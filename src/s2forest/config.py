@@ -143,6 +143,17 @@ class NormalizationConfig(BaseModel):
 
 
 class AnomalyConfig(BaseModel):
+    # Baseline model per pixel and index:
+    #  "harmonic": robust (IRLS, Huber) fit of intercept + `harmonics` annual
+    #              harmonics to all baseline-year observations; scale = MAD of the
+    #              model residuals. Follows the seasonal curve, so an early-season
+    #              observation is compared with the early-season level.
+    #  "window":   median / MAD of baseline observations within +-doy_window days.
+    #              Biased at the season edges (the window is one-sided there).
+    baseline_method: Literal["harmonic", "window"] = "harmonic"
+    harmonics: int = 1
+    robust_iterations: int = 5
+    huber_k: float = 1.345
     z_threshold: float = 2.5
     persistence: int = 2
     doy_window: int = 30

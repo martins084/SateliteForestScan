@@ -102,8 +102,17 @@ Kataloga pieņēmumu pārbaude (ar internetu): `python -m uv run pytest -m netwo
    režģī.
 5. **Indeksi.** NDVI (B08, B04), NDRE (B8A, B05), NDMI (B8A, B11), CRSWIR
    (B11 / lineārs kontinuums starp B8A un B12 pie 1610 nm).
-6. **Anomālijas.** Katram pikselim bāzes līnija no iepriekšējiem 3 gadiem tajā
-   pašā sezonas logā (±30 dienas), robusta novirze ar mediānu un MAD.
+6. **Anomālijas.** Katram pikselim un indeksam bāzes līnija no iepriekšējiem 3
+   gadiem: **harmonisks sezonālais modelis** (brīvais loceklis + 1 gada harmonika,
+   `anomaly.harmonics`), pielāgots robusti (IRLS ar Huber svariem, 5 iterācijas).
+   Novirzes mērogs = modeļa atlikumu MAD × 1,4826 (ne mazāks par `mad_floor`);
+   pikseļiem ar < 5 bāzes novērojumiem bāzes nav. Alternatīva
+   (`anomaly.baseline_method: window`): mediāna un MAD ±30 dienu logā.
+   Harmoniskais modelis izvēlēts, jo loga mediāna sezonas malās ir nobīdīta
+   (logs tur ir vienpusējs): Kalsnavā veselā mežā agrā pavasarī (≤ 30.05)
+   z ≥ 2,5 īpatsvars samazinājās no 0,42 % līdz 0,15 %, un vidējā |z mediāna|
+   no 0,12 līdz 0,08 (`scripts/diagnose_seasonal_bias.py`, grafiks
+   `diagnostics/seasonal_bias.png`). 2. harmonika uzlabojumu nedeva.
    Novērojums ir anomāls, ja CRSWIR z ≥ 2,5 un vismaz viens cits indekss arī
    pārsniedz 2,5; pikselis tiek atzīmēts, ja tas atkārtojas ≥ 2 secīgos
    derīgos novērojumos. Poligoni < 0,1 ha tiek atmesti.
@@ -111,7 +120,9 @@ Kataloga pieņēmumu pārbaude (ar internetu): `python -m uv run pytest -m netwo
    bufera meža pikseļu mediāno novirzi (sausuma gadi, fenoloģijas nobīde);
    buferis tiek lasīts 60 m izšķirtspējā no COG pārskatiem (overviews).
    No bāzes izslēdz pikseļus, kas bāzes periodā jau bija nocirsti vai noturīgi
-   anomāli (≥ 0,1 ha laukumi).
+   anomāli (≥ 0,1 ha laukumi); katrs bāzes gads tiek pārbaudīts pret
+   iepriekšējiem bāzes gadiem (pirmais — pret pārējiem), lai noķertu arī
+   traucējumu, kas turpinās vairākus gadus.
 7. **Poligonu atribūti.** `first_detected`, `area_ha`, `type` (`stress` vai
    `cut` — cirte / audzi nomainoša izmaiņa), `delta_<indekss>` (izmaiņa pret
    bāzi), `z_<indekss>`, `persistence_len`, `n_indices_agree`, `confidence`

@@ -20,9 +20,9 @@ deviation from its own baseline reference. It removes signals shared by the
 whole region (drought year, phenology shift, residual atmospheric effects).
 Computed in two passes: pass 2 excludes context pixels that pass 1 flagged.
 
-Baseline cleanliness: for each baseline year, observations are tested against
-the OTHER baseline years (leave-one-year-out) with the same rule, and summer
-NDVI is checked for felling. Pixels disturbed during the baseline period are
+Baseline cleanliness: each baseline year is tested with the same rule against
+the baseline years before it (the first baseline year against the others), and
+checked for the cut signature. Pixels disturbed during the baseline period are
 excluded from the analysis (reported separately), because their baseline does
 not describe a healthy stand.
 
@@ -44,7 +44,7 @@ import xarray as xr
 
 from .config import AnomalyConfig
 from .indices import INDICES
-from .temporal import doy_reference_stats, time_info
+from .temporal import doy_reference_stats, harmonic_reference, time_info
 
 MAD_SCALE = 1.4826
 
@@ -81,6 +81,10 @@ class DetectParams:
     ndvi_i: int | None
     baseline_years: list[int]
     monitor_year: int
+    baseline_method: str = "harmonic"
+    harmonics: int = 1
+    robust_iterations: int = 5
+    huber_k: float = 1.345
 
 
 def params_from_config(cfg: AnomalyConfig, names: list[str], baseline_years: list[int],
@@ -96,6 +100,8 @@ def params_from_config(cfg: AnomalyConfig, names: list[str], baseline_years: lis
         cut_ndmi_drop=cfg.cut_ndmi_drop, ndmi_i=names.index("ndmi") if "ndmi" in names else None,
         ndvi_i=names.index("ndvi") if "ndvi" in names else None,
         baseline_years=baseline_years, monitor_year=monitor_year,
+        baseline_method=cfg.baseline_method, harmonics=cfg.harmonics,
+        robust_iterations=cfg.robust_iterations, huber_k=cfg.huber_k,
     )
 
 
@@ -112,15 +118,24 @@ def cut_signature(values: np.ndarray, med: np.ndarray, p: DetectParams) -> np.nd
     return out
 
 
+def baseline_reference(values: np.ndarray, doy: np.ndarray, ref_sel: np.ndarray, p: DetectParams
+                       ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """One index, values (T, ...): expected value (T, ...), MAD (T, ...), count (T, ...)
+    from the reference observations, with the configured baseline method."""
+    if p.baseline_method == "harmonic":
+        return harmonic_reference(values, doy, ref_sel, p.min_obs, p.harmonics,
+                                  p.robust_iterations, p.huber_k)
+    return doy_reference_stats(values, doy, ref_sel, p.window, p.min_obs, with_mad=True)
+
+
 def zscores(values: np.ndarray, doy: np.ndarray, ref_sel: np.ndarray, p: DetectParams
             ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """values (I, T, ...) -> z (I, T, ...), reference median (I, T, ...), count (T, ...)."""
+    """values (I, T, ...) -> z (I, T, ...), expected value (I, T, ...), count (T, ...)."""
     z = np.full(values.shape, np.nan, dtype="float32")
     med_all = np.full(values.shape, np.nan, dtype="float32")
     cnt0 = None
     for i in range(values.shape[0]):
-        med, mad, cnt = doy_reference_stats(values[i], doy, ref_sel, p.window, p.min_obs,
-                                            with_mad=True)
+        med, mad, cnt = baseline_reference(values[i], doy, ref_sel, p)
         scale = np.maximum(MAD_SCALE * mad, p.floors[i])
         z[i] = p.signs[i] * (values[i] - med) / scale
         med_all[i] = med
@@ -176,7 +191,11 @@ def detect_block(values: np.ndarray, doy: np.ndarray, year: np.ndarray, p: Detec
     disturbed = np.zeros(shape, dtype=bool)
     cut_year = np.full(shape, np.nan, dtype="float32")
     for by in p.baseline_years:
-        ref_sel = base_sel & (year != by)
+        # Reference = the baseline years BEFORE `by` (catches the onset of a disturbance
+        # that continues into later years); the first year is tested against the others.
+        ref_sel = base_sel & (year < by)
+        if not ref_sel.any():
+            ref_sel = base_sel & (year != by)
         sel = np.flatnonzero(year == by)
         if sel.size == 0 or not ref_sel.any():
             continue
@@ -264,7 +283,7 @@ def regional_offsets(values: np.ndarray, doy: np.ndarray, year: np.ndarray, fore
                      min_pixels: int = 50) -> tuple[np.ndarray, np.ndarray]:
     """values (I, T, y, x) on the context grid -> offsets (I, T) and pixel counts (T,).
 
-    offset = median over context forest pixels of (x - own baseline DOY median).
+    offset = median over context forest pixels of (x - own baseline expectation).
     Dates with fewer than `min_pixels` usable pixels get offset 0 (no normalization).
     """
     base_sel = np.isin(year, p.baseline_years)
@@ -272,7 +291,7 @@ def regional_offsets(values: np.ndarray, doy: np.ndarray, year: np.ndarray, fore
     offsets = np.zeros(values.shape[:2], dtype="float32")
     counts = np.zeros(values.shape[1], dtype="int32")
     for i in range(values.shape[0]):
-        med, _, _ = doy_reference_stats(values[i], doy, base_sel, p.window, p.min_obs)
+        med, _, _ = baseline_reference(values[i], doy, base_sel, p)
         dev = values[i] - med
         for t in range(values.shape[1]):
             d = dev[t][region]
