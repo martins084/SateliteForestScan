@@ -119,7 +119,9 @@ def build_report(cfg: Config, n_series: int = 5) -> Path:
         top_stress.append({"id": r["id"], "status": STATUS_LV.get(r["status"], r["status"]),
                            "first": r["first_detected"], "area": _fmt(r["area_ha"]),
                            "delta": _fmt(r.get(f"delta_{prim}"), 3), "conf": _fmt(r["confidence"]),
-                           "before": "jā" if bool(r.get("onset_before_season")) else "nē"})
+                           "before": "jā" if bool(r.get("onset_before_season")) else "nē",
+                           "linear": "jā" if bool(r.get("linear_feature", False)) else "",
+                           "road": _fmt(r.get("dist_to_road_m"), 0)})
     mission_rows = []
     if missions is not None:
         for _, m in missions.iterrows():
@@ -273,8 +275,8 @@ prioritārās drona misijas (pārtraukta līnija). Fails: figures/report/{{ fig_
 <b>Noturīgs</b>: izmaiņa saglabājas. <b>Atkopies</b>: atgriezies normā. Poligoni netiek dzēsti.</p>
 {% if top_stress %}
 <div class="tablewrap"><table>
-<tr><th>ID</th><th>Statuss</th><th>Pirmoreiz</th><th class="num">Platība, ha</th><th class="num">{{ prim }} izmaiņa</th><th class="num">Ticamība</th><th>Pirms sezonas</th></tr>
-{% for r in top_stress %}<tr><td>#{{ r.id }}</td><td>{{ r.status }}</td><td>{{ r.first }}</td><td class="num">{{ r.area }}</td><td class="num">{{ r.delta }}</td><td class="num">{{ r.conf }}</td><td>{{ r.before }}</td></tr>{% endfor %}
+<tr><th>ID</th><th>Statuss</th><th>Pirmoreiz</th><th class="num">Platība, ha</th><th class="num">{{ prim }} izmaiņa</th><th class="num">Ticamība</th><th>Pirms sezonas</th><th>Iegarens</th><th class="num">Līdz ceļam, m</th></tr>
+{% for r in top_stress %}<tr><td>#{{ r.id }}</td><td>{{ r.status }}</td><td>{{ r.first }}</td><td class="num">{{ r.area }}</td><td class="num">{{ r.delta }}</td><td class="num">{{ r.conf }}</td><td>{{ r.before }}</td><td>{{ r.linear }}</td><td class="num">{{ r.road }}</td></tr>{% endfor %}
 </table></div>
 <p class="note">Ticamība ir heuristisks 0–1 rādītājs (z lielums, indeksu saskaņa, noturība,
 bāzes novērojumu skaits), nevis varbūtība.</p>

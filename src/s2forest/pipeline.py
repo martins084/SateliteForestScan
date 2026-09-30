@@ -12,7 +12,8 @@ import xarray as xr
 
 from .config import Config
 from .fetch import Grid, build_grid, open_cube
-from .forestmask import FOREST_ANALYSED, forest_mask, refine_forest_mask, summer_median
+from .forestmask import (FOREST_ANALYSED, FOREST_NOT_IN_HRL, forest_mask, refine_forest_mask,
+                         summer_median)
 from .indices import INDICES, compute_indices
 from .io import write_geotiff, write_timeseries_geotiff
 
@@ -29,6 +30,7 @@ class IndexStage:
     grid: Grid
     forest_codes: np.ndarray  # FOREST_* codes, OUTSIDE_AOI outside the AOI
     ndvi_summer_baseline: np.ndarray
+    linear_lines: "gpd.GeoDataFrame | None" = None   # OSM lines used for the mask
 
     @property
     def analysis_mask(self) -> np.ndarray:
@@ -74,9 +76,15 @@ def index_stage(cfg: Config) -> IndexStage:
     ndvi_s = summer_median(idx.ndvi, cfg.time.baseline_year_list, fm.summer_start,
                            fm.summer_end).values
     codes = refine_forest_mask(hrl, ndvi_s, fm.min_summer_ndvi)
+    from .forestmask import FOREST_LINEAR
+    from .linear import linear_mask
+
+    lin, lines = linear_mask(grid.geobox, cfg.linear_features, cfg.cache_dir / grid.key)
+    if lin is not None:
+        codes[lin & (codes != FOREST_NOT_IN_HRL)] = FOREST_LINEAR
     codes[~grid.aoi_mask] = OUTSIDE_AOI
     return IndexStage(cube=cube, indices=idx, grid=grid, forest_codes=codes,
-                      ndvi_summer_baseline=ndvi_s)
+                      ndvi_summer_baseline=ndvi_s, linear_lines=lines)
 
 
 def write_index_outputs(cfg: Config, st: IndexStage) -> dict[str, Path]:
@@ -88,7 +96,7 @@ def write_index_outputs(cfg: Config, st: IndexStage) -> dict[str, Path]:
     written["forest_mask"] = write_geotiff(
         template.copy(data=st.forest_codes), rdir / "forest_mask.tif", crs, dtype="uint8",
         nodata=OUTSIDE_AOI, band_names=["forest code: 0 not HRL class, 1 analysed, "
-                                        "2 low summer NDVI, 3 no summer data"])
+                                        "2 low summer NDVI, 3 no summer data, 4 road buffer"])
     written["ndvi_summer_baseline"] = write_geotiff(
         template.copy(data=st.ndvi_summer_baseline.astype("float32")),
         rdir / "ndvi_summer_median_baseline.tif", crs, band_names=["NDVI summer median, baseline"])
@@ -190,6 +198,23 @@ def context_offsets(cfg: Config, st: IndexStage, p) -> tuple[pd.DataFrame, np.nd
     return table, off2
 
 
+def add_linear_attributes(gdf: "gpd.GeoDataFrame", lines, threshold: float) -> "gpd.GeoDataFrame":
+    """elongation, dist_to_road_m and the `linear_feature` flag for stress polygons."""
+    from .linear import elongation
+
+    if gdf.empty:
+        return gdf
+    gdf = gdf.copy()
+    gdf["elongation"] = [round(elongation(g), 2) for g in gdf.geometry]
+    if lines is not None and len(lines):
+        roads = lines[lines["kind"] == "road"].to_crs(gdf.crs)
+        if len(roads):
+            u = roads.geometry.union_all()
+            gdf["dist_to_road_m"] = [round(float(g.distance(u)), 1) for g in gdf.geometry]
+    gdf["linear_feature"] = (gdf["type"] == "stress") & (gdf["elongation"] >= threshold)
+    return gdf
+
+
 def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
     from .anomaly import apply_baseline_exclusion, params_from_config, run_detection
     from .vectorize import polygonize
@@ -212,6 +237,7 @@ def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
     gdf = polygonize(feats, z, delta, cfg.data.crs, cfg.anomaly.min_area_ha, p.k,
                      p.persistence, p.min_obs, primary=cfg.anomaly.primary_index,
                      status_min_obs=cfg.anomaly.status_min_obs)
+    gdf = add_linear_attributes(gdf, st.linear_lines, cfg.linear_features.elongation_threshold)
 
     codes = np.full(st.forest_codes.shape, STATUS_NOT_ANALYSED, dtype="uint8")
     flag = feats["flag"].values

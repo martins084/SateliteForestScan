@@ -82,6 +82,7 @@ FOREST_NOT_IN_HRL = 0
 FOREST_ANALYSED = 1
 FOREST_LOW_NDVI = 2      # in HRL class, but low baseline summer NDVI (felled / young)
 FOREST_NO_DATA = 3       # in HRL class, but no clear summer observation in the baseline
+FOREST_LINEAR = 4        # in HRL class, but within the buffer of a road (OSM)
 
 
 def summer_median(da: xr.DataArray, years: list[int], start: str, end: str) -> xr.DataArray:

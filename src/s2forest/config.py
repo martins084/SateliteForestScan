@@ -132,6 +132,24 @@ class ForestMaskConfig(BaseModel):
     summer_end: str = "08-31"
 
 
+class LinearFeaturesConfig(BaseModel):
+    """OSM linear features removed from the analysis mask (buffered)."""
+    enabled: bool = True
+    buffer_m: float = 20.0
+    highway_types: list[str] = Field(default_factory=lambda: [
+        "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified",
+        "residential", "service", "track", "motorway_link", "trunk_link", "primary_link",
+        "secondary_link", "tertiary_link"])
+    # Drainage ditches are very common in Latvian forests; masking them all may
+    # remove a lot of forest, so they are off by default.
+    include_waterways: bool = False
+    waterway_types: list[str] = Field(default_factory=lambda: ["ditch", "drain", "canal"])
+    include_power_lines: bool = False
+    # Stress polygons with elongation (min. rotated rectangle long/short side) at or
+    # above this are flagged `linear_feature` (not deleted).
+    elongation_threshold: float = 3.0
+
+
 class NormalizationConfig(BaseModel):
     enabled: bool = True
     buffer_m: float = 5000.0
@@ -219,6 +237,7 @@ class Config(BaseModel):
     data: DataConfig = Field(default_factory=DataConfig)
     masking: MaskingConfig = Field(default_factory=MaskingConfig)
     forest_mask: ForestMaskConfig = Field(default_factory=ForestMaskConfig)
+    linear_features: LinearFeaturesConfig = Field(default_factory=LinearFeaturesConfig)
     indices: list[str] = Field(default_factory=lambda: ["ndvi", "ndre", "ndmi", "crswir"])
     anomaly: AnomalyConfig = Field(default_factory=AnomalyConfig)
     targets: TargetsConfig = Field(default_factory=TargetsConfig)

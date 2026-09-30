@@ -123,11 +123,21 @@ Kataloga pieņēmumu pārbaude (ar internetu): `python -m uv run pytest -m netwo
    anomāli (≥ 0,1 ha laukumi); katrs bāzes gads tiek pārbaudīts pret
    iepriekšējiem bāzes gadiem (pirmais — pret pārējiem), lai noķertu arī
    traucējumu, kas turpinās vairākus gadus.
+   **Ceļi:** no analīzes izslēdz pikseļus ≤ 20 m no OpenStreetMap ceļiem
+   (`linear_features`; ieskaitot meža ceļus `track`), jo ceļmalas ir jaukti
+   pikseļi, kas mainās ar putekļiem, pļaušanu un ceļa darbiem. Dati no publiskā
+   Overpass API (bez atslēgas, ODbL licence), kešoti. Kalsnavā tas ir 58 ceļi un
+   6,8 % skujkoku meža. Grāvjus un elektrolīnijas var ieslēgt konfigurācijā
+   (noklusēti izslēgti: grāvju Latvijas mežos ir ļoti daudz). Ja OSM dati nav
+   pieejami, analīze turpinās bez ceļu maskas un CLI par to brīdina.
 7. **Poligonu atribūti.** `first_detected`, `area_ha`, `type` (`stress` vai
    `cut` — cirte / audzi nomainoša izmaiņa), `delta_<indekss>` (izmaiņa pret
    bāzi), `z_<indekss>`, `persistence_len`, `n_indices_agree`, `confidence`
    (heuristisks 0–1 rādītājs, **nav varbūtība**), `onset_before_season`
-   (izmaiņa notikusi jau pirms sezonas pirmā novērojuma, piem., ziemas cirte) un
+   (izmaiņa notikusi jau pirms sezonas pirmā novērojuma, piem., ziemas cirte),
+   `elongation` (minimālā pagrieztā taisnstūra garā/īsā mala), `dist_to_road_m`,
+   `linear_feature` (stresa poligons ar iegarenību ≥ 3 — iespējams lineārs
+   objekts; netiek dzēsts, bet atzīmēts arī drona mērķa aprakstā) un
    `status`:
    - `new` — pēc pirmās noteikšanas ir < 2 derīgi novērojumi, vēl nevar izlemt;
    - `persistent` — izmaiņa saglabājas (mediānā primārā z ≥ k/2);

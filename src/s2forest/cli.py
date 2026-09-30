@@ -127,10 +127,17 @@ def indices(config: Path = ConfigArg, verbose: bool = VerboseOpt):
 
     codes = st.forest_codes
     inside = codes != 255
-    shares = {k: float(np.mean(codes[inside] == k)) for k in (0, 1, 2, 3)}
-    labels = {0: "not in HRL class", 1: "analysed", 2: "low summer NDVI", 3: "no summer data"}
+    shares = {k: float(np.mean(codes[inside] == k)) for k in (0, 1, 2, 3, 4)}
+    labels = {0: "not in HRL class", 1: "analysed", 2: "low summer NDVI", 3: "no summer data",
+              4: "road buffer"}
     typer.echo("Forest mask (share of AOI): " + ", ".join(
-        f"{labels[k]} {v:.0%}" for k, v in shares.items()))
+        f"{labels[k]} {v:.1%}" for k, v in shares.items()))
+    if st.linear_lines is not None:
+        typer.echo(f"OSM linear features: {len(st.linear_lines)} "
+                   f"({st.linear_lines['kind'].value_counts().to_dict()})")
+    elif cfg.linear_features.enabled:
+        typer.echo("WARNING: OSM road data could not be downloaded - the road buffer is NOT "
+                   "applied in this run. Re-run `indices` later.", err=True)
 
     fig_dir = cfg.run_dir / "figures"
     template = st.cube.B04.isel(time=0, drop=True)

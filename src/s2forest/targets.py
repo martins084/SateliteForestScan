@@ -146,8 +146,13 @@ def build_targets(cfg: Config, polygons: gpd.GeoDataFrame, feats: xr.Dataset,
             desc = (f"Stress ({STATUS_LV.get(p['status'], p['status'])}), {p['area_ha']:.2f} ha; "
                     f"pirmoreiz {p['first_detected']}; {prim.upper()} izmaiņa "
                     f"{p.get(f'delta_{prim}', float('nan')):+.3f}; ticamība {p['confidence']:.2f}; "
-                    f"poligons #{p['id']}")
+                    f"poligons #{p['id']}"
+                    + ("; IEGARENS - iespējams lineārs objekts (ceļš, grāvis)"
+                       if bool(p.get("linear_feature", False)) else "")
+                    + (f"; {p['dist_to_road_m']:.0f} m no ceļa"
+                       if pd.notna(p.get("dist_to_road_m", np.nan)) and p["dist_to_road_m"] < 60 else ""))
             parts.append({"kind": "stress", "status": p["status"], "source_id": int(p["id"]),
+                          "linear_feature": bool(p.get("linear_feature", False)),
                           "area_ha": p["area_ha"], "first_detected": p["first_detected"],
                           "confidence": p["confidence"], "risk_score": None,
                           "priority": 1 if p["status"] == "persistent" else 2,

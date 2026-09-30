@@ -43,3 +43,14 @@ def test_planetary_offset_from_baseline():
     assert scenes
     for s in scenes:
         assert s.offset == (-0.1 if s.baseline_num >= 4.0 else 0.0)
+
+
+def test_overpass_roads_in_test_aoi(tmp_path):
+    from odc.geo.geobox import GeoBox
+
+    from s2forest.config import LinearFeaturesConfig
+    from s2forest.linear import fetch_osm_lines
+
+    gb = GeoBox.from_bbox(BBOX, crs="EPSG:4326", resolution=0.001)
+    g = fetch_osm_lines(gb, LinearFeaturesConfig(), tmp_path)
+    assert len(g) > 10 and set(g["kind"]) == {"road"}
