@@ -123,6 +123,7 @@ class DetectStage:
     polygons: "gpd.GeoDataFrame"
     offsets: pd.DataFrame       # regional normalization per date and index
     status_codes: np.ndarray    # STATUS_* per pixel
+    targets: "gpd.GeoDataFrame"  # drone target layer
 
 
 # Per-pixel status raster codes.
@@ -208,7 +209,8 @@ def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
     min_px = int(np.ceil(cfg.anomaly.min_area_ha * 1e4 / cfg.data.resolution ** 2))
     feats = apply_baseline_exclusion(feats, min_px)
     gdf = polygonize(feats, z, delta, cfg.data.crs, cfg.anomaly.min_area_ha, p.k,
-                     p.persistence, p.min_obs)
+                     p.persistence, p.min_obs, primary=cfg.anomaly.primary_index,
+                     status_min_obs=cfg.anomaly.status_min_obs)
 
     codes = np.full(st.forest_codes.shape, STATUS_NOT_ANALYSED, dtype="uint8")
     flag = feats["flag"].values
@@ -219,8 +221,19 @@ def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
     codes[np.nan_to_num(feats["baseline_disturbed"].values) > 0] = STATUS_BASELINE_DISTURBED
     codes[~st.analysis_mask] = STATUS_NOT_ANALYSED
     codes[st.forest_codes == OUTSIDE_AOI] = OUTSIDE_AOI
+    from .targets import build_targets
+
+    targets = build_targets(cfg, gdf, feats, st.analysis_mask, st.cube.B04.isel(time=0, drop=True))
     return DetectStage(features=feats, z=z, delta=delta, polygons=gdf, offsets=offsets,
-                       status_codes=codes)
+                       status_codes=codes, targets=targets)
+
+
+def status_summary(polygons: "gpd.GeoDataFrame") -> pd.DataFrame:
+    """Polygon counts and area per type and status."""
+    if polygons.empty or "status" not in polygons:
+        return pd.DataFrame(columns=["type", "status", "n", "area_ha"])
+    return (polygons.groupby(["type", "status"])["area_ha"].agg(n="size", area_ha="sum")
+            .round(2).reset_index())
 
 
 def write_detect_outputs(cfg: Config, st: IndexStage, ds: DetectStage) -> dict[str, Path]:
@@ -263,4 +276,9 @@ def write_detect_outputs(cfg: Config, st: IndexStage, ds: DetectStage) -> dict[s
     written["suspects"] = gpkg
     ds.polygons.drop(columns="geometry", errors="ignore").to_csv(tdir / f"suspects_{year}.csv", index=False)
     ds.offsets.to_csv(tdir / "regional_offsets.csv", index=False)
+    status_summary(ds.polygons).to_csv(tdir / f"polygon_status_{year}.csv", index=False)
+
+    from .targets import write_targets
+
+    written.update(write_targets(cfg, ds.targets, gpkg))
     return written

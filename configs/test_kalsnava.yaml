@@ -42,3 +42,13 @@ anomaly:
   normalization:
     enabled: true
     buffer_m: 5000
+
+# DEMO references (scripts/make_demo_references.py): synthetic, built from the
+# tool's own cut detections - they exercise the validation module only and say
+# nothing about accuracy. Replace with LVM sanitary-cut data when available.
+reference:
+  path: ../data/local/test_kalsnava_demo_references.gpkg
+  id_field: nr
+  date_field: cirtes_datums
+  reason_field: iemesls
+  reason_values: ["sanitārā cirte (DEMO)"]

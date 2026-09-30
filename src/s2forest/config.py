@@ -37,6 +37,11 @@ class ReferenceConfig(BaseModel):
     date_field: str = "date"
     reason_field: str | None = None
     reason_values: list[str | int] | None = None
+    # A detection matches a reference if it intersects the reference buffered by this.
+    match_buffer_m: float = 10.0
+    # References cut later than this are out of scope (default: 31 March of the
+    # year after the monitoring year). ISO date string.
+    max_date: str | None = None
 
 
 class TimeConfig(BaseModel):
@@ -157,7 +162,23 @@ class AnomalyConfig(BaseModel):
     cut_ndvi_max: float = 0.5
     cut_ndvi_drop: float = 0.25
     cut_ndmi_drop: float = 0.15
+    # Polygon status needs at least this many valid observations after the first
+    # detection: fewer -> "new"; else median primary z >= k/2 -> "persistent",
+    # below -> "recovered" (e.g. early-spring phenology artefacts).
+    status_min_obs: int = 2
     normalization: NormalizationConfig = Field(default_factory=NormalizationConfig)
+
+
+class TargetsConfig(BaseModel):
+    """Drone target layer (`drone_targets`)."""
+    statuses: list[str] = Field(default_factory=lambda: ["new", "persistent"])
+    # High-risk zone: band of conifer forest along recent cuts (bark beetles often
+    # attack newly exposed stand edges).
+    cut_edge_enabled: bool = True
+    cut_edge_width_m: float = 30.0
+    cut_edge_years: int = 2        # cuts of the monitoring year and the year before
+    cut_edge_min_cut_ha: float = 0.3   # ignore smaller cuts / thinning patches
+    cut_edge_min_area_ha: float = 0.05  # minimum band area per cut
 
 
 class Config(BaseModel):
@@ -171,6 +192,7 @@ class Config(BaseModel):
     forest_mask: ForestMaskConfig = Field(default_factory=ForestMaskConfig)
     indices: list[str] = Field(default_factory=lambda: ["ndvi", "ndre", "ndmi", "crswir"])
     anomaly: AnomalyConfig = Field(default_factory=AnomalyConfig)
+    targets: TargetsConfig = Field(default_factory=TargetsConfig)
     stands: StandsConfig = Field(default_factory=StandsConfig)
     reference: ReferenceConfig = Field(default_factory=ReferenceConfig)
 

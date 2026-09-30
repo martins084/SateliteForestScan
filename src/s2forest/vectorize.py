@@ -29,9 +29,32 @@ def confidence_score(z_primary: float, n_agree: float, n_other: int, run_len: fl
     return float(np.round(0.35 * s_z + 0.25 * s_a + 0.25 * s_p + 0.15 * s_b, 3))
 
 
+def polygon_status(z_primary: np.ndarray, sel: np.ndarray, first_t: int, k: float,
+                   min_obs: int) -> tuple[str, int, float]:
+    """Status of one polygon from its primary-index z after the first detection.
+
+    z_primary: (Tm, y, x); sel: polygon pixels. A date counts as a valid
+    observation of the polygon if at least half of its pixels are valid.
+    Returns (status, n valid obs after first detection, median polygon z).
+    """
+    zs = z_primary[first_t + 1:, sel]
+    if zs.shape[0] == 0:
+        return "new", 0, float("nan")
+    valid = np.isfinite(zs).mean(axis=1) >= 0.5
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        series = np.nanmedian(zs[valid], axis=1) if valid.any() else np.array([])
+    n = int(valid.sum())
+    med = float(np.median(series)) if n else float("nan")
+    if n < min_obs:
+        return "new", n, med
+    return ("persistent" if med >= k / 2 else "recovered"), n, med
+
+
 def polygonize(feats: xr.Dataset, zm: xr.DataArray, index_delta: xr.DataArray, crs: str,
                min_area_ha: float, k: float, persistence: int, min_obs: int,
-               stand_codes: np.ndarray | None = None) -> gpd.GeoDataFrame:
+               primary: str | None = None, status_min_obs: int = 2) -> gpd.GeoDataFrame:
     """Connected (8-neighbour) groups of flagged pixels -> polygons.
 
     index_delta: (index, time_mon, y, x) change x' - baseline median (index units),
@@ -90,6 +113,12 @@ def polygonize(feats: xr.Dataset, zm: xr.DataArray, index_delta: xr.DataArray, c
             with np.errstate(invalid="ignore"):
                 row[f"delta_{name}"] = round(float(np.nanmedian(np.where(after, d, np.nan))), 4)
                 row[f"z_{name}"] = round(float(np.nanmedian(np.where(after, z, np.nan))), 2)
+        if primary is not None:
+            st, n_after, z_after = polygon_status(zm.values[names.index(primary)], sel,
+                                                  int(fi.min()), k, status_min_obs)
+            row["status"] = st
+            row["obs_after_detection"] = n_after
+            row["z_after_detection"] = round(z_after, 2) if np.isfinite(z_after) else None
         row["confidence"] = confidence_score(
             float(np.nanmedian(F["z_primary"][sel])), row["n_indices_agree"], len(names) - 1,
             row["persistence_len"], persistence, row["baseline_obs"], min_obs, k)

@@ -59,6 +59,7 @@ FEATURES = [
     "baseline_obs",      # number of baseline observations (primary index, all DOY)
     "baseline_disturbed",  # 1 if disturbed during the baseline period
     "max_z_primary",     # max primary z in the monitoring year
+    "baseline_cut_year",  # latest baseline year with a persistent cut signature (NaN: none)
 ]
 
 
@@ -173,6 +174,7 @@ def detect_block(values: np.ndarray, doy: np.ndarray, year: np.ndarray, p: Detec
 
     # --- baseline cleanliness (leave-one-year-out) ---------------------------------
     disturbed = np.zeros(shape, dtype=bool)
+    cut_year = np.full(shape, np.nan, dtype="float32")
     for by in p.baseline_years:
         ref_sel = base_sel & (year != by)
         sel = np.flatnonzero(year == by)
@@ -192,6 +194,7 @@ def detect_block(values: np.ndarray, doy: np.ndarray, year: np.ndarray, p: Detec
             cflag, _, _ = persistent_runs(cut, np.isfinite(sub[p.primary, ref_sel.sum():]),
                                           p.persistence)
             disturbed |= cflag
+            cut_year = np.where(cflag, np.float32(by), cut_year)
 
     # --- monitoring year ------------------------------------------------------------
     zm = z[:, mon_sel]
@@ -203,6 +206,7 @@ def detect_block(values: np.ndarray, doy: np.ndarray, year: np.ndarray, p: Detec
     base_count = np.sum(np.isfinite(values[p.primary][base_sel]), axis=0)
     feats[FEATURES.index("baseline_obs")] = base_count
     feats[FEATURES.index("baseline_disturbed")] = disturbed
+    feats[FEATURES.index("baseline_cut_year")] = cut_year
     with np.errstate(invalid="ignore"):
         feats[FEATURES.index("max_z_primary")] = np.nanmax(
             np.where(valid, zm[p.primary], -np.inf), axis=0) if zm.shape[1] else np.nan

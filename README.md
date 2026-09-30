@@ -30,11 +30,32 @@ python -m uv sync
 
 Visu vada viens YAML konfigurācijas fails (piemērs: `configs/test_kalsnava.yaml`).
 
+### Jauna teritorija
+
+1. Nokopē `configs/template_aoi.yaml` (piem., `configs/lvm_meza_masivs.yaml`).
+2. Ievieto ievaddatus mapē `data/local/` (tā netiek iekļauta git): AOI, pēc
+   vajadzības nogabalus un references (sanitārās cirtes).
+3. Aizpildi laukus, kas atzīmēti ar `TODO` (AOI ceļš, monitoringa gads,
+   references lauku nosaukumi un cirtes iemesla vērtības).
+4. Palaid visu procesu ar vienu komandu:
+
 ```bash
-python -m uv run s2forest fetch   configs/test_kalsnava.yaml   # datu ieguve + diagnostika
-python -m uv run s2forest indices configs/test_kalsnava.yaml   # indeksi, meža maska, GeoTIFF
-python -m uv run s2forest detect  configs/test_kalsnava.yaml   # anomālijas, poligoni (GPKG)
+python -m uv run s2forest run configs/lvm_meza_masivs.yaml
 ```
+
+Pirmā palaišana jaunai 5×5 km teritorijai ilgst ~40–60 min (datu ieguve,
+4 sezonas); atkārtota palaišana izmanto kešu un ilgst ~10 min.
+
+### Atsevišķi soļi
+
+```bash
+python -m uv run s2forest fetch    configs/test_kalsnava.yaml   # datu ieguve + diagnostika
+python -m uv run s2forest indices  configs/test_kalsnava.yaml   # indeksi, meža maska, GeoTIFF
+python -m uv run s2forest detect   configs/test_kalsnava.yaml   # anomālijas, poligoni, drona mērķi
+python -m uv run s2forest validate configs/test_kalsnava.yaml   # salīdzinājums ar references datiem
+```
+
+`detect --no-closeups` izlaiž poligonu tuvplānu attēlus (ātrāk).
 
 Rezultāti: `output/<run_name>/`
 
@@ -43,8 +64,9 @@ Rezultāti: `output/<run_name>/`
 | `diagnostics/` | pārlidojumu tabula, derīgo novērojumu grafiks, RGB priekšskatījumi, harmonizācijas un dūmakas testa pārbaude |
 | `rasters/` | meža maska, indeksu laika rindas (viena josla = viens datums), vasaras mediānas pa gadiem |
 | `rasters/anomaly/` | statusa rastrs, pirmās noteikšanas diena, z-vērtības |
-| `vectors/suspects.gpkg` | aizdomīgie poligoni (atverami QGIS un QField) |
-| `tables/` | poligonu atribūti CSV, reģionālās nobīdes |
+| `vectors/suspects.gpkg` | slāņi `suspects_<gads>` (visi poligoni), `drone_targets` (drona mērķi), `validation_references_<gads>`; atverami QGIS un QField |
+| `vectors/drone_targets_<gads>.kml` / `.geojson` | drona mērķi WGS84 lidojuma plānošanai |
+| `tables/` | poligonu atribūti un statusu kopsavilkums, drona mērķi, validācijas rezultāti, reģionālās nobīdes (CSV) |
 | `figures/` | PNG kartes prezentācijai |
 | `run_metadata.json` | izmantotie pārlidojumi, pakotņu versijas (reproducējamībai) |
 
@@ -76,6 +98,43 @@ Kataloga pieņēmumu pārbaude (ar internetu): `python -m uv run pytest -m netwo
    Novērojums ir anomāls, ja CRSWIR z ≥ 2,5 un vismaz viens cits indekss arī
    pārsniedz 2,5; pikselis tiek atzīmēts, ja tas atkārtojas ≥ 2 secīgos
    derīgos novērojumos. Poligoni < 0,1 ha tiek atmesti.
+   Reģionālā normalizācija: katram datumam no novērojumiem atņem AOI + 5 km
+   bufera meža pikseļu mediāno novirzi (sausuma gadi, fenoloģijas nobīde);
+   buferis tiek lasīts 60 m izšķirtspējā no COG pārskatiem (overviews).
+   No bāzes izslēdz pikseļus, kas bāzes periodā jau bija nocirsti vai noturīgi
+   anomāli (≥ 0,1 ha laukumi).
+7. **Poligonu atribūti.** `first_detected`, `area_ha`, `type` (`stress` vai
+   `cut` — cirte / audzi nomainoša izmaiņa), `delta_<indekss>` (izmaiņa pret
+   bāzi), `z_<indekss>`, `persistence_len`, `n_indices_agree`, `confidence`
+   (heuristisks 0–1 rādītājs, **nav varbūtība**), `onset_before_season`
+   (izmaiņa notikusi jau pirms sezonas pirmā novērojuma, piem., ziemas cirte) un
+   `status`:
+   - `new` — pēc pirmās noteikšanas ir < 2 derīgi novērojumi, vēl nevar izlemt;
+   - `persistent` — izmaiņa saglabājas (mediānā primārā z ≥ k/2);
+   - `recovered` — atgriezies normā (piem., pavasara fenoloģijas artefakts).
+   Poligoni netiek dzēsti; statusu skaits redzams `tables/polygon_status_<gads>.csv`.
+8. **Drona mērķi** (`drone_targets`): stresa poligoni ar statusu `new` vai
+   `persistent` (1.–2. prioritāte) un, pēc izvēles, 30 m skujkoku meža josla gar
+   pēdējo 2 gadu cirtēm ≥ 0,3 ha (3. prioritāte — augsta riska zona, kur
+   anomālija nav noteikta). Katram mērķim: ID (T001…), centroīda un punkta uz
+   mērķa koordinātas WGS84, īss apraksts latviski.
+9. **Validācija** (ja ir references dati, piem., sanitārās cirtes ar datumiem):
+   - references darbības jomā ir cirtes no monitoringa sezonas sākuma līdz
+     nākamā gada 31. martam; agrākās cirtes nevar noteikt "pirms cirtes";
+   - atbilstība: jebkura pārklāšanās ar referenci, kas paplašināta par 10 m;
+   - **TP ir tikai stresa noteikšana pirms cirtes**; atsevišķi uzskaitītas
+     references, kas noteiktas tikai kā cirte vai kā stress pēc cirtes;
+   - aizkave = cirtes datums − `first_detected` dienās (pozitīvs = agrāk);
+   - precision, recall, F1; katras references indeksu laika rinda, sadalīta
+     pie cirtes datuma;
+   - references lauku nosaukumi (ID, datums, iemesls) un iemesla filtrs ir
+     konfigurējami. Datumi tiek lasīti arī formātā `dd.mm.gggg`.
+   - Precision ir pesimistisks novērtējums, jo references dati parasti nav pilnīgi.
+
+   Kalsnavas konfigurācijā validācija tiek demonstrēta ar **sintētiskām**
+   referencēm (`scripts/make_demo_references.py`), kas izveidotas no paša rīka
+   atrastajām cirtēm. Tās pārbauda tikai moduļa darbību un **neko neliecina par
+   precizitāti**.
 
 ## Kalibrētie parametri (Kalsnavas testa teritorija, 2026)
 

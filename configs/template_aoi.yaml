@@ -1,0 +1,62 @@
+# Configuration template for a new area of interest (AOI).
+#
+# 1. Copy this file, e.g. configs/lvm_<name>.yaml
+# 2. Put input data in data/local/ (not committed to git)
+# 3. Fill in the fields marked TODO
+# 4. Run everything with one command:
+#       python -m uv run s2forest run configs/lvm_<name>.yaml
+#
+# Relative paths are resolved against this file's folder.
+# Only `run_name`, `aoi` and `time.monitor_year` are required; everything else
+# has calibrated defaults (see README, "Kalibrētie parametri").
+
+run_name: TODO_name                     # output goes to output/<run_name>/
+aoi: ../data/local/TODO_aoi.gpkg        # GeoJSON / Shapefile / GeoPackage, any CRS
+output_dir: ../output
+cache_dir: ../cache
+
+time:
+  monitor_year: 2026                    # year to screen
+  baseline_years: 3                     # previous years used as the baseline
+  season_start: "05-01"                 # MM-DD
+  season_end: "09-30"
+
+# Optional: forest stand polygons (e.g. from the State Forest Register).
+# Used later to restrict the analysis to spruce stands and aggregate per stand.
+stands:
+  path: null                            # ../data/local/TODO_stands.gpkg
+  id_field: id                          # TODO: stand id attribute
+  species_field: null                   # TODO: dominant species attribute
+  spruce_values: []                     # TODO: code(s) meaning spruce (check your data)
+
+# Optional: reference polygons with known damage (e.g. sanitary cuts) for validation.
+reference:
+  path: null                            # ../data/local/TODO_sanitary_cuts.gpkg
+  id_field: null                        # TODO: reference id attribute (optional)
+  date_field: date                      # TODO: cut date attribute
+  reason_field: null                    # TODO: cut reason attribute (optional)
+  reason_values: null                   # e.g. ["mizgrauži"] to keep only bark beetle cuts
+
+# --- Defaults below normally need no change -------------------------------------
+
+data:
+  sources:
+    - {name: earthsearch, collection: sentinel-2-c1-l2a}
+    - {name: planetary, collection: sentinel-2-l2a}
+  min_valid_fraction: 0.6               # share of clear AOI pixels to accept a scene
+  workers: 4
+
+anomaly:
+  z_threshold: 2.5
+  persistence: 2
+  primary_index: crswir
+  min_confirming: 1
+  min_area_ha: 0.1
+  normalization:
+    enabled: true
+    buffer_m: 5000
+
+targets:
+  statuses: [new, persistent]
+  cut_edge_enabled: true
+  cut_edge_width_m: 30

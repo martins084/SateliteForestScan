@@ -30,6 +30,12 @@ plt.rcParams.update({
 })
 
 
+def _concise_dates(ax) -> None:
+    loc = matplotlib.dates.AutoDateLocator(minticks=3, maxticks=7)
+    ax.xaxis.set_major_locator(loc)
+    ax.xaxis.set_major_formatter(matplotlib.dates.ConciseDateFormatter(loc))
+
+
 def _save(fig, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -306,7 +312,67 @@ def plot_polygon_chips(cube: xr.Dataset, indices: xr.Dataset, polygons, year: in
         ax = axes[r, 2]
         ax.plot(t[ok], ts.values[ok], "-o", ms=3, lw=1, color=SERIES[0], mec=SURFACE)
         ax.axvline(pd.Timestamp(poly["first_detected"]), color=SERIES[1], lw=1.2, ls="--")
+        _concise_dates(ax)
         ax.set_title(f"{index.upper()} mediāna poligonā; {poly['type']}, {poly['area_ha']:.2f} ha, "
                      f"ticamība {poly['confidence']:.2f}", loc="left", fontsize=8)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
+OUTCOME_LV = {"stress_before_cut": "stress pirms cirtes (TP)",
+              "stress_on_or_after_cut": "stress cirtes dienā vai vēlāk",
+              "cut_only": "noteikts tikai kā cirte", "missed": "nav noteikts"}
+
+
+def plot_validation(refs, summary: pd.DataFrame, ts: pd.DataFrame, primary: str,
+                    path: Path, max_series: int = 6) -> Path:
+    inscope = refs[refs["scope"] == "in_scope"]
+    counts = [int((inscope["outcome"] == o).sum()) for o in OUTCOME_LV]
+    leads = inscope.loc[inscope["outcome"] == "stress_before_cut", "lead_days"].dropna()
+    ids = list(inscope["ref_id"][:max_series])
+    nrow = 1 + int(np.ceil(len(ids) / 2))
+    fig = plt.figure(figsize=(11, 3.0 * nrow))
+    gs = fig.add_gridspec(nrow, 2)
+    ax = fig.add_subplot(gs[0, 0])
+    labels = list(OUTCOME_LV.values())
+    ax.barh(labels[::-1], counts[::-1], color=SERIES[0], height=0.6)
+    for yv, c in enumerate(counts[::-1]):
+        ax.text(c, yv, f" {c}", va="center", fontsize=8, color=INK)
+    ax.set_title(f"References darbības jomā: {len(inscope)} (ārpus: {len(refs) - len(inscope)})",
+                 loc="left")
+    ax.grid(axis="y", visible=False)
+    ax = fig.add_subplot(gs[0, 1])
+    row = summary.iloc[0]
+    if len(leads):
+        ax.hist(leads, bins=min(12, max(3, len(leads))), color=SERIES[0], rwidth=0.9)
+        ax.axvline(0, color=INK_2, lw=0.8)
+        ax.set_xlabel("dienas pirms cirtes (pozitīvs = agrāk)")
+    else:
+        ax.text(0.5, 0.5, "Nav stresa noteikšanu pirms cirtes", ha="center", va="center",
+                transform=ax.transAxes, color=INK_2)
+        ax.set_xticks([])
+        ax.set_yticks([])
+    fmt = lambda v: "–" if pd.isna(v) else f"{v:.2f}"
+    ax.set_title(f"Aizkave; precision {fmt(row['precision'])}, recall {fmt(row['recall'])}, "
+                 f"F1 {fmt(row['f1'])}", loc="left")
+    for k, rid in enumerate(ids):
+        ax = fig.add_subplot(gs[1 + k // 2, k % 2])
+        d = ts[ts["ref_id"] == rid] if len(ts) else ts
+        r = inscope[inscope["ref_id"] == rid].iloc[0]
+        if len(d):
+            d = d.dropna(subset=[primary])
+            dt = pd.to_datetime(d["date"])
+            pre, post = d["phase"] == "pre_cut", d["phase"] == "post_cut"
+            ax.plot(dt[pre], d.loc[pre, primary], "o", ms=3, color=SERIES[0], label="pirms cirtes")
+            ax.plot(dt[post], d.loc[post, primary], "o", ms=3, color=SERIES[1], label="pēc cirtes")
+        ax.axvline(pd.Timestamp(r["ref_date"]), color=INK, lw=1)
+        if r["first_detected"] is not None:
+            ax.axvline(pd.Timestamp(r["first_detected"]), color=SERIES[1], lw=1, ls="--")
+        ax.set_title(f"{rid}: {OUTCOME_LV[r['outcome']]} (cirte {r['ref_date']})", loc="left",
+                     fontsize=8.5)
+        ax.set_ylabel(primary.upper())
+        _concise_dates(ax)
+        if k == 0:
+            ax.legend(loc="upper left")
     fig.tight_layout()
     return _save(fig, path)

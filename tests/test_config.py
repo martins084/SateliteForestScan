@@ -27,3 +27,11 @@ def test_invalid_primary_index_rejected(tmp_path):
     }), encoding="utf-8")
     with pytest.raises(ValueError):
         load_config(p)
+
+
+def test_template_config_is_valid():
+    from pathlib import Path
+
+    cfg = load_config(Path(__file__).parents[1] / "configs" / "template_aoi.yaml")
+    assert cfg.time.monitor_year == 2026 and cfg.targets.cut_edge_width_m == 30
+    assert cfg.reference.path is None and cfg.stands.path is None

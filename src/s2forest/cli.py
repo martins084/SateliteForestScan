@@ -145,11 +145,16 @@ def indices(config: Path = ConfigArg, verbose: bool = VerboseOpt):
     typer.echo(f"{len(written)} rasters written to {cfg.run_dir / 'rasters'}")
 
 
+CloseupsOpt = typer.Option(True, "--closeups/--no-closeups",
+                           help="Render per-polygon close-up figures (slow)")
+
+
 @app.command()
-def detect(config: Path = ConfigArg, verbose: bool = VerboseOpt):
-    """Baseline, anomalies, persistence and suspect polygons for the monitoring year."""
+def detect(config: Path = ConfigArg, verbose: bool = VerboseOpt, closeups: bool = CloseupsOpt):
+    """Baseline, anomalies, persistence, suspect polygons and drone targets."""
     from . import viz
-    from .pipeline import detect_stage, index_stage, write_detect_outputs, write_index_outputs
+    from .pipeline import (detect_stage, index_stage, status_summary, write_detect_outputs,
+                           write_index_outputs)
 
     cfg = _setup(config, verbose)
     st = index_stage(cfg)
@@ -163,10 +168,10 @@ def detect(config: Path = ConfigArg, verbose: bool = VerboseOpt):
     aoi = read_vector(cfg.aoi, cfg.data.crs)
     viz.plot_suspects_map(st.cube, ds.polygons, aoi, year, fig_dir / f"suspects_{year}.png")
     stress = ds.polygons[ds.polygons["type"] == "stress"] if len(ds.polygons) else ds.polygons
-    if len(stress):
+    if closeups and len(stress):
         viz.plot_polygon_chips(st.cube, st.indices, stress, year,
                                fig_dir / f"suspect_chips_stress_{year}.png", n=8)
-    if len(ds.polygons):
+    if closeups and len(ds.polygons):
         viz.plot_polygon_chips(st.cube, st.indices, ds.polygons, year,
                                fig_dir / f"suspect_chips_all_{year}.png", n=8)
     if cfg.anomaly.normalization.enabled:
@@ -188,8 +193,77 @@ def detect(config: Path = ConfigArg, verbose: bool = VerboseOpt):
                f"(excluded as disturbed in baseline: {summary['baseline_disturbed_ha']:.1f} ha)")
     typer.echo(f"Suspect polygons {year}: {summary['n_stress']} stress ({summary['stress_ha']:.2f} ha), "
                f"{summary['n_cut']} cut ({summary['cut_ha']:.2f} ha)")
+    ss = status_summary(gdf)
+    for _, r in ss.iterrows():
+        typer.echo(f"  {r['type']:6s} {r['status']:10s} {int(r['n']):3d} polygons, {r['area_ha']:.2f} ha")
+    tg = ds.targets
+    n_kind = tg["kind"].value_counts().to_dict() if len(tg) else {}
+    typer.echo(f"Drone targets: {len(tg)} ({n_kind})")
+    summary["status"] = ss.to_dict(orient="records")
+    summary["drone_targets"] = n_kind
     _write_metadata(cfg, {"detect": {**summary, "outputs": {k: str(v) for k, v in written.items()}}})
-    typer.echo(f"GeoPackage: {written['suspects']}")
+    typer.echo(f"GeoPackage: {written['suspects']} (layers suspects_{year}, drone_targets)")
+    typer.echo(f"KML / GeoJSON: {written['drone_targets_kml'].parent}")
+
+
+@app.command()
+def validate(config: Path = ConfigArg, verbose: bool = VerboseOpt,
+             timeseries: bool = typer.Option(True, "--timeseries/--no-timeseries",
+                                             help="Index time series per reference (slower)")):
+    """Compare suspect polygons with reference polygons (e.g. dated sanitary cuts)."""
+    import geopandas as gpd
+
+    from . import viz
+    from .validation import validate as run_validation
+
+    cfg = _setup(config, verbose)
+    if cfg.reference.path is None:
+        typer.echo("No reference data configured (reference.path) - skipping validation.")
+        return
+    year = cfg.time.monitor_year
+    gpkg = cfg.run_dir / "vectors" / "suspects.gpkg"
+    if not gpkg.exists():
+        raise typer.BadParameter(f"{gpkg} not found - run `detect` first")
+    polygons = gpd.read_file(gpkg, layer=f"suspects_{year}")
+    indices = None
+    if timeseries:
+        from .pipeline import index_stage
+
+        indices = index_stage(cfg).indices
+    res, info = run_validation(cfg, polygons, indices)
+
+    tdir = cfg.run_dir / "tables"
+    tdir.mkdir(parents=True, exist_ok=True)
+    res.references.drop(columns="geometry").to_csv(tdir / f"validation_references_{year}.csv", index=False)
+    res.polygons.to_csv(tdir / f"validation_polygons_{year}.csv", index=False)
+    res.summary.to_csv(tdir / f"validation_summary_{year}.csv", index=False)
+    if len(res.timeseries):
+        res.timeseries.to_csv(tdir / f"validation_timeseries_{year}.csv", index=False)
+    res.references.to_file(gpkg, layer=f"validation_references_{year}", driver="GPKG",
+                           engine="pyogrio")
+    viz.plot_validation(res.references, res.summary, res.timeseries, cfg.anomaly.primary_index,
+                        cfg.run_dir / "figures" / f"validation_{year}.png")
+
+    typer.echo(f"References: {info}")
+    for _, r in res.summary.iterrows():
+        f = lambda v: "n/a" if pd.isna(v) else f"{v:.2f}"
+        typer.echo(f"  {r['subset']}: in scope {r['references_in_scope']}, "
+                   f"TP refs {r['tp_references']}, cut only {r['refs_cut_only']}, "
+                   f"missed {r['refs_missed']}; precision {f(r['precision'])}, "
+                   f"recall {f(r['recall'])}, F1 {f(r['f1'])}, "
+                   f"median lead {f(r['lead_days_median'])} d")
+    _write_metadata(cfg, {"validate": {"references": info,
+                                       "summary": res.summary.to_dict(orient="records")}})
+
+
+@app.command()
+def run(config: Path = ConfigArg, verbose: bool = VerboseOpt, closeups: bool = CloseupsOpt):
+    """Whole pipeline: fetch -> indices -> detect -> validate (if references are configured)."""
+    fetch(config, verbose)
+    indices(config, verbose)
+    detect(config, verbose, closeups)
+    validate(config, verbose, timeseries=True)
+    typer.echo(f"Done. Results in {load_config(config).run_dir}")
 
 
 if __name__ == "__main__":
