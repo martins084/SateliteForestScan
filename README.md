@@ -220,6 +220,20 @@ jāpārpalaiž jaunai teritorijai.
 - Harmonizācijas pārbaudes grafiks (`diagnostics/harmonization_check.png`)
   rāda konsekventus skujkoku meža atstarošanās līmeņus 2022–2026 abos avotos.
 
+## Starpgadu un platformu saskaņotība (Kalsnava, 2022–2026)
+
+`scripts/check_platform_trend.py`: vasaras (15.06.–31.08.) CRSWIR un NDVI mediāna
+stabilā veselā mežā pa gadiem un platformām.
+
+- Vasaras CRSWIR pieauga 0,78 (2022) → 0,84 (2025), 2026. gadā 0,76; NDVI tajā pašā
+  laikā arī pieauga (0,79 → 0,83). Vienlaicīgs pieaugums nav stresa pazīme —
+  visticamāk, reģionāls laikapstākļu signāls, ko noņem reģionālā normalizācija.
+- Nenormalizētās vērtībās S2A CRSWIR bija par 0,02–0,04 augstāks nekā S2B 3 no 5
+  gadiem (datumu maz: 1–6 uz platformu gadā). Pēc reģionālās normalizācijas
+  (nobīde katram datumam atsevišķi) atlikusī atšķirība veselā mežā ir ≤ 0,1 z
+  (S2A +0,02, S2B −0,06, S2C −0,08), t. i., ~4 % no sliekšņa k = 2,5. Platformu
+  korekcija netiek veikta.
+
 ## Zināmie ierobežojumi
 
 - **Izšķirtspēja:** koku grupu / nogabala līmenis; atsevišķi koki netiek
