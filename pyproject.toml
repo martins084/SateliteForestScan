@@ -1,0 +1,52 @@
+[project]
+name = "s2forest"
+version = "0.1.0"
+description = "Sentinel-2 forest stress and bark beetle damage screening (level 1 of a satellite + drone system)"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "xarray>=2024.6",
+    "rioxarray>=0.15",
+    "rasterio>=1.3.10",
+    "dask[array]>=2024.6",
+    "geopandas>=1.0",
+    "shapely>=2.0",
+    "pyogrio>=0.9",
+    "pyproj>=3.6",
+    "pystac-client>=0.8",
+    "odc-stac>=0.3.10",
+    "planetary-computer>=1.0",
+    "zarr>=2.18",
+    "matplotlib>=3.8",
+    "jinja2>=3.1",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "requests>=2.31",
+]
+
+[project.scripts]
+s2forest = "s2forest.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ipykernel>=6.29",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/s2forest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["network: tests that need internet access (deselected by default)"]
+addopts = "-m 'not network'"
+filterwarnings = [
+    "ignore:Use `@` matmul:PendingDeprecationWarning",
+]
