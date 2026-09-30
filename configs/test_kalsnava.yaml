@@ -52,3 +52,4 @@ reference:
   date_field: cirtes_datums
   reason_field: iemesls
   reason_values: ["sanitārā cirte (DEMO)"]
+  description: "DEMO: sintētiskas references no rīka paša 2026. gada cirtēm. Pārbauda tikai moduļa darbību, neko neliecina par precizitāti."

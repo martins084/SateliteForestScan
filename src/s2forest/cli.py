@@ -199,8 +199,14 @@ def detect(config: Path = ConfigArg, verbose: bool = VerboseOpt, closeups: bool 
     tg = ds.targets
     n_kind = tg["kind"].value_counts().to_dict() if len(tg) else {}
     typer.echo(f"Drone targets: {len(tg)} ({n_kind})")
+    ms = ds.missions
+    top = ms.head(cfg.targets.max_missions)
+    typer.echo(f"Drone missions: {len(ms)} total, top {len(top)} exported "
+               f"({int(top['n_targets'].sum()) if len(top) else 0} targets, "
+               f"{top['flight_area_ha'].sum() if len(top) else 0:.0f} ha flight area)")
     summary["status"] = ss.to_dict(orient="records")
     summary["drone_targets"] = n_kind
+    summary["drone_missions"] = {"total": int(len(ms)), "exported": int(len(top))}
     _write_metadata(cfg, {"detect": {**summary, "outputs": {k: str(v) for k, v in written.items()}}})
     typer.echo(f"GeoPackage: {written['suspects']} (layers suspects_{year}, drone_targets)")
     typer.echo(f"KML / GeoJSON: {written['drone_targets_kml'].parent}")
@@ -257,12 +263,45 @@ def validate(config: Path = ConfigArg, verbose: bool = VerboseOpt,
 
 
 @app.command()
+def missions(config: Path = ConfigArg, verbose: bool = VerboseOpt):
+    """Regroup existing drone targets into missions (after changing `targets.mission_*`)."""
+    import geopandas as gpd
+
+    from .targets import build_missions, write_targets
+
+    cfg = _setup(config, verbose)
+    gpkg = cfg.run_dir / "vectors" / "suspects.gpkg"
+    if not gpkg.exists():
+        raise typer.BadParameter(f"{gpkg} not found - run `detect` first")
+    targets = gpd.read_file(gpkg, layer="drone_targets").drop(columns="mission_id", errors="ignore")
+    ms, targets = build_missions(cfg, targets)
+    write_targets(cfg, targets, gpkg, ms)
+    top = ms.head(cfg.targets.max_missions)
+    typer.echo(f"Drone missions: {len(ms)} total, top {len(top)} exported")
+    for _, m in top.iterrows():
+        typer.echo(f"  {m['mission_id']}: {m['n_stress']} stress + {m['n_cut_edge']} cut edges, "
+                   f"{m['flight_area_ha']:.1f} ha, best value {m['max_value']:.2f}")
+
+
+@app.command()
+def report(config: Path = ConfigArg, verbose: bool = VerboseOpt):
+    """Single-file HTML report (Latvian); figures also saved as 200 dpi PNG."""
+    from .report import build_report
+
+    cfg = _setup(config, verbose)
+    out = build_report(cfg)
+    typer.echo(f"Report: {out}")
+    typer.echo(f"Figures (PNG, 200 dpi): {cfg.run_dir / 'figures' / 'report'}")
+
+
+@app.command()
 def run(config: Path = ConfigArg, verbose: bool = VerboseOpt, closeups: bool = CloseupsOpt):
-    """Whole pipeline: fetch -> indices -> detect -> validate (if references are configured)."""
+    """Whole pipeline: fetch -> indices -> detect -> validate (if references) -> report."""
     fetch(config, verbose)
     indices(config, verbose)
     detect(config, verbose, closeups)
     validate(config, verbose, timeseries=True)
+    report(config, verbose)
     typer.echo(f"Done. Results in {load_config(config).run_dir}")
 
 

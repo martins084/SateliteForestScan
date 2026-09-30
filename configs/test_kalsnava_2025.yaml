@@ -42,3 +42,12 @@ anomaly:
   normalization:
     enabled: true
     buffer_m: 5000
+
+# Winter cuts 2025/26 found by the 2026 run (scripts/make_winter_cut_references.py).
+# Cut reason UNKNOWN (mostly regular fellings); cut date = earliest possible, so
+# lead times are lower bounds. Question: was stress visible in 2025 before the cut?
+reference:
+  path: ../data/local/test_kalsnava_2025_winter_cut_references.gpkg
+  id_field: nr
+  date_field: cirtes_datums
+  description: "2025./2026. gada ziemas cirtes, ko atrada 2026. gada analīze. Cirtes iemesls NAV zināms (visticamāk, galvenokārt kārtējās cirtes, nevis mizgraužu bojājumi). Cirtes datums ir agrākais iespējamais (2025-09-30), tāpēc aizkave ir apakšējā robeža."

@@ -57,6 +57,15 @@ python -m uv run s2forest validate configs/test_kalsnava.yaml   # salīdzinājum
 
 `detect --no-closeups` izlaiž poligonu tuvplānu attēlus (ātrāk).
 
+```bash
+python -m uv run s2forest report   configs/test_kalsnava.yaml   # HTML atskaite
+python -m uv run s2forest missions configs/test_kalsnava.yaml   # pārgrupēt misijas (pēc targets.mission_* maiņas)
+```
+
+Atskaite: `output/<run_name>/atskaite_<run_name>_<gads>.html` (viens fails ar
+iegultiem attēliem). Visi atskaites attēli ir arī atsevišķi PNG failos (200 dpi)
+mapē `figures/report/` — izmantošanai granta pieteikumā un prezentācijā.
+
 Rezultāti: `output/<run_name>/`
 
 | Mape | Saturs |
@@ -114,10 +123,30 @@ Kataloga pieņēmumu pārbaude (ar internetu): `python -m uv run pytest -m netwo
    - `recovered` — atgriezies normā (piem., pavasara fenoloģijas artefakts).
    Poligoni netiek dzēsti; statusu skaits redzams `tables/polygon_status_<gads>.csv`.
 8. **Drona mērķi** (`drone_targets`): stresa poligoni ar statusu `new` vai
-   `persistent` (1.–2. prioritāte) un, pēc izvēles, 30 m skujkoku meža josla gar
-   pēdējo 2 gadu cirtēm ≥ 0,3 ha (3. prioritāte — augsta riska zona, kur
-   anomālija nav noteikta). Katram mērķim: ID (T001…), centroīda un punkta uz
-   mērķa koordinātas WGS84, īss apraksts latviski.
+   `persistent` (vienmēr 1.–2. prioritāte) un, pēc izvēles, 30 m skujkoku meža
+   josla gar pēdējo 2 gadu cirtēm ≥ 0,3 ha (3. prioritāte — augsta riska zona,
+   kur anomālija nav noteikta), sakārtota pēc `risk_score`. Katram mērķim: ID
+   (T001…), centroīda un punkta uz mērķa koordinātas WGS84, īss apraksts latviski.
+
+   **Cirtes malas riska rādītājs** `risk_score` (0–1) = svērta summa (svari
+   `targets.risk_weights`, noklusēti):
+
+   | Komponente | Svars | Aprēķins |
+   |---|---|---|
+   | orientācija (`risk_orientation`) | 0,4 | Katram joslas pikselim — virziens uz tuvāko cirtes pikseli, t. i., kurp vērsta atsegtā meža siena. Pikseļa vērtība (1 + cos(virziens − 225°)) / 2: maksimums DR (225°), D un R ≈ 0,93, Z ≈ 0,07; vidējais pa joslu. D, DR un R vērstas malas saņem visvairāk saules → pārkaršana → mizgraužu uzbrukumu risks. |
+   | svaigums (`risk_freshness`) | 0,3 | Monitoringa gada cirte = 1, iepriekšējā gada = 0,5 (lineāri pa `cut_edge_years`). |
+   | skujkoku īpatsvars (`risk_conifer`) | 0,3 | Cik liela daļa no pilnās 30 m joslas ap cirti ir analizētais skujkoku mežs. |
+
+   Papildus: `sw_exposed_share` — joslas daļa, kuras siena vērsta D…R (157,5–292,5°).
+   Maksimuma virzienu var mainīt ar `targets.risk_peak_azimuth`.
+
+   **Misijas** (`drone_missions`): mērķi tiek grupēti pēc attāluma. Sākot ar
+   augstākās prioritātes nepiešķirto mērķi, tiek pievienoti tuvākie mērķi
+   (≤ 500 m), kamēr buferēto (20 m) mērķu izliektās čaulas laukums nepārsniedz
+   30 ha (~1–2 Mavic 3M baterijas zemā augstumā). Misijas sakārtotas pēc labākā
+   mērķa prioritātes, tad pēc augstākā mērķa riska / ticamības misijā, tad pēc kopējās vērtības; eksportētas top 10 (`targets.max_missions`)
+   GPKG slānī un KML/GeoJSON (`vectors/drone_missions_<gads>.kml`). Visi mērķi
+   (arī ārpus top 10) paliek `drone_targets` slānī ar `mission_id`.
 9. **Validācija** (ja ir references dati, piem., sanitārās cirtes ar datumiem):
    - references darbības jomā ir cirtes no monitoringa sezonas sākuma līdz
      nākamā gada 31. martam; agrākās cirtes nevar noteikt "pirms cirtes";

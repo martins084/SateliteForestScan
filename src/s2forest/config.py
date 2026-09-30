@@ -37,6 +37,9 @@ class ReferenceConfig(BaseModel):
     date_field: str = "date"
     reason_field: str | None = None
     reason_values: list[str | int] | None = None
+    # Free text shown in the report next to the validation results (what the
+    # references are, how reliable their dates / reasons are).
+    description: str | None = None
     # A detection matches a reference if it intersects the reference buffered by this.
     match_buffer_m: float = 10.0
     # References cut later than this are out of scope (default: 31 March of the
@@ -179,6 +182,21 @@ class TargetsConfig(BaseModel):
     cut_edge_years: int = 2        # cuts of the monitoring year and the year before
     cut_edge_min_cut_ha: float = 0.3   # ignore smaller cuts / thinning patches
     cut_edge_min_area_ha: float = 0.05  # minimum band area per cut
+    # risk_score of a cut-edge zone = weighted sum of three 0..1 components:
+    #  orientation: how much the exposed forest wall faces `risk_peak_azimuth`
+    #               (S/SW/W walls get the most sun -> heat stress, beetle attacks);
+    #               per pixel (1 + cos(face - peak)) / 2, averaged over the band;
+    #  freshness:   1 for cuts of the monitoring year, decreasing linearly to
+    #               1 / cut_edge_years for the oldest year considered;
+    #  conifer:     share of the full band (before masking) that is conifer forest.
+    risk_weights: dict[str, float] = Field(
+        default_factory=lambda: {"orientation": 0.4, "freshness": 0.3, "conifer": 0.3})
+    risk_peak_azimuth: float = 225.0   # direction the exposed wall faces; S=180, SW=225, W=270
+    # Missions: targets grouped by proximity into flight areas.
+    mission_max_area_ha: float = 30.0  # convex hull of buffered targets (~1-2 Mavic 3M batteries, low altitude)
+    mission_buffer_m: float = 20.0     # margin around targets in the flight area
+    mission_max_gap_m: float = 500.0   # do not join targets farther apart than this
+    max_missions: int = 10             # missions exported (by priority)
 
 
 class Config(BaseModel):

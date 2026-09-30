@@ -123,7 +123,8 @@ class DetectStage:
     polygons: "gpd.GeoDataFrame"
     offsets: pd.DataFrame       # regional normalization per date and index
     status_codes: np.ndarray    # STATUS_* per pixel
-    targets: "gpd.GeoDataFrame"  # drone target layer
+    targets: "gpd.GeoDataFrame"  # drone target layer (with mission_id)
+    missions: "gpd.GeoDataFrame"  # drone missions, ranked
 
 
 # Per-pixel status raster codes.
@@ -221,11 +222,12 @@ def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
     codes[np.nan_to_num(feats["baseline_disturbed"].values) > 0] = STATUS_BASELINE_DISTURBED
     codes[~st.analysis_mask] = STATUS_NOT_ANALYSED
     codes[st.forest_codes == OUTSIDE_AOI] = OUTSIDE_AOI
-    from .targets import build_targets
+    from .targets import build_missions, build_targets
 
     targets = build_targets(cfg, gdf, feats, st.analysis_mask, st.cube.B04.isel(time=0, drop=True))
+    missions, targets = build_missions(cfg, targets)
     return DetectStage(features=feats, z=z, delta=delta, polygons=gdf, offsets=offsets,
-                       status_codes=codes, targets=targets)
+                       status_codes=codes, targets=targets, missions=missions)
 
 
 def status_summary(polygons: "gpd.GeoDataFrame") -> pd.DataFrame:
@@ -280,5 +282,5 @@ def write_detect_outputs(cfg: Config, st: IndexStage, ds: DetectStage) -> dict[s
 
     from .targets import write_targets
 
-    written.update(write_targets(cfg, ds.targets, gpkg))
+    written.update(write_targets(cfg, ds.targets, gpkg, ds.missions))
     return written

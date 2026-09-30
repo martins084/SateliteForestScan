@@ -19,6 +19,7 @@ INK_2 = "#52514e"
 GRID = "#e4e3df"
 SURFACE = "#fcfcfb"
 MUTED = "#b9b8b3"
+FIG_DPI = 200  # figures are reused in the grant application and slides
 
 plt.rcParams.update({
     "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
@@ -38,7 +39,7 @@ def _concise_dates(ax) -> None:
 
 def _save(fig, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=FIG_DPI, bbox_inches="tight")
     plt.close(fig)
     return path
 
@@ -249,6 +250,8 @@ def plot_suspects_map(cube: xr.Dataset, polygons, aoi_outline, year: int, path: 
     ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.04), ncol=2)
     ax.set_title(f"Aizdomīgās vietas {year} (fons: {t[i]:%Y-%m-%d}; numuri = id pēc ticamības)",
                  loc="left")
+    ax.set_xlabel("")
+    ax.set_ylabel("")
     ax.set_xticks([])
     ax.set_yticks([])
     ax.grid(False)
@@ -303,6 +306,10 @@ def plot_polygon_chips(cube: xr.Dataset, indices: xr.Dataset, polygons, year: in
             gpd_boundary.plot(ax=ax, color="#ffffff", lw=2)
             gpd_boundary.plot(ax=ax, color=SERIES[1], lw=1)
             ax.set_title(f"#{poly['id']}  {t[ti]:%Y-%m-%d}", loc="left", fontsize=8)
+            ax.set_xlim(ext[0], ext[1])
+            ax.set_ylim(ext[2], ext[3])
+            ax.set_xlabel("")
+            ax.set_ylabel("")
             ax.set_xticks([])
             ax.set_yticks([])
             ax.grid(False)
@@ -329,7 +336,10 @@ def plot_validation(refs, summary: pd.DataFrame, ts: pd.DataFrame, primary: str,
     inscope = refs[refs["scope"] == "in_scope"]
     counts = [int((inscope["outcome"] == o).sum()) for o in OUTCOME_LV]
     leads = inscope.loc[inscope["outcome"] == "stress_before_cut", "lead_days"].dropna()
-    ids = list(inscope["ref_id"][:max_series])
+    # most informative first: pre-cut stress, stress after cut, cut only, missed
+    rank = {o: i for i, o in enumerate(OUTCOME_LV)}
+    ids = list(inscope.assign(_r=inscope["outcome"].map(rank)).sort_values(["_r", "ref_id"])
+               ["ref_id"][:max_series])
     nrow = 1 + int(np.ceil(len(ids) / 2))
     fig = plt.figure(figsize=(11, 3.0 * nrow))
     gs = fig.add_gridspec(nrow, 2)
@@ -343,9 +353,23 @@ def plot_validation(refs, summary: pd.DataFrame, ts: pd.DataFrame, primary: str,
     ax.grid(axis="y", visible=False)
     ax = fig.add_subplot(gs[0, 1])
     row = summary.iloc[0]
-    if len(leads):
-        ax.hist(leads, bins=min(12, max(3, len(leads))), color=SERIES[0], rwidth=0.9)
+    if len(leads) >= 8:
+        ax.hist(leads, bins=min(12, len(leads)), color=SERIES[0], rwidth=0.9)
         ax.axvline(0, color=INK_2, lw=0.8)
+        ax.set_xlabel("dienas pirms cirtes (pozitīvs = agrāk)")
+    elif len(leads):
+        # few values: show each reference as a labelled point
+        lr = inscope.loc[leads.index]
+        ys = np.arange(len(lr))
+        ax.plot(lr["lead_days"], ys, "o", ms=8, color=SERIES[0], mec=SURFACE)
+        for yv, (_, r) in zip(ys, lr.iterrows()):
+            ax.annotate(f"{r['ref_id']}: {r['lead_days']:.0f} d", (r["lead_days"], yv),
+                        xytext=(8, 0), textcoords="offset points", va="center", fontsize=8,
+                        color=INK)
+        ax.axvline(0, color=INK_2, lw=0.8)
+        ax.set_yticks([])
+        ax.set_ylim(-1, len(lr))
+        ax.set_xlim(min(0, float(lr["lead_days"].min())) - 10, float(lr["lead_days"].max()) * 1.35 + 10)
         ax.set_xlabel("dienas pirms cirtes (pozitīvs = agrāk)")
     else:
         ax.text(0.5, 0.5, "Nav stresa noteikšanu pirms cirtes", ha="center", va="center",
@@ -375,4 +399,101 @@ def plot_validation(refs, summary: pd.DataFrame, ts: pd.DataFrame, primary: str,
         if k == 0:
             ax.legend(loc="upper left")
     fig.tight_layout()
+    return _save(fig, path)
+
+
+MONTHS_LV = {5: "maijs", 6: "jūnijs", 7: "jūlijs", 8: "augusts", 9: "septembris",
+             4: "aprīlis", 10: "oktobris"}
+
+
+def monthly_availability(table: pd.DataFrame, usable_times=None) -> pd.DataFrame:
+    """Usable / all overpasses per year and month.
+
+    `usable_times`: acquisition times actually used in the analysis (after the
+    SCL and haze filters). If None, the SCL-based `accepted` status is used.
+    """
+    t = table[table["status"].isin(["accepted", "rejected", "failed"])].copy()
+    t["datetime"] = pd.to_datetime(t["datetime"], utc=True)
+    t["year"] = t["datetime"].dt.year
+    t["month"] = t["datetime"].dt.month
+    g = t.groupby(["year", "month"]).agg(total=("status", "size"),
+                                         accepted=("status", lambda s: int((s == "accepted").sum())))
+    g = g.reset_index()
+    if usable_times is not None:
+        u = pd.DatetimeIndex(usable_times)
+        cnt = pd.Series(1, index=u).groupby([u.year, u.month]).sum()
+        g["accepted"] = [int(cnt.get((y, m), 0)) for y, m in zip(g["year"], g["month"])]
+    return g
+
+
+def plot_monthly_availability(avail: pd.DataFrame, path: Path) -> Path:
+    years = sorted(avail["year"].unique())
+    months = sorted(avail["month"].unique())
+    fig, axes = plt.subplots(1, len(years), figsize=(2.3 * len(years) + 0.6, 2.8), sharey=True,
+                             squeeze=False)
+    ymax = max(int(avail["accepted"].max()), 1)
+    for ax, y in zip(axes[0], years):
+        d = avail[avail["year"] == y].set_index("month").reindex(months, fill_value=0)
+        xs = np.arange(len(months))
+        ax.bar(xs, d["accepted"], color=SERIES[0], width=0.7)
+        for x, (a, tot) in zip(xs, zip(d["accepted"], d["total"])):
+            ax.text(x, a + 0.1, f"{a}/{tot}", ha="center", va="bottom", fontsize=7, color=INK_2)
+        ax.set_xticks(xs, [MONTHS_LV.get(m, str(m))[:3] for m in months])
+        ax.set_title(f"{y}: {int(d['accepted'].sum())} derīgi", loc="left", fontsize=9)
+        ax.set_ylim(0, ymax + 1.5)
+        ax.grid(axis="x", visible=False)
+    axes[0, 0].set_ylabel("derīgi pārlidojumi")
+    fig.suptitle("Datu pieejamība pa mēnešiem (derīgi / visi pārlidojumi virs AOI)", x=0.01,
+                 ha="left", fontsize=10.5, color=INK)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
+def plot_overview_map(cube: xr.Dataset, polygons, missions, aoi_outline, year: int,
+                      path: Path) -> Path:
+    """RGB + cuts (filled) + stress polygons (outlined) + drone missions (dashed, labelled)."""
+    t = pd.DatetimeIndex(cube.time.values)
+    cand = np.flatnonzero((t.year == year) & (t.month >= 6))
+    if cand.size == 0:
+        cand = np.flatnonzero(t.year == year)
+    i = int(cand[np.argmax(cube.valid_fraction.values[cand])])
+    template = cube.B04.isel(time=0, drop=True)
+    fig, ax = plt.subplots(figsize=(9, 9))
+    ax.imshow(rgb_image(cube, i, gain=3.2), extent=_extent(template), interpolation="nearest")
+    if aoi_outline is not None:
+        aoi_outline.boundary.plot(ax=ax, color="#ffffff", lw=0.8)
+    handles = []
+    cuts = polygons[polygons["type"] == "cut"] if len(polygons) else polygons
+    if len(cuts):
+        cuts.plot(ax=ax, color=SERIES[0], alpha=0.45, edgecolor=SERIES[0], lw=0.6)
+    handles.append(matplotlib.patches.Patch(facecolor=SERIES[0], alpha=0.6,
+                                            label=f"cirtes: {len(cuts)} ({cuts['area_ha'].sum() if len(cuts) else 0:.1f} ha)"))
+    stress = polygons[polygons["type"] == "stress"] if len(polygons) else polygons
+    for status, ls in (("persistent", "-"), ("new", "-"), ("recovered", ":")):
+        sub = stress[stress["status"] == status] if len(stress) else stress
+        if len(sub):
+            sub.boundary.plot(ax=ax, color="#ffffff", lw=3.0)
+            sub.boundary.plot(ax=ax, color=SERIES[1], lw=1.8, ls=ls)
+        lab = {"persistent": "stress, noturīgs", "new": "stress, jauns",
+               "recovered": "stress, atkopies"}[status]
+        handles.append(matplotlib.lines.Line2D([], [], color=SERIES[1], lw=2, ls=ls,
+                                               label=f"{lab}: {len(sub)}"))
+    if missions is not None and len(missions):
+        missions.boundary.plot(ax=ax, color="#ffffff", lw=1.6, ls="--")
+        for _, m in missions.iterrows():
+            c = m.geometry.representative_point()
+            ax.annotate(m["mission_id"], (c.x, c.y), fontsize=8, color=INK, ha="center",
+                        bbox=dict(boxstyle="round,pad=0.2", fc="#ffffff", ec="none", alpha=0.9))
+        handles.append(matplotlib.lines.Line2D([], [], color=INK_2, lw=1.5, ls="--",
+                                               label=f"drona misijas (top {len(missions)})"))
+    ext = _extent(template)
+    ax.set_xlim(ext[0], ext[1])
+    ax.set_ylim(ext[2], ext[3])
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.02), ncol=3)
+    ax.set_title(f"Pārskata karte {year} (fons: Sentinel-2 {t[i]:%Y-%m-%d})", loc="left")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(False)
     return _save(fig, path)
