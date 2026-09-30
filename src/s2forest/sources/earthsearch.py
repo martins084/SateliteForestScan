@@ -49,5 +49,6 @@ class EarthSearch(DataSource):
         return scenes
 
     def load(self, scene: SceneItem, bands: list[str], geobox: GeoBox,
-             reflectance_resampling: str = "bilinear") -> xr.Dataset:
-        return odc_load(scene, bands, geobox, BAND_MAP, reflectance_resampling)
+             reflectance_resampling: str = "bilinear",
+             scl_resampling: str = "nearest") -> xr.Dataset:
+        return odc_load(scene, bands, geobox, BAND_MAP, reflectance_resampling, scl_resampling)

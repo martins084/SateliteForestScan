@@ -117,8 +117,13 @@ class DataSource(ABC):
 
     @abstractmethod
     def load(self, scene: SceneItem, bands: list[str], geobox: GeoBox,
-             reflectance_resampling: str = "bilinear") -> xr.Dataset:
-        """Load raw DN for `bands` (canonical names) on `geobox`, lazily (dask)."""
+             reflectance_resampling: str = "bilinear",
+             scl_resampling: str = "nearest") -> xr.Dataset:
+        """Load raw DN for `bands` (canonical names) on `geobox`, lazily (dask).
+
+        For a geobox coarser than the native resolution, the reader uses COG
+        overviews, so only a fraction of the data is transferred.
+        """
 
 
 def get_source(name: str, collection: str) -> DataSource:

@@ -70,7 +70,8 @@ class FakeSource(DataSource):
         return out
 
     def load(self, scene: SceneItem, bands: list[str], geobox: GeoBox,
-             reflectance_resampling: str = "bilinear") -> xr.Dataset:
+             reflectance_resampling: str = "bilinear",
+             scl_resampling: str = "nearest") -> xr.Dataset:
         self.load_calls += 1
         spec = next(s for s in self.spec if s["date"] == scene.acquisition_date
                     and s.get("tile", "T1") == scene.tile and s.get("baseline", "05.00") == scene.baseline)
@@ -87,7 +88,8 @@ class FakeSource(DataSource):
             if b == SCL_BAND:
                 ds[b] = xr_zeros(geobox, dtype="uint8").copy(data=scl)
             else:
-                dn = np.round((self.true_reflectance(b) - scene.offset) / 1e-4).astype("uint16")
+                refl = self.true_reflectance(b) + (0.05 if spec.get("hazy") and b == "B02" else 0.0)
+                dn = np.round((refl - scene.offset) / 1e-4).astype("uint16")
                 arr = np.full((ny, nx), dn, dtype="uint16")
                 arr[scl == 0] = 0
                 ds[b] = xr_zeros(geobox, dtype="uint16").copy(data=arr)

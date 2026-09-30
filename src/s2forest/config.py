@@ -52,6 +52,10 @@ class TimeConfig(BaseModel):
         return v
 
     @property
+    def baseline_year_list(self) -> list[int]:
+        return list(range(self.monitor_year - self.baseline_years, self.monitor_year))
+
+    @property
     def years(self) -> list[int]:
         return list(range(self.monitor_year - self.baseline_years, self.monitor_year + 1))
 
@@ -75,22 +79,59 @@ class DataConfig(BaseModel):
     min_valid_fraction: float = 0.6
     workers: int = 4
     reflectance_resampling: str = "bilinear"
+    # Resolution of the context layer (AOI + normalization buffer); read from COG overviews.
+    context_resolution: float = 60.0
+
+
+class HazeConfig(BaseModel):
+    """Per-pixel temporal test for thin cloud / haze missed by SCL.
+
+    An observation is masked when B02 exceeds the pixel's own baseline-years
+    reference (median, same DOY window) by more than `b02_threshold` AND the
+    next valid observation of the same season is not elevated (transient).
+    """
+    enabled: bool = True
+    # Calibrated on Kalsnava 2026-09-15 (haze streaks) vs clear dates: clear-date
+    # forest B02 excess p95 = 0.017, p99 = 0.025. 0.015 starts masking clear-cut
+    # edges on clear dates; 0.03 misses streak margins.
+    b02_threshold: float = 0.02
+    doy_window: int = 30
+    min_ref_obs: int = 3
+    # Last observation of a season (no successor to prove transience) is kept,
+    # unless unresolved candidates cover at least this share of the AOI's valid
+    # pixels on that date: spatially widespread B02 elevation on one date is
+    # atmospheric, local change is not (clear last dates: 0.1-1.5 %, hazy: 12-24 %).
+    last_obs_scene_share: float = 0.10
 
 
 class MaskingConfig(BaseModel):
     invalid_scl: list[int] = Field(default_factory=lambda: list(DEFAULT_INVALID_SCL))
     cloud_buffer_m: float = 20.0
+    haze: HazeConfig = Field(default_factory=HazeConfig)
 
 
 class ForestMaskConfig(BaseModel):
     source: Literal["hrl_dlt_2018", "none"] = "hrl_dlt_2018"
     # HRL DLT classes: 1 broadleaved, 2 coniferous
     classes: list[int] = Field(default_factory=lambda: [2])
+    # Pixels whose summer NDVI median over the baseline years is below this are
+    # excluded (clear-cuts and young stands since the 2018 HRL reference year).
+    # None disables the refinement.
+    # Calibrated on Kalsnava: healthy canopy mode ~0.78 (sd ~0.04); felled / young
+    # stands form a tail at 0.35-0.65. 0.65 ~ mode - 3 sd.
+    min_summer_ndvi: float | None = 0.65
+    summer_start: str = "06-01"  # MM-DD
+    summer_end: str = "08-31"
 
 
 class NormalizationConfig(BaseModel):
     enabled: bool = True
     buffer_m: float = 5000.0
+    # Context pixel (coarse grid) counts as forest if at least this share of it is
+    # in the HRL forest classes.
+    min_forest_fraction: float = 0.5
+    # Dates with fewer usable context forest pixels are not normalized (offset 0).
+    min_pixels: int = 50
 
 
 class AnomalyConfig(BaseModel):
@@ -98,12 +139,24 @@ class AnomalyConfig(BaseModel):
     persistence: int = 2
     doy_window: int = 30
     min_baseline_obs: int = 5
+    # Minimum z-score scale per index. MAD from ~10-15 baseline observations in a
+    # +-30 day window is often underestimated, inflating z. Calibrated on Kalsnava
+    # (scripts/calibrate_mad_floor.py) as the 75th percentile of the per-pixel
+    # robust scale (1.4826 * MAD) over analysed forest.
     mad_floor: dict[str, float] = Field(
-        default_factory=lambda: {"ndvi": 0.02, "ndre": 0.02, "ndmi": 0.02, "crswir": 0.02}
+        default_factory=lambda: {"ndvi": 0.035, "ndre": 0.034, "ndmi": 0.047, "crswir": 0.061}
     )
     primary_index: str = "crswir"
     min_confirming: int = 1
     min_area_ha: float = 0.1
+    # "cut" (stand-replacing change) signature per observation, either:
+    #  a) NDVI <= cut_ndvi_max and >= cut_ndvi_drop below the baseline, or
+    #  b) NDMI >= cut_ndmi_drop below the baseline. Calibrated on Kalsnava 2026:
+    #     visually confirmed winter clear-cuts have NDMI change -0.16 .. -0.28 while
+    #     NDVI stays ~0.6 (regrowing ground vegetation), so rule (a) alone missed them.
+    cut_ndvi_max: float = 0.5
+    cut_ndvi_drop: float = 0.25
+    cut_ndmi_drop: float = 0.15
     normalization: NormalizationConfig = Field(default_factory=NormalizationConfig)
 
 

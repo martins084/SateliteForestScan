@@ -55,7 +55,8 @@ def to_scene(item: pystac.Item, source: str, collection: str, red_asset: str,
 
 def odc_load(
     scene: SceneItem, bands: list[str], geobox: GeoBox, band_map: dict[str, str],
-    reflectance_resampling: str, patch_url: Callable[[str], str] | None = None,
+    reflectance_resampling: str, scl_resampling: str = "nearest",
+    patch_url: Callable[[str], str] | None = None,
 ) -> xr.Dataset:
     assets = [band_map[b] for b in bands]
     stac_cfg: dict[str, Any] = {
@@ -67,7 +68,7 @@ def odc_load(
         }
     }
     resampling = {a: reflectance_resampling for a in assets}
-    resampling[band_map[SCL_BAND]] = "nearest"
+    resampling[band_map[SCL_BAND]] = scl_resampling
     ds = odc.stac.load(
         [scene.item],
         bands=assets,

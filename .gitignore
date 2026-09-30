@@ -7,3 +7,13 @@ cache/
 output/
 data/local/
 *.egg-info/
+
+# Large / generated geodata anywhere in the repo (inputs from LVM go to data/local/)
+*.tif
+*.tiff
+*.zarr/
+*.gpkg
+*.nc
+*.jp2
+*.kml
+*.kmz

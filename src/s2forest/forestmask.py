@@ -19,8 +19,10 @@ import math
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import rasterio
 import requests
+import xarray as xr
 from odc.geo.geobox import GeoBox
 from rasterio.transform import from_bounds
 from rasterio.warp import Resampling, reproject, transform_bounds
@@ -72,6 +74,53 @@ def dlt_on_grid(geobox: GeoBox, cache_file: Path) -> np.ndarray:
                        count=1, dtype="uint8", crs=str(geobox.crs), transform=geobox.affine,
                        nodata=255, compress="deflate") as f:
         f.write(dst, 1)
+    return dst
+
+
+# Codes of the forest mask raster written to the outputs.
+FOREST_NOT_IN_HRL = 0
+FOREST_ANALYSED = 1
+FOREST_LOW_NDVI = 2      # in HRL class, but low baseline summer NDVI (felled / young)
+FOREST_NO_DATA = 3       # in HRL class, but no clear summer observation in the baseline
+
+
+def summer_median(da: xr.DataArray, years: list[int], start: str, end: str) -> xr.DataArray:
+    """Per-pixel median of `da` over the summer window of the given years."""
+    t = pd.DatetimeIndex(da.time.values)
+    mmdd = t.strftime("%m-%d")
+    sel = np.isin(t.year, years) & (mmdd >= start) & (mmdd <= end)
+    if not sel.any():
+        return xr.full_like(da.isel(time=0, drop=True), np.nan)
+    return da.isel(time=np.flatnonzero(sel)).median("time", skipna=True)
+
+
+def refine_forest_mask(hrl: np.ndarray, ndvi_summer: np.ndarray,
+                       min_ndvi: float | None) -> np.ndarray:
+    """Coded mask (see FOREST_* constants) from the HRL mask and baseline summer NDVI."""
+    codes = np.full(hrl.shape, FOREST_NOT_IN_HRL, dtype="uint8")
+    codes[hrl] = FOREST_ANALYSED
+    if min_ndvi is not None:
+        nodata = hrl & np.isnan(ndvi_summer)
+        with np.errstate(invalid="ignore"):
+            low = hrl & (ndvi_summer < min_ndvi)
+        codes[low] = FOREST_LOW_NDVI
+        codes[nodata] = FOREST_NO_DATA
+    return codes
+
+
+def forest_fraction(geobox: GeoBox, fine_geobox: GeoBox, cache_dir: Path,
+                    classes: list[int]) -> np.ndarray:
+    """Share of each (coarse) pixel of `geobox` covered by the HRL classes.
+
+    The 10 m HRL layer is fetched on `fine_geobox` (same extent as `geobox`,
+    10 m) and aggregated by averaging.
+    """
+    dlt = dlt_on_grid(fine_geobox, cache_dir / "forest_hrl_dlt_2018_context10m.tif")
+    frac = np.isin(dlt, classes).astype("float32")
+    dst = np.zeros(geobox.shape, dtype="float32")
+    reproject(frac, dst, src_transform=fine_geobox.affine, src_crs=str(fine_geobox.crs),
+              dst_transform=geobox.affine, dst_crs=str(geobox.crs),
+              resampling=Resampling.average)
     return dst
 
 

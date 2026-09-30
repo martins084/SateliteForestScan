@@ -41,7 +41,8 @@ class PlanetaryComputer(DataSource):
         ]
 
     def load(self, scene: SceneItem, bands: list[str], geobox: GeoBox,
-             reflectance_resampling: str = "bilinear") -> xr.Dataset:
+             reflectance_resampling: str = "bilinear",
+             scl_resampling: str = "nearest") -> xr.Dataset:
         # Sign at load time: tokens expire, so signing at search time is fragile.
-        return odc_load(scene, bands, geobox, BAND_MAP, reflectance_resampling,
+        return odc_load(scene, bands, geobox, BAND_MAP, reflectance_resampling, scl_resampling,
                         patch_url=planetary_computer.sign)
