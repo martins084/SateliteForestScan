@@ -76,8 +76,14 @@ def index_stage(cfg: Config) -> IndexStage:
     ndvi_s = summer_median(idx.ndvi, cfg.time.baseline_year_list, fm.summer_start,
                            fm.summer_end).values
     codes = refine_forest_mask(hrl, ndvi_s, fm.min_summer_ndvi)
-    from .forestmask import FOREST_LINEAR
+    from .forestmask import FOREST_HIGH_AMPLITUDE, FOREST_LINEAR, seasonal_range
     from .linear import linear_mask
+
+    if fm.max_seasonal_range is not None:
+        rng = seasonal_range(compute_indices(cube, [fm.seasonal_range_index])[fm.seasonal_range_index],
+                             cfg.time.baseline_year_list)
+        with np.errstate(invalid="ignore"):
+            codes[(codes == FOREST_ANALYSED) & (rng > fm.max_seasonal_range)] = FOREST_HIGH_AMPLITUDE
 
     lin, lines = linear_mask(grid.geobox, cfg.linear_features, cfg.cache_dir / grid.key)
     if lin is not None:
@@ -96,7 +102,8 @@ def write_index_outputs(cfg: Config, st: IndexStage) -> dict[str, Path]:
     written["forest_mask"] = write_geotiff(
         template.copy(data=st.forest_codes), rdir / "forest_mask.tif", crs, dtype="uint8",
         nodata=OUTSIDE_AOI, band_names=["forest code: 0 not HRL class, 1 analysed, "
-                                        "2 low summer NDVI, 3 no summer data, 4 road buffer"])
+                                        "2 low summer NDVI, 3 no summer data, 4 road buffer, "
+                                        "5 large seasonal range"])
     written["ndvi_summer_baseline"] = write_geotiff(
         template.copy(data=st.ndvi_summer_baseline.astype("float32")),
         rdir / "ndvi_summer_median_baseline.tif", crs, band_names=["NDVI summer median, baseline"])

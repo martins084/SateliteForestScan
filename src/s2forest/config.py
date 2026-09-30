@@ -128,6 +128,13 @@ class ForestMaskConfig(BaseModel):
     # Calibrated on Kalsnava: healthy canopy mode ~0.78 (sd ~0.04); felled / young
     # stands form a tail at 0.35-0.65. 0.65 ~ mode - 3 sd.
     min_summer_ndvi: float | None = 0.65
+    # Pixels whose baseline-period seasonal range (p90 - p10 of all observations of
+    # `seasonal_range_index`) exceeds this are excluded: not a closed conifer stand
+    # (mixed / deciduous / wet / sparse). None disables. Calibrated on Kalsnava:
+    # NDVI range mode ~0.10 (closed conifer), long tail of mixed / young stands;
+    # median + 3 robust sd = 0.21 (baseline 2022-24) / 0.22 (2023-25).
+    seasonal_range_index: str = "ndvi"
+    max_seasonal_range: float | None = 0.22
     summer_start: str = "06-01"  # MM-DD
     summer_end: str = "08-31"
 

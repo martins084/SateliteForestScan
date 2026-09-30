@@ -132,6 +132,7 @@ DIV = matplotlib.colors.LinearSegmentedColormap.from_list(
     "div_blue_red", ["#184f95", "#6da7ec", "#f0efec", "#ec8a89", "#b8302f"])
 FOREST_COLORS = {1: ("#1c5cab", "analizēts mežs"), 2: ("#eda100", "zems vasaras NDVI (cirte/jaunaudze)"),
                  3: ("#b9b8b3", "nav vasaras novērojumu"), 4: ("#e34948", "ceļa buferis (OSM)"),
+                 5: ("#e87ba4", "liela sezonālā amplitūda (nav slēgta skujkoku audze)"),
                  0: ("#f0efec", "nav HRL skujkoku klasē")}
 
 

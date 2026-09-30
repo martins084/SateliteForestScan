@@ -83,6 +83,21 @@ FOREST_ANALYSED = 1
 FOREST_LOW_NDVI = 2      # in HRL class, but low baseline summer NDVI (felled / young)
 FOREST_NO_DATA = 3       # in HRL class, but no clear summer observation in the baseline
 FOREST_LINEAR = 4        # in HRL class, but within the buffer of a road (OSM)
+FOREST_HIGH_AMPLITUDE = 5  # in HRL class, but large seasonal range (not a closed conifer stand)
+
+
+def seasonal_range(da: xr.DataArray, years: list[int], lo: float = 10, hi: float = 90) -> np.ndarray:
+    """Per-pixel robust seasonal range: p90 - p10 of the observations in `years`."""
+    t = pd.DatetimeIndex(da.time.values)
+    sel = np.flatnonzero(np.isin(t.year, years))
+    if sel.size == 0:
+        return np.full(da.shape[1:], np.nan, dtype="float32")
+    v = da.isel(time=sel).values
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        q = np.nanpercentile(v, [lo, hi], axis=0)
+    return (q[1] - q[0]).astype("float32")
 
 
 def summer_median(da: xr.DataArray, years: list[int], start: str, end: str) -> xr.DataArray:

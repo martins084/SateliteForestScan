@@ -127,9 +127,9 @@ def indices(config: Path = ConfigArg, verbose: bool = VerboseOpt):
 
     codes = st.forest_codes
     inside = codes != 255
-    shares = {k: float(np.mean(codes[inside] == k)) for k in (0, 1, 2, 3, 4)}
+    shares = {k: float(np.mean(codes[inside] == k)) for k in (0, 1, 2, 3, 4, 5)}
     labels = {0: "not in HRL class", 1: "analysed", 2: "low summer NDVI", 3: "no summer data",
-              4: "road buffer"}
+              4: "road buffer", 5: "large seasonal range"}
     typer.echo("Forest mask (share of AOI): " + ", ".join(
         f"{labels[k]} {v:.1%}" for k, v in shares.items()))
     if st.linear_lines is not None:

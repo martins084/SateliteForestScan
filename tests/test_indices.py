@@ -53,3 +53,18 @@ def test_register_new_index():
 def test_unknown_index_raises():
     with pytest.raises(KeyError):
         compute_indices(_ds(**HEALTHY), ["nope"])
+
+
+def test_seasonal_range_p90_minus_p10():
+    import pandas as pd
+
+    from s2forest.forestmask import seasonal_range
+
+    t = pd.date_range("2024-05-01", periods=11, freq="10D")
+    v = np.zeros((11, 1, 2), dtype="float32")
+    v[:, 0, 0] = np.linspace(0.7, 0.9, 11)       # range 0.2 -> p90-p10 = 0.16
+    v[:, 0, 1] = 0.8
+    da = xr.DataArray(v, dims=("time", "y", "x"), coords={"time": t})
+    r = seasonal_range(da, [2024])
+    assert r[0, 0] == pytest.approx(0.16, abs=1e-5) and r[0, 1] == pytest.approx(0.0)
+    assert np.isnan(seasonal_range(da, [2020])).all()
