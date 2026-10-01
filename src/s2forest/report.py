@@ -49,6 +49,48 @@ def _read_layer(gpkg: Path, layer: str) -> gpd.GeoDataFrame | None:
     return gpd.read_file(gpkg, layer=layer)
 
 
+def method_lines(cfg: Config) -> list[str]:
+    """Method description generated from the EFFECTIVE configuration of the run."""
+    a, m, fm, lf, n = cfg.anomaly, cfg.masking, cfg.forest_mask, cfg.linear_features, cfg.anomaly.normalization
+    f = lambda v, nd=2: _fmt(v, nd)
+    lines = [
+        "Dati: " + ", ".join(f"{s.name}/{s.collection}" for s in cfg.data.sources)
+        + " (STAC, bez autentifikācijas); atstarošanās harmonizēta pēc processing baseline "
+        "(BOA_ADD_OFFSET).",
+        f"Mākoņu maska: SCL klases {', '.join(map(str, m.invalid_scl))}, buferis {m.cloud_buffer_m:.0f} m"
+        + (f"; laikrindu dūmakas tests (B02 > bāze + {f(m.haze.b02_threshold, 3)})" if m.haze.enabled
+           else "; dūmakas tests izslēgts")
+        + f"; aina tiek izmantota, ja ≥ {cfg.data.min_valid_fraction:.0%} AOI pikseļu ir derīgi.",
+        f"Režģis {cfg.data.crs}, {cfg.data.resolution:g} m; indeksi {', '.join(i.upper() for i in cfg.indices)}.",
+        "Meža maska: HRL Dominant Leaf Type 2018 (klases " + ", ".join(map(str, fm.classes)) + ")"
+        + (f"; izslēgts, ja bāzes vasaras NDVI < {f(fm.min_summer_ndvi)}" if fm.min_summer_ndvi is not None else "")
+        + (f"; izslēgts, ja bāzes {fm.seasonal_range_index.upper()} sezonālais diapazons (p90−p10) > "
+           f"{f(fm.max_seasonal_range)}" if fm.max_seasonal_range is not None else "")
+        + (f"; izslēgts ≤ {lf.buffer_m:.0f} m no OSM ceļiem" if lf.enabled else "; ceļu maska izslēgta")
+        + ".",
+    ]
+    if a.baseline_method == "harmonic":
+        lines.append(f"Bāze ({cfg.time.baseline_year_list[0]}–{cfg.time.baseline_year_list[-1]}): harmonisks "
+                     f"sezonālais modelis katram pikselim (brīvais loceklis + {a.harmonics} harmonika(s)), robusta "
+                     f"pielāgošana (IRLS, Huber k = {f(a.huber_k, 3)}, {a.robust_iterations} iterācijas); mērogs = "
+                     f"atlikumu MAD × 1,4826, ne mazāks par mad_floor; ≥ {a.min_baseline_obs} bāzes novērojumi.")
+    else:
+        lines.append(f"Bāze ({cfg.time.baseline_year_list[0]}–{cfg.time.baseline_year_list[-1]}): mediāna un MAD "
+                     f"±{a.doy_window} dienu logā; ≥ {a.min_baseline_obs} bāzes novērojumi.")
+    if n.enabled:
+        lines.append(f"Reģionālā normalizācija: katra datuma nobīde = meža pikseļu mediānā novirze AOI + "
+                     f"{n.buffer_m / 1000:g} km buferī ({cfg.data.context_resolution:g} m), divos soļos.")
+    else:
+        lines.append("Reģionālā normalizācija izslēgta.")
+    span = getattr(a, "persistence_min_days", 0)
+    lines.append(f"Anomālija: {a.primary_index.upper()} z ≥ {f(a.z_threshold, 1)} un vismaz {a.min_confirming} "
+                 f"cits indekss; noturība ≥ {a.persistence} secīgi derīgi novērojumi"
+                 + (f", kas aptver ≥ {span} dienas" if span else "")
+                 + f"; min. laukums {f(a.min_area_ha, 1)} ha; cirtes pazīme: NDVI ≤ {f(a.cut_ndvi_max)} un "
+                 f"kritums ≥ {f(a.cut_ndvi_drop)}, vai NDMI kritums ≥ {f(a.cut_ndmi_drop)}.")
+    return lines
+
+
 def build_report(cfg: Config, n_series: int = 5) -> Path:
     from .pipeline import index_stage
 
@@ -179,6 +221,7 @@ def build_report(cfg: Config, n_series: int = 5) -> Path:
         "top_stress": top_stress, "prim": prim.upper(), "missions": mission_rows,
         "val_rows": val_rows, "val_detail": val_detail,
         "val_description": cfg.reference.description,
+        "method_lines": method_lines(cfg),
         "k": _fmt(cfg.anomaly.z_threshold, 1), "N": cfg.anomaly.persistence,
         "min_area": _fmt(cfg.anomaly.min_area_ha, 1),
         "sources": ", ".join(f"{s.name}/{s.collection}" for s in cfg.data.sources),
@@ -342,11 +385,9 @@ kalibrēti Kalsnavas testa teritorijā; jaunām teritorijām tie jāpārbauda ar
 </ul>
 
 <h2>Metode un parametri</h2>
-<p class="note">Dati: {{ sources }} (STAC, bez autentifikācijas), harmonizēti pēc processing baseline
-(BOA_ADD_OFFSET). Mākoņu maska: SCL + 20 m buferis + laikrindu dūmakas tests. Režģis EPSG:3059, 10 m.
-Indeksi NDVI, NDRE, NDMI, CRSWIR. Bāze: {{ baseline }}, ±30 dienu logs, mediāna/MAD, reģionālā
-normalizācija (AOI + 5 km). Anomālija: CRSWIR z ≥ {{ k }} un vismaz viens cits indekss, noturība
-{{ N }} secīgos derīgos novērojumos, min. laukums {{ min_area }} ha. Pilns apraksts: README.</p>
+<p class="note">Ģenerēts no šī skrējiena faktiskās konfigurācijas (pilna konfigurācija:
+config.yaml un run_metadata.json). Pilns apraksts: README.</p>
+<ul class="note">{% for l in method_lines %}<li>{{ l }}</li>{% endfor %}</ul>
 
 <footer>Sagatavots ar s2forest {{ version }} · LBTU Studentu inovāciju programma, sadarbībā ar LVM.
 Sentinel-2 dati: Copernicus (ESA), izplatīti ar Element84 Earth Search un Microsoft Planetary Computer.</footer>

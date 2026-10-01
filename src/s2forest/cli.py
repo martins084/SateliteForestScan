@@ -164,6 +164,10 @@ def detect(config: Path = ConfigArg, verbose: bool = VerboseOpt, closeups: bool 
                            write_index_outputs)
 
     cfg = _setup(config, verbose)
+    a = cfg.anomaly
+    typer.echo(f"Baseline: {a.baseline_method}"
+               + (f" ({a.harmonics} harmonic(s), Huber IRLS)" if a.baseline_method == "harmonic"
+                  else f" (+-{a.doy_window} d window)"))
     st = index_stage(cfg)
     if not (cfg.run_dir / "rasters" / "forest_mask.tif").exists():
         write_index_outputs(cfg, st)
@@ -214,7 +218,8 @@ def detect(config: Path = ConfigArg, verbose: bool = VerboseOpt, closeups: bool 
     summary["status"] = ss.to_dict(orient="records")
     summary["drone_targets"] = n_kind
     summary["drone_missions"] = {"total": int(len(ms)), "exported": int(len(top))}
-    _write_metadata(cfg, {"detect": {**summary, "outputs": {k: str(v) for k, v in written.items()}}})
+    _write_metadata(cfg, {"effective_config": cfg.model_dump(mode="json"),
+                          "detect": {**summary, "outputs": {k: str(v) for k, v in written.items()}}})
     typer.echo(f"GeoPackage: {written['suspects']} (layers suspects_{year}, drone_targets)")
     typer.echo(f"KML / GeoJSON: {written['drone_targets_kml'].parent}")
 
