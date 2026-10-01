@@ -150,12 +150,20 @@ def build_targets(cfg: Config, polygons: gpd.GeoDataFrame, feats: xr.Dataset,
                     + ("; IEGARENS - iespējams lineārs objekts (ceļš, grāvis)"
                        if bool(p.get("linear_feature", False)) else "")
                     + (f"; {p['dist_to_road_m']:.0f} m no ceļa"
-                       if pd.notna(p.get("dist_to_road_m", np.nan)) and p["dist_to_road_m"] < 60 else ""))
+                       if pd.notna(p.get("dist_to_road_m", np.nan)) and p["dist_to_road_m"] < 60 else "")
+                    + ("; izmaiņa sākusies jau iepriekšējā rudenī"
+                       if bool(p.get("onset_prev_autumn", False)) else ""))
             parts.append({"kind": "stress", "status": p["status"], "source_id": int(p["id"]),
                           "linear_feature": bool(p.get("linear_feature", False)),
                           "area_ha": p["area_ha"], "first_detected": p["first_detected"],
                           "confidence": p["confidence"], "risk_score": None,
-                          "priority": 1 if p["status"] == "persistent" else 2,
+                          # 1 persistent, 2 new; 3 if near a road or elongated (likely
+                          # road-side works / linear objects rather than stress)
+                          "priority": (3 if bool(p.get("near_road", False))
+                                       or bool(p.get("linear_feature", False))
+                                       else 1 if p["status"] == "persistent" else 2),
+                          "near_road": bool(p.get("near_road", False)),
+                          "onset_prev_autumn": bool(p.get("onset_prev_autumn", False)),
                           # stress targets always outrank cut edges (risk_score <= 1)
                           "value": 1.0 + float(p["confidence"]),
                           "description": desc, "geometry": p.geometry})
@@ -171,7 +179,7 @@ def build_targets(cfg: Config, polygons: gpd.GeoDataFrame, feats: xr.Dataset,
                           "risk_score": e["risk_score"], "risk_orientation": e["risk_orientation"],
                           "risk_freshness": e["risk_freshness"], "risk_conifer": e["risk_conifer"],
                           "sw_exposed_share": e["sw_exposed_share"], "cut_year": e["cut_year"],
-                          "priority": 3, "value": float(e["risk_score"]),
+                          "priority": 4, "value": float(e["risk_score"]),
                           "description": desc, "geometry": e.geometry})
     if not parts:
         return gpd.GeoDataFrame(columns=["target_id", "geometry"], geometry="geometry",

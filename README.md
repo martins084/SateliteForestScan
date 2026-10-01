@@ -115,7 +115,10 @@ Kataloga pieņēmumu pārbaude (ar internetu): `python -m uv run pytest -m netwo
    `diagnostics/seasonal_bias.png`). 2. harmonika uzlabojumu nedeva.
    Novērojums ir anomāls, ja CRSWIR z ≥ 2,5 un vismaz viens cits indekss arī
    pārsniedz 2,5; pikselis tiek atzīmēts, ja tas atkārtojas ≥ 2 secīgos
-   derīgos novērojumos. Poligoni < 0,1 ha tiek atmesti.
+   derīgos novērojumos **un** skrējiens aptver ≥ 7 dienas (`persistence_min_days`;
+   divas ainas dažu dienu attālumā ir vienos laikapstākļos un nav neatkarīgas).
+   Skrējiens, kas sezonas beigās vēl nav sasniedzis 7 dienas, netiek izmests —
+   poligons saņem statusu `new`. Poligoni < 0,1 ha tiek atmesti.
    Reģionālā normalizācija: katram datumam no novērojumiem atņem AOI + 5 km
    bufera meža pikseļu mediāno novirzi (sausuma gadi, fenoloģijas nobīde);
    buferis tiek lasīts 60 m izšķirtspējā no COG pārskatiem (overviews).
@@ -135,7 +138,10 @@ Kataloga pieņēmumu pārbaude (ar internetu): `python -m uv run pytest -m netwo
    bāzi), `z_<indekss>`, `persistence_len`, `n_indices_agree`, `confidence`
    (heuristisks 0–1 rādītājs, **nav varbūtība**), `onset_before_season`
    (izmaiņa notikusi jau pirms sezonas pirmā novērojuma, piem., ziemas cirte),
+   `prev_autumn_z` un `onset_prev_autumn` (poligona mediānais z iepriekšējā gada
+   novērojumos no 15.08.; ≥ 1,25 → izmaiņa sākusies jau iepriekšējā rudenī),
    `elongation` (minimālā pagrieztā taisnstūra garā/īsā mala), `dist_to_road_m`,
+   `near_road` (stresa poligona mala ≤ 30 m no ceļa),
    `linear_feature` (stresa poligons ar iegarenību ≥ 3 — iespējams lineārs
    objekts; netiek dzēsts, bet atzīmēts arī drona mērķa aprakstā) un
    `status`:
@@ -144,9 +150,10 @@ Kataloga pieņēmumu pārbaude (ar internetu): `python -m uv run pytest -m netwo
    - `recovered` — atgriezies normā (piem., pavasara fenoloģijas artefakts).
    Poligoni netiek dzēsti; statusu skaits redzams `tables/polygon_status_<gads>.csv`.
 8. **Drona mērķi** (`drone_targets`): stresa poligoni ar statusu `new` vai
-   `persistent` (vienmēr 1.–2. prioritāte) un, pēc izvēles, 30 m skujkoku meža
-   josla gar pēdējo 2 gadu cirtēm ≥ 0,3 ha (3. prioritāte — augsta riska zona,
-   kur anomālija nav noteikta), sakārtota pēc `risk_score`. Katram mērķim: ID
+   `persistent` — 1. prioritāte noturīgi, 2. jauni, 3. stress pie ceļa (`near_road`)
+   vai iegarens (`linear_feature`), jo tie biežāk ir ceļmalu / grāvju darbi, nevis
+   stress; 4. prioritāte — 30 m skujkoku meža josla gar pēdējo 2 gadu cirtēm
+   ≥ 0,3 ha (augsta riska zona, kur anomālija nav noteikta), sakārtota pēc `risk_score`. Katram mērķim: ID
    (T001…), centroīda un punkta uz mērķa koordinātas WGS84, īss apraksts latviski.
 
    **Cirtes malas riska rādītājs** `risk_score` (0–1) = svērta summa (svari
@@ -220,6 +227,23 @@ jāpārpalaiž jaunai teritorijai.
 - Harmonizācijas pārbaudes grafiks (`diagnostics/harmonization_check.png`)
   rāda konsekventus skujkoku meža atstarošanās līmeņus 2022–2026 abos avotos.
 
+## Ceļu bagātinājuma tests (Kalsnava)
+
+`scripts/road_enrichment.py`: stresa pikseļu daļa attāluma joslās līdz OSM ceļam,
+dalīta ar analizētā meža daļu tajās pašās joslās (1 = nav ceļa efekta).
+
+| Josla | 2025 stress | 2025 cirtes | 2026 stress |
+|---|---|---|---|
+| 20–30 m | 1,8 | 1,1 | 0 |
+| 30–50 m | 1,5 | 1,1 | 0 |
+| 50–100 m | 1,9 | 1,1 | 0,8 |
+| > 100 m | 0,65 | 0,95 | 1,2 |
+
+2025. gadā bagātinājums nenokrīt līdz ~1 pēc 30 m, tātad tas nav lokāls
+ceļmalas pikseļu efekts, ko atrisinātu plašāks buferis (paraugs mazs: 16 poligoni).
+Tāpēc buferis paliek 20 m, bet poligoni ≤ 30 m no ceļa tiek atzīmēti ar
+`near_road` un saņem zemāku drona prioritāti. Cirtēm ceļu efekta nav (~1).
+
 ## Starpgadu un platformu saskaņotība (Kalsnava, 2022–2026)
 
 `scripts/check_platform_trend.py`: vasaras (15.06.–31.08.) CRSWIR un NDVI mediāna
@@ -232,7 +256,9 @@ stabilā veselā mežā pa gadiem un platformām.
   gadiem (datumu maz: 1–6 uz platformu gadā). Pēc reģionālās normalizācijas
   (nobīde katram datumam atsevišķi) atlikusī atšķirība veselā mežā ir ≤ 0,1 z
   (S2A +0,02, S2B −0,06, S2C −0,08), t. i., ~4 % no sliekšņa k = 2,5. Platformu
-  korekcija netiek veikta.
+  korekcija netiek veikta. 2025. gadā vasaras logā nav S2C datumu, jo visas 5
+  pieņemtās S2C ainas ir maijā un septembrī; katalogā sezonā ir 29 S2C ainas
+  (tikpat, cik S2A/S2B), tātad tā nav filtra vai platformu kartējuma kļūda.
 
 ## Zināmie ierobežojumi
 

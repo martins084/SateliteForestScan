@@ -163,6 +163,8 @@ def build_report(cfg: Config, n_series: int = 5) -> Path:
                            "delta": _fmt(r.get(f"delta_{prim}"), 3), "conf": _fmt(r["confidence"]),
                            "before": "jā" if bool(r.get("onset_before_season")) else "nē",
                            "linear": "jā" if bool(r.get("linear_feature", False)) else "",
+                           "near_road": "jā" if bool(r.get("near_road", False)) else "",
+                           "autumn": "jā" if bool(r.get("onset_prev_autumn", False)) else "nē",
                            "road": _fmt(r.get("dist_to_road_m"), 0)})
     mission_rows = []
     if missions is not None:
@@ -318,8 +320,8 @@ prioritārās drona misijas (pārtraukta līnija). Fails: figures/report/{{ fig_
 <b>Noturīgs</b>: izmaiņa saglabājas. <b>Atkopies</b>: atgriezies normā. Poligoni netiek dzēsti.</p>
 {% if top_stress %}
 <div class="tablewrap"><table>
-<tr><th>ID</th><th>Statuss</th><th>Pirmoreiz</th><th class="num">Platība, ha</th><th class="num">{{ prim }} izmaiņa</th><th class="num">Ticamība</th><th>Pirms sezonas</th><th>Iegarens</th><th class="num">Līdz ceļam, m</th></tr>
-{% for r in top_stress %}<tr><td>#{{ r.id }}</td><td>{{ r.status }}</td><td>{{ r.first }}</td><td class="num">{{ r.area }}</td><td class="num">{{ r.delta }}</td><td class="num">{{ r.conf }}</td><td>{{ r.before }}</td><td>{{ r.linear }}</td><td class="num">{{ r.road }}</td></tr>{% endfor %}
+<tr><th>ID</th><th>Statuss</th><th>Pirmoreiz</th><th class="num">Platība, ha</th><th class="num">{{ prim }} izmaiņa</th><th class="num">Ticamība</th><th>Pirms sezonas</th><th>Sācies iepr. rudenī</th><th>Iegarens</th><th>Pie ceļa</th><th class="num">Līdz ceļam, m</th></tr>
+{% for r in top_stress %}<tr><td>#{{ r.id }}</td><td>{{ r.status }}</td><td>{{ r.first }}</td><td class="num">{{ r.area }}</td><td class="num">{{ r.delta }}</td><td class="num">{{ r.conf }}</td><td>{{ r.before }}</td><td>{{ r.autumn }}</td><td>{{ r.linear }}</td><td>{{ r.near_road }}</td><td class="num">{{ r.road }}</td></tr>{% endfor %}
 </table></div>
 <p class="note">Ticamība ir heuristisks 0–1 rādītājs (z lielums, indeksu saskaņa, noturība,
 bāzes novērojumu skaits), nevis varbūtība.</p>
@@ -338,7 +340,8 @@ visā periodā; pārtrauktā līnija = pirmā noteikšana. Fails: figures/report
 <tr><th>Misija</th><th class="num">Stresa mērķi</th><th class="num">Cirtes malas</th><th class="num">Laukums, ha</th><th>Centrs (WGS84)</th><th>Mērķi</th></tr>
 {% for m in missions %}<tr><td>{{ m.id }}</td><td class="num">{{ m.stress }}</td><td class="num">{{ m.edges }}</td><td class="num">{{ m.area }}</td><td>{{ m.lat }}, {{ m.lon }}</td><td>{{ m.targets }}</td></tr>{% endfor %}
 </table></div>
-<p class="note">Stresa mērķi vienmēr ir augstākajā prioritātē. Cirtes malas (30 m skujkoku josla gar
+<p class="note">Prioritāte: 1 — noturīgs stress, 2 — jauns stress, 3 — stress pie ceļa
+(≤ 30 m) vai iegarens (iespējami ceļmalas darbi / lineāri objekti), 4 — cirtes malas. Cirtes malas (30 m skujkoku josla gar
 pēdējo 2 gadu cirtēm) ir sakārtotas pēc riska: malas orientācija (D–DR–R vērstas malas), cirtes svaigums
 un skujkoku īpatsvars. KML: vectors/drone_missions_{{ year }}.kml, vectors/drone_targets_{{ year }}.kml.</p>
 {% else %}<p>Nav drona misiju.</p>{% endif %}

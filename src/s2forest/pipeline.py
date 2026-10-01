@@ -205,8 +205,9 @@ def context_offsets(cfg: Config, st: IndexStage, p) -> tuple[pd.DataFrame, np.nd
     return table, off2
 
 
-def add_linear_attributes(gdf: "gpd.GeoDataFrame", lines, threshold: float) -> "gpd.GeoDataFrame":
-    """elongation, dist_to_road_m and the `linear_feature` flag for stress polygons."""
+def add_linear_attributes(gdf: "gpd.GeoDataFrame", lines, threshold: float,
+                          near_road_m: float = 30.0) -> "gpd.GeoDataFrame":
+    """elongation, dist_to_road_m and the `linear_feature` / `near_road` flags (stress only)."""
     from .linear import elongation
 
     if gdf.empty:
@@ -219,6 +220,8 @@ def add_linear_attributes(gdf: "gpd.GeoDataFrame", lines, threshold: float) -> "
             u = roads.geometry.union_all()
             gdf["dist_to_road_m"] = [round(float(g.distance(u)), 1) for g in gdf.geometry]
     gdf["linear_feature"] = (gdf["type"] == "stress") & (gdf["elongation"] >= threshold)
+    gdf["near_road"] = (gdf["type"] == "stress") & (
+        gdf["dist_to_road_m"] <= near_road_m if "dist_to_road_m" in gdf else False)
     return gdf
 
 
@@ -245,7 +248,8 @@ def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
                      p.persistence, p.min_obs, primary=cfg.anomaly.primary_index,
                      status_min_obs=cfg.anomaly.status_min_obs,
                      onset_prev_autumn_z=cfg.anomaly.onset_prev_autumn_z)
-    gdf = add_linear_attributes(gdf, st.linear_lines, cfg.linear_features.elongation_threshold)
+    gdf = add_linear_attributes(gdf, st.linear_lines, cfg.linear_features.elongation_threshold,
+                                cfg.linear_features.near_road_m)
 
     codes = np.full(st.forest_codes.shape, STATUS_NOT_ANALYSED, dtype="uint8")
     flag = feats["flag"].values

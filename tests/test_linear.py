@@ -56,3 +56,23 @@ def test_elongation_and_linear_flag():
     assert list(out["linear_feature"]) == [False, True, False]   # cuts are never flagged
     assert out.loc[1, "dist_to_road_m"] == pytest.approx(20.0)
     assert "dist_to_road_m" not in add_linear_attributes(polys, None, 3.0)
+
+
+def test_near_road_flag_and_drone_priority(tmp_path):
+    from s2forest.config import Config, TimeConfig
+    from s2forest.targets import build_targets
+
+    polys = gpd.GeoDataFrame({
+        "id": [1, 2, 3], "type": ["stress"] * 3, "status": ["persistent", "persistent", "new"],
+        "area_ha": [0.2, 0.2, 0.2], "first_detected": ["2026-06-01"] * 3,
+        "confidence": [0.8, 0.9, 0.7], "delta_crswir": [0.1] * 3,
+    }, geometry=[box(0, 0, 40, 40), box(0, 100, 40, 130), box(0, 300, 40, 340)], crs="EPSG:3059")
+    roads = gpd.GeoDataFrame({"kind": ["road"]}, geometry=[LineString([(0, 150), (300, 150)])],
+                             crs="EPSG:3059")
+    out = add_linear_attributes(polys, roads, 3.0, near_road_m=30)
+    assert list(out["near_road"]) == [False, True, False]      # #2 is 20 m from the road
+    cfg = Config(run_name="t", aoi=tmp_path / "a.geojson", time=TimeConfig(monitor_year=2026))
+    cfg.targets.cut_edge_enabled = False
+    t = build_targets(cfg, out, None, None, None).set_index("source_id")
+    assert t.loc[1, "priority"] == 1 and t.loc[3, "priority"] == 2 and t.loc[2, "priority"] == 3
+    assert "m no ceļa" in t.loc[2, "description"]

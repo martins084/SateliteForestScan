@@ -155,6 +155,11 @@ class LinearFeaturesConfig(BaseModel):
     # Stress polygons with elongation (min. rotated rectangle long/short side) at or
     # above this are flagged `linear_feature` (not deleted).
     elongation_threshold: float = 3.0
+    # Stress polygons whose edge is within this distance of a road get the flag
+    # `near_road` and a lower drone priority (not deleted, mask unchanged).
+    # Road enrichment test (Kalsnava 2025): stress pixels enriched 1.5-1.9x at
+    # 20-100 m, i.e. a wider buffer would not remove the effect.
+    near_road_m: float = 30.0
 
 
 class NormalizationConfig(BaseModel):
