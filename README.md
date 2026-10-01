@@ -12,6 +12,9 @@ multispektrālai verifikācijai.
 
 LBTU Studentu inovāciju programma, sadarbībā ar LVM.
 
+Pilns projekta apraksts (metode, kalibrēšana, pārbaudītie fakti, rezultāti,
+lēmumu vēsture, atvērtie jautājumi): [`docs/PROJEKTA_APRAKSTS.md`](docs/PROJEKTA_APRAKSTS.md).
+
 ---
 
 ## Uzstādīšana
