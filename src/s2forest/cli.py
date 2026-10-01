@@ -152,6 +152,26 @@ def indices(config: Path = ConfigArg, verbose: bool = VerboseOpt):
     typer.echo(f"{len(written)} rasters written to {cfg.run_dir / 'rasters'}")
 
 
+def _ring_control(cfg: Config, st, polygons, year: int) -> None:
+    """Standard control-ring diagnostic for stress polygons (tables + figure)."""
+    from .ringcontrol import plot_ring, ring_series, summarize_ring
+
+    stress = polygons[polygons["type"] == "stress"] if len(polygons) else polygons
+    if not len(stress):
+        return
+    order = {"persistent": 0, "new": 1, "recovered": 2}
+    stress = stress.assign(_o=stress["status"].map(order)).sort_values(
+        ["_o", "confidence"], ascending=[True, False]).drop(columns="_o")
+    prim = cfg.anomaly.primary_index
+    arr = st.indices[prim].transpose("time", "y", "x").values
+    ser = ring_series(arr, st.cube.time.values, st.cube.x.values, st.cube.y.values, stress,
+                      st.analysis_mask, cfg.linear_features.control_ring_m)
+    tdir = cfg.run_dir / "tables"
+    ser.to_csv(tdir / f"ring_control_series_{year}.csv", index=False)
+    summarize_ring(ser).to_csv(tdir / f"ring_control_{year}.csv", index=False)
+    plot_ring(ser, stress, prim, cfg.run_dir / "figures" / f"ring_control_{year}.png")
+
+
 CloseupsOpt = typer.Option(True, "--closeups/--no-closeups",
                            help="Render per-polygon close-up figures (slow)")
 
@@ -178,6 +198,7 @@ def detect(config: Path = ConfigArg, verbose: bool = VerboseOpt, closeups: bool 
     fig_dir = cfg.run_dir / "figures"
     aoi = read_vector(cfg.aoi, cfg.data.crs)
     viz.plot_suspects_map(st.cube, ds.polygons, aoi, year, fig_dir / f"suspects_{year}.png")
+    _ring_control(cfg, st, ds.polygons, year)
     stress = ds.polygons[ds.polygons["type"] == "stress"] if len(ds.polygons) else ds.polygons
     if closeups and len(stress):
         viz.plot_polygon_chips(st.cube, st.indices, stress, year,

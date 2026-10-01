@@ -160,6 +160,9 @@ class LinearFeaturesConfig(BaseModel):
     # Road enrichment test (Kalsnava 2025): stress pixels enriched 1.5-1.9x at
     # 20-100 m, i.e. a wider buffer would not remove the effect.
     near_road_m: float = 30.0
+    # Ring of healthy (analysed) forest around each stress polygon used as a local
+    # control in the standard ring diagnostic.
+    control_ring_m: float = 100.0
 
 
 class NormalizationConfig(BaseModel):

@@ -157,10 +157,10 @@ def build_targets(cfg: Config, polygons: gpd.GeoDataFrame, feats: xr.Dataset,
                           "linear_feature": bool(p.get("linear_feature", False)),
                           "area_ha": p["area_ha"], "first_detected": p["first_detected"],
                           "confidence": p["confidence"], "risk_score": None,
-                          # 1 persistent, 2 new; 3 if near a road or elongated (likely
-                          # road-side works / linear objects rather than stress)
-                          "priority": (3 if bool(p.get("near_road", False))
-                                       or bool(p.get("linear_feature", False))
+                          # 1 persistent, 2 new; 3 if elongated (a linear-object artefact).
+                          # near_road is informational only: sunny road-side stand edges
+                          # are a plausible attack site, like cut edges.
+                          "priority": (3 if bool(p.get("linear_feature", False))
                                        else 1 if p["status"] == "persistent" else 2),
                           "near_road": bool(p.get("near_road", False)),
                           "onset_prev_autumn": bool(p.get("onset_prev_autumn", False)),

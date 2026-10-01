@@ -126,6 +126,25 @@ def build_report(cfg: Config, n_series: int = 5) -> Path:
         figs["timeseries"] = viz.plot_polygon_chips(st.cube, st.indices, series_polys, year,
                                                     fig_dir / "03_laika_rindas.png",
                                                     n=len(series_polys))
+    ring_rows, ring_years = [], []
+    rc = run / "tables" / f"ring_control_{year}.csv"
+    if rc.exists():
+        ring = pd.read_csv(rc)
+        ring_years = sorted(int(v) for v in ring["year"].unique())
+        st_by = polys.set_index("id")
+        for pid in [i for i in stress["id"] if i in set(ring["id"])][:12]:
+            d = ring[ring["id"] == pid].set_index("year")
+            p = st_by.loc[pid]
+            ring_rows.append({
+                "id": pid, "status": STATUS_LV.get(p["status"], p["status"]),
+                "autumn": "jā" if bool(p.get("onset_prev_autumn", False)) else "nē",
+                "late": [_fmt(d.loc[y, "late_diff"], 2) if y in d.index else "–" for y in ring_years],
+                "summer": _fmt(d.loc[year, "summer_diff"], 2) if year in d.index else "–",
+                "ratio": _fmt(d.loc[year, "summer_ratio"], 2) if year in d.index else "–"})
+        src = run / "figures" / f"ring_control_{year}.png"
+        if src.exists():
+            figs["ring"] = fig_dir / "05_kontroles_gredzens.png"
+            figs["ring"].write_bytes(src.read_bytes())
     val_summary = val_refs = None
     vs = run / "tables" / f"validation_summary_{year}.csv"
     if vs.exists():
@@ -221,6 +240,9 @@ def build_report(cfg: Config, n_series: int = 5) -> Path:
                          "status": STATUS_LV.get(r["status"], r["status"]),
                          "n": int(r["size"]), "ha": _fmt(r["sum"])} for _, r in status_tab.iterrows()],
         "top_stress": top_stress, "prim": prim.upper(), "missions": mission_rows,
+        "ring_rows": ring_rows, "ring_years": ring_years,
+        "n_season_start": int(stress["onset_before_season"].astype(bool).sum())
+        if "onset_before_season" in stress else 0,
         "val_rows": val_rows, "val_detail": val_detail,
         "val_description": cfg.reference.description,
         "method_lines": method_lines(cfg),
@@ -323,6 +345,10 @@ prioritārās drona misijas (pārtraukta līnija). Fails: figures/report/{{ fig_
 <tr><th>ID</th><th>Statuss</th><th>Pirmoreiz</th><th class="num">Platība, ha</th><th class="num">{{ prim }} izmaiņa</th><th class="num">Ticamība</th><th>Pirms sezonas</th><th>Sācies iepr. rudenī</th><th>Iegarens</th><th>Pie ceļa</th><th class="num">Līdz ceļam, m</th></tr>
 {% for r in top_stress %}<tr><td>#{{ r.id }}</td><td>{{ r.status }}</td><td>{{ r.first }}</td><td class="num">{{ r.area }}</td><td class="num">{{ r.delta }}</td><td class="num">{{ r.conf }}</td><td>{{ r.before }}</td><td>{{ r.autumn }}</td><td>{{ r.linear }}</td><td>{{ r.near_road }}</td><td class="num">{{ r.road }}</td></tr>{% endfor %}
 </table></div>
+{% if n_season_start %}<p class="callout"><b>"Pirmoreiz" sezonas sākumā nav izmaiņas sākuma
+datums.</b> {{ n_season_start }} stresa poligoni pirmoreiz noteikti sezonas pirmajā derīgajā novērojumā:
+izmaiņa tobrīd jau pastāvēja, un pavasara augstais {{ prim }} līmenis starpību vēl pastiprina. Izmaiņas
+sākumu rāda kolonna "Sācies iepr. rudenī" un sadaļa "Kontroles gredzens" (iepriekšējā gada vēlā sezona).</p>{% endif %}
 <p class="note">Ticamība ir heuristisks 0–1 rādītājs (z lielums, indeksu saskaņa, noturība,
 bāzes novērojumu skaits), nevis varbūtība.</p>
 {% endif %}
@@ -334,14 +360,30 @@ bāzes novērojumu skaits), nevis varbūtība.</p>
 visā periodā; pārtrauktā līnija = pirmā noteikšana. Fails: figures/report/{{ fig_files.timeseries }}</figcaption></figure>
 {% endif %}
 
+{% if ring_rows %}
+<h2>Kontroles gredzens</h2>
+<p class="note">Katrs stresa poligons salīdzināts ar analizēto mežu 100 m gredzenā ap to (tie paši
+laikapstākļi, fenoloģija un atmosfēra). Vērtības: {{ prim }} mediāna poligonā mīnus gredzenā.
+"Vēlā sezona" = 15.08.–30.09.; pozitīva novirze iepriekšējā rudenī nozīmē, ka izmaiņa sākās jau
+tad. Ja poligons atšķiras no gredzena jau pirmajos gados, tā var būt arī strukturāla atšķirība
+(cita suga, vecums, biezība), ko pārbaudīs nogabalu dati.</p>
+<div class="tablewrap"><table>
+<tr><th>ID</th><th>Statuss</th><th>Sācies iepr. rudenī</th>{% for y in ring_years %}<th class="num">Vēlā sezona {{ y }}</th>{% endfor %}<th class="num">Vasara {{ year }}</th><th class="num">Vasara {{ year }}, attiecība</th></tr>
+{% for r in ring_rows %}<tr><td>#{{ r.id }}</td><td>{{ r.status }}</td><td>{{ r.autumn }}</td>{% for v in r.late %}<td class="num">{{ v }}</td>{% endfor %}<td class="num">{{ r.summer }}</td><td class="num">{{ r.ratio }}</td></tr>{% endfor %}
+</table></div>
+{% if figs.ring %}<figure><img src="{{ figs.ring }}" alt="Kontroles gredzens">
+<figcaption>Poligons (oranžs) un apkārtējais mežs (zils). Fails: figures/report/{{ fig_files.ring }}</figcaption></figure>{% endif %}
+{% endif %}
+
 <h2>Drona misijas</h2>
 {% if missions %}
 <div class="tablewrap"><table>
 <tr><th>Misija</th><th class="num">Stresa mērķi</th><th class="num">Cirtes malas</th><th class="num">Laukums, ha</th><th>Centrs (WGS84)</th><th>Mērķi</th></tr>
 {% for m in missions %}<tr><td>{{ m.id }}</td><td class="num">{{ m.stress }}</td><td class="num">{{ m.edges }}</td><td class="num">{{ m.area }}</td><td>{{ m.lat }}, {{ m.lon }}</td><td>{{ m.targets }}</td></tr>{% endfor %}
 </table></div>
-<p class="note">Prioritāte: 1 — noturīgs stress, 2 — jauns stress, 3 — stress pie ceļa
-(≤ 30 m) vai iegarens (iespējami ceļmalas darbi / lineāri objekti), 4 — cirtes malas. Cirtes malas (30 m skujkoku josla gar
+<p class="note">Prioritāte: 1 — noturīgs stress, 2 — jauns stress, 3 — iegarens stresa poligons
+(iespējams lineāra objekta artefakts), 4 — cirtes malas. "Pie ceļa" (≤ 30 m) ir tikai informatīvs
+karogs: saulainas ceļmalas audžu malas ir tikpat ticama uzbrukuma vieta kā cirtes malas. Cirtes malas (30 m skujkoku josla gar
 pēdējo 2 gadu cirtēm) ir sakārtotas pēc riska: malas orientācija (D–DR–R vērstas malas), cirtes svaigums
 un skujkoku īpatsvars. KML: vectors/drone_missions_{{ year }}.kml, vectors/drone_targets_{{ year }}.kml.</p>
 {% else %}<p>Nav drona misiju.</p>{% endif %}

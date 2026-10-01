@@ -150,9 +150,10 @@ Kataloga pieņēmumu pārbaude (ar internetu): `python -m uv run pytest -m netwo
    - `recovered` — atgriezies normā (piem., pavasara fenoloģijas artefakts).
    Poligoni netiek dzēsti; statusu skaits redzams `tables/polygon_status_<gads>.csv`.
 8. **Drona mērķi** (`drone_targets`): stresa poligoni ar statusu `new` vai
-   `persistent` — 1. prioritāte noturīgi, 2. jauni, 3. stress pie ceļa (`near_road`)
-   vai iegarens (`linear_feature`), jo tie biežāk ir ceļmalu / grāvju darbi, nevis
-   stress; 4. prioritāte — 30 m skujkoku meža josla gar pēdējo 2 gadu cirtēm
+   `persistent` — 1. prioritāte noturīgi, 2. jauni, 3. iegareni (`linear_feature`,
+   iespējams lineāra objekta artefakts); `near_road` ir tikai informatīvs karogs
+   (saulainas ceļmalas audžu malas ir tikpat ticama uzbrukuma vieta kā cirtes
+   malas); 4. prioritāte — 30 m skujkoku meža josla gar pēdējo 2 gadu cirtēm
    ≥ 0,3 ha (augsta riska zona, kur anomālija nav noteikta), sakārtota pēc `risk_score`. Katram mērķim: ID
    (T001…), centroīda un punkta uz mērķa koordinātas WGS84, īss apraksts latviski.
 
@@ -241,8 +242,28 @@ dalīta ar analizētā meža daļu tajās pašās joslās (1 = nav ceļa efekta)
 
 2025. gadā bagātinājums nenokrīt līdz ~1 pēc 30 m, tātad tas nav lokāls
 ceļmalas pikseļu efekts, ko atrisinātu plašāks buferis (paraugs mazs: 16 poligoni).
-Tāpēc buferis paliek 20 m, bet poligoni ≤ 30 m no ceļa tiek atzīmēti ar
-`near_road` un saņem zemāku drona prioritāti. Cirtēm ceļu efekta nav (~1).
+Tāpēc buferis paliek 20 m, un poligoni ≤ 30 m no ceļa tiek tikai atzīmēti ar
+`near_road` (prioritāti nemaina). Cirtēm ceļu efekta nav (~1). Pikseļi vienā
+poligonā nav neatkarīgi, un poligonu ir maz (12–16), tāpēc attiecība ~1,8 var
+rasties no 2–3 poligoniem; iespējams arī, ka meža ceļi ved uz apsaimniekotām
+audzēm. Ja turpināt, rēķināt poligonu līmenī ar bootstrap intervālu.
+
+## Kontroles gredzens (standarta diagnostika)
+
+`detect` katram stresa poligonam salīdzina primāro indeksu poligonā ar analizēto
+mežu 100 m gredzenā ap to (tie paši laikapstākļi, fenoloģija un atmosfēra):
+`tables/ring_control_<gads>.csv` (agrā sezona ≤ 31.05., vasara 15.06.–14.08.,
+vēlā sezona 15.08.–30.09.; starpība un attiecība) un `figures/ring_control_<gads>.png`;
+atskaitē sadaļa "Kontroles gredzens". Tas ir labāks tests nekā salīdzinājums ar
+iepriekšējiem gadiem, jo noņem reģionālus un laikapstākļu signālus.
+`scripts/inspect_polygons.py` dara to pašu jebkuriem poligoniem (arī cirtēm).
+
+- `first_detected` sezonas pirmajā novērojumā **nav izmaiņas sākuma datums**:
+  izmaiņa tobrīd jau pastāvēja, un pavasarī augstais CRSWIR līmenis (arī
+  gredzenā) absolūto starpību pastiprina (attiecība poligons/gredzens to dara
+  mazāk). Sākumu rāda iepriekšējā gada vēlā sezona un `onset_prev_autumn`.
+- Ja poligons atšķiras no gredzena jau pirmajos gados, tā var būt strukturāla
+  atšķirība (cita suga, vecums, biezība), ne bojājums — to pārbauda nogabalu dati.
 
 ## Starpgadu un platformu saskaņotība (Kalsnava, 2022–2026)
 

@@ -74,5 +74,9 @@ def test_near_road_flag_and_drone_priority(tmp_path):
     cfg = Config(run_name="t", aoi=tmp_path / "a.geojson", time=TimeConfig(monitor_year=2026))
     cfg.targets.cut_edge_enabled = False
     t = build_targets(cfg, out, None, None, None).set_index("source_id")
-    assert t.loc[1, "priority"] == 1 and t.loc[3, "priority"] == 2 and t.loc[2, "priority"] == 3
+    # near_road is informational: #2 stays priority 1
+    assert t.loc[1, "priority"] == 1 and t.loc[3, "priority"] == 2 and t.loc[2, "priority"] == 1
     assert "m no ceļa" in t.loc[2, "description"]
+    out.loc[out["id"] == 2, "linear_feature"] = True
+    t = build_targets(cfg, out, None, None, None).set_index("source_id")
+    assert t.loc[2, "priority"] == 3
