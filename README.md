@@ -17,6 +17,31 @@ lēmumu vēsture, atvērtie jautājumi): [`docs/PROJEKTA_APRAKSTS.md`](docs/PROJ
 
 ---
 
+## Iesaldētā versija (`v0.2-kalsnava`)
+
+Detekcijas parametri ir **iesaldēti** git tagā `v0.2-kalsnava` (2026-10-01) un
+netiek mainīti, līdz ir pieejami LVM dati (teritorija ar zināmiem bojājumiem un
+sanitāro ciršu references).
+
+**Kāpēc:** visi sliekšņi līdz šim kalibrēti vienā testa teritorijā (Kalsnava),
+skatoties uz tās pašas teritorijas rezultātiem. Lai LVM datu validācija būtu
+**akla** un godīga, metodi nedrīkst pielāgot pēc tam, kad redzēti validācijas
+dati. Ja pēc validācijas parametri tiks mainīti, tā būs jauna versija ar jaunu
+validāciju.
+
+**Iesaldēti:** bāzes modelis (harmonisks, 1 harmonika, IRLS/Huber), `mad_floor`
+(NDVI 0,035, NDRE 0,034, NDMI 0,047, CRSWIR 0,061), anomālijas kārtula (CRSWIR
+z ≥ 2,5 + ≥ 1 cits indekss), noturība (≥ 2 novērojumi un ≥ 7 dienas), min.
+laukums 0,1 ha, cirtes pazīme (NDVI ≤ 0,5 un kritums ≥ 0,25 vai NDMI kritums
+≥ 0,15), statusa kārtula (k/2, ≥ 2 novērojumi), iepriekšējā rudens slieksnis
+(z ≥ 1,25), reģionālā normalizācija (AOI + 5 km, 60 m, divos soļos), maskas
+(SCL + 20 m, dūmaka B02 0,02 / 10 %, HRL skujkoki, vasaras NDVI ≥ 0,65, NDVI
+sezonālā amplitūda ≤ 0,22, OSM ceļi 20 m), drona prioritātes un `risk_score`
+svari. Pilns saraksts: `docs/PROJEKTA_APRAKSTS.md`, 22. sadaļa.
+
+**Atļautas izmaiņas** (nemaina detekciju): informatīvi atribūti (piem., nogabalu
+dati), atskaites, lauka pārbaudes rīki, kļūdu labojumi, kas neietekmē rezultātus.
+
 ## Uzstādīšana
 
 Nepieciešams: Windows / Linux / macOS, interneta pieslēgums datu ieguvei.
