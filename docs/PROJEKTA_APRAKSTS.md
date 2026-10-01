@@ -33,7 +33,7 @@ teritorijā, lēmumu vēsturi un atvērtos jautājumus. Lietošanas instrukcija
 18. [Lēmumu vēsture](#18-lēmumu-vēsture)
 19. [Testi](#19-testi)
 20. [Zināmie ierobežojumi](#20-zināmie-ierobežojumi)
-21. [Atvērtie jautājumi un nākamie soļi](#21-atvērtie-jautājumi-un-nākamie-soļi)
+21. [Iesaldētā versija, 4. posms, lauka pārbaude, nākamie soļi](#21-iesaldētā-versija-4-posms-lauka-pārbaude-nākamie-soļi)
 22. [Konfigurācijas parametru atsauce](#22-konfigurācijas-parametru-atsauce)
 23. [Commit vēsture](#23-commit-vēsture)
 
@@ -82,6 +82,9 @@ vai paroles nav vajadzīgas.
 | `s2forest report CONFIG` | vienfaila HTML atskaite latviski + PNG (200 dpi) |
 | `s2forest missions CONFIG` | pārgrupē esošos mērķus misijās (pēc parametru maiņas, bez `detect`) |
 | `s2forest run CONFIG` | viss process: fetch → indices → detect → validate → report |
+| `s2forest stands CONFIG` | nogabalu atribūti esošam skrējienam (informatīvi) |
+| `s2forest field-prepare CONFIG --id …` | lauka pārbaudes pakete (GPKG, KML, veidlapa) |
+| `s2forest field-import CONFIG FORMA.csv` | aizpildītās veidlapas ielasīšana kā references |
 
 Visas komandas izsauc ar `python -m uv run s2forest ...`.
 
@@ -635,7 +638,7 @@ ja turpinās — poligonu līmenī ar bootstrap.
 
 ## 19. Testi
 
-`python -m uv run pytest` — **63 bezsaistes testi** (bez interneta, sintētiski dati
+`python -m uv run pytest` — **69 bezsaistes testi** (bez interneta, sintētiski dati
 ar viltotu STAC avotu), `pytest -m network` — 5 tīkla testi (kataloga pieņēmumi,
 2022. gada robs, legacy nobīde, Planetary Computer nobīde, Overpass).
 
@@ -664,28 +667,51 @@ kontroles gredzens, konfigurācija (arī veidne).
 - Ģeometriskā nobīde starp baseline ≤ 0,17–0,23 px (malu troksnis).
 - OSM ceļu un grāvju pārklājums nav pilnīgs.
 - Validācija līdz šim tikai ar DEMO / ziemas cirtēm bez zināma iemesla.
+- Nogabalu dati (sugu sastāvs) Kalsnavas valsts mežam nav pieejami atvērtajos datos.
 - `detect` ilgst ~4–11 min 5×5 km AOI (divpakāpju normalizācija); nav prioritāte.
 
 ---
 
-## 21. Atvērtie jautājumi un nākamie soļi
+## 21. Iesaldētā versija, 4. posms, lauka pārbaude, nākamie soļi
 
-1. **4. posms (nogabali)** — gaida atļauju lejupielādēt `vidzemes.zip` (239,5 MB,
-   VMD atvērtie dati, CC0) uz `data/local/`. Plāns:
-   - noteikt sugu sastāva laukus (klasifikatori VMD);
-   - egļu īpatsvars katram stresa poligonam (2025: 12, 2026: 3);
-   - egļu īpatsvaru izmantot ticamībā / prioritātē (labākais solis pret viltus
-     trauksmēm bez drona);
-   - #34 / #31 kā pirmais tests (suga, vecums, meža tips; abas ģeometrijas);
-   - agregācija un CSV laika rindas pa nogabaliem.
-2. **LVM teritorija un references** (sanitārās cirtes ar datumu un iemeslu) — gaida
-   datus; konfigurācijas veidne gatava.
-3. **7. posms:** demonstrācijas Jupyter notebook (AOI → karte ar aizdomīgām vietām),
-   README galīgā versija.
-4. Platformu pārbaude atkārtoti 2026. gada beigās (vairāk S2C datumu).
-5. Neobligāti: ceļu efekts poligonu līmenī ar bootstrap; CRSWIR relatīvā novirze
-   (poligons/gredzens) pavasarī; Copernicus Data Space Ecosystem kā trešais avots;
-   `detect` paātrināšana.
+**Iesaldētā versija `v0.2-kalsnava`** (git tags, 2026-10-01): detekcijas parametri
+netiek mainīti līdz LVM datiem — aklā validācija (sliekšņi kalibrēti uz tās pašas
+teritorijas rezultātiem). Atļautas tikai informatīvas izmaiņas (atribūti, atskaites,
+lauka rīki, kļūdu labojumi bez ietekmes uz rezultātiem).
+
+**4. posms (ierobežots, informatīvs)** — `stands.py`, `s2forest stands`:
+- Avots: VMD Meža valsts reģistra atvērtie dati (data.gov.lv, CC0), `vidzemes.zip`
+  (239,5 MB, 2026-07-08; Kalsnava → Madonas mežniecība → Vidzemes virsmežniecība),
+  izgriezts pēc AOI uz `data/local/mvr_kalsnava.gpkg`. Klasifikators
+  `data/local/vmd_klasifikatori.xlsx` (gis.vmd.gov.lv): egle = 3, citas egles = 15.
+- Atvērtajos datos nav sugu koeficientu: egļu īpatsvars pēc šķērslaukuma `g10…g14`
+  (rezerve — koku skaits `n10…n14`); valdošā suga = lielākais šķērslaukums; vecums
+  `a1x`; meža tips `mt`. Shapefailos nav lauka `id` → `kadastrs-kvart-nog`.
+- Atribūti GPKG, drona mērķos un atskaitē; **netiek izmantoti** ticamībā/prioritātē.
+- **Rezultāts:** atvērtie dati ir tikai privātie meži — 73 nogabali, 1,2 % no
+  analizētā meža AOI; **0 no 15 stresa poligoniem** ir nogabalos ar datiem (2026:
+  #25 2,8 km, #26 207 m, #31 225 m līdz tuvākajam). #31/#34 pārbaude abām
+  ģeometrijām nav iespējama (vecā #34 tikai par dažiem pikseļiem lielāka).
+  LVM publiskajā nogabalu kopā sugu sastāva nav, saite atgriež 404.
+  → **Vajadzīgi LVM taksācijas dati** valsts mežam (shēma konfigurējama).
+
+**Lauka pārbaude 2026** (`fieldcheck.py`, `field-prepare`, `field-import`,
+instrukcija `docs/LAUKA_PARBAUDE.md`): F01–F03 = stresa poligoni #25, #26, #31;
+F04 = augstākā riska cirtes mala T004 (risks 0,81); F05 = automātiski izvēlēta
+kontroles vieta (vesels skujkoku mežs, z mediāna −0,05, bāzes NDVI 0,783 / CRSWIR
+0,826 pret mērķu 0,783 / 0,82). GPKG + KML (poligoni un punkti), CSV veidlapa
+(`;`, UTF-8) ar pazīmēm (urbumu milti, sveķi, ieejas atveres, mizas lobīšanās,
+vainaga krāsa, foto, secinājums); ielasīšana ar pārbaudēm → references `validate`
+un prognozes/novērojuma tabula. Poligonu ID var mainīties, ja `detect` tiek
+pārrēķināts; lauka paketē ģeometrijas ir saglabātas.
+
+**Nākamie soļi:**
+1. LVM teritorija, sanitāro ciršu references un taksācijas dati (sugu sastāvs).
+2. Lauka / drona pārbaude F01–F05, veidlapas ielasīšana.
+3. Platformu pārbaude atkārtoti 2026. gada beigās.
+
+**Atmests (komandas lēmums):** 7. posma notebook, ceļu efekta bootstrap, CDSE avots,
+`detect` paātrināšana.
 
 ---
 
@@ -732,7 +758,7 @@ conifer 0,3}, `risk_peak_azimuth` 225, `mission_max_area_ha` 30,
 **reference:** `path`, `id_field`, `date_field`, `reason_field`, `reason_values`,
 `description`, `match_buffer_m` 10, `max_date` (noklusēti nākamā gada 31. marts).
 
-**stands:** `path`, `id_field`, `species_field`, `spruce_values` (4. posmam).
+**stands:** `path`, `id_field` (id; rezerve kadastrs-kvart-nog), `species_fields` s10…s14, `basal_area_fields` g10…g14, `tree_count_fields` n10…n14, `age_fields` a10…a14, `forest_type_field` mt, `spruce_values` [3, 15] (informatīvi).
 
 ---
 

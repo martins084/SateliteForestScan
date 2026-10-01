@@ -25,10 +25,20 @@ class SourceConfig(BaseModel):
 
 
 class StandsConfig(BaseModel):
-    path: Path | None = None
+    """Forest stands (State Forest Register open data schema by default).
+
+    Informative attributes only in v0.2-kalsnava (not used in detection,
+    confidence or priority).
+    """
+    path: Path | None = None              # GeoPackage / SHP / zip, clipped to the AOI
     id_field: str = "id"
-    species_field: str | None = None
-    spruce_values: list[str | int] = Field(default_factory=list)
+    species_fields: list[str] = Field(default_factory=lambda: [f"s1{i}" for i in range(5)])
+    basal_area_fields: list[str] = Field(default_factory=lambda: [f"g1{i}" for i in range(5)])
+    tree_count_fields: list[str] = Field(default_factory=lambda: [f"n1{i}" for i in range(5)])
+    age_fields: list[str] = Field(default_factory=lambda: [f"a1{i}" for i in range(5)])
+    forest_type_field: str = "mt"
+    # VMD species classifier: 3 = Egle, 15 = Citas egles
+    spruce_values: list[int] = Field(default_factory=lambda: [3, 15])
 
 
 class ReferenceConfig(BaseModel):

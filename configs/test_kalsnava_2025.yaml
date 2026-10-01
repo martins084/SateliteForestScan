@@ -51,3 +51,9 @@ reference:
   id_field: nr
   date_field: cirtes_datums
   description: "2025./2026. gada ziemas cirtes, ko atrada 2026. gada analīze. Cirtes iemesls NAV zināms (visticamāk, galvenokārt kārtējās cirtes, nevis mizgraužu bojājumi). Cirtes datums ir agrākais iespējamais (2025-09-30), tāpēc aizkave ir apakšējā robeža."
+
+# Forest stands: VMD State Forest Register open data (Vidzemes virsmežniecība),
+# clipped to the AOI. Covers only ~1 % of the analysed forest here: state forest
+# (LVM) stands are not in the open data. Informative attributes only.
+stands:
+  path: ../data/local/mvr_kalsnava.gpkg

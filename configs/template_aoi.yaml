@@ -23,11 +23,12 @@ time:
 
 # Optional: forest stand polygons (e.g. from the State Forest Register).
 # Used later to restrict the analysis to spruce stands and aggregate per stand.
+# Defaults follow the VMD open-data schema (s10..s14 species, g10..g14 basal area,
+# a10..a14 age, mt forest type; spruce = codes 3 and 15). Adjust for LVM exports.
 stands:
   path: null                            # ../data/local/TODO_stands.gpkg
-  id_field: id                          # TODO: stand id attribute
-  species_field: null                   # TODO: dominant species attribute
-  spruce_values: []                     # TODO: code(s) meaning spruce (check your data)
+  id_field: id                          # falls back to kadastrs-kvart-nog if missing
+  spruce_values: [3, 15]
 
 # Optional: reference polygons with known damage (e.g. sanitary cuts) for validation.
 reference:

@@ -53,3 +53,9 @@ reference:
   reason_field: iemesls
   reason_values: ["sanitārā cirte (DEMO)"]
   description: "DEMO: sintētiskas references no rīka paša 2026. gada cirtēm. Pārbauda tikai moduļa darbību, neko neliecina par precizitāti."
+
+# Forest stands: VMD State Forest Register open data (Vidzemes virsmežniecība),
+# clipped to the AOI. Covers only ~1 % of the analysed forest here: state forest
+# (LVM) stands are not in the open data. Informative attributes only.
+stands:
+  path: ../data/local/mvr_kalsnava.gpkg

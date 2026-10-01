@@ -192,6 +192,11 @@ def detect(config: Path = ConfigArg, verbose: bool = VerboseOpt, closeups: bool 
     if not (cfg.run_dir / "rasters" / "forest_mask.tif").exists():
         write_index_outputs(cfg, st)
     ds = detect_stage(cfg, st)
+    if cfg.stands.path is not None:
+        from .stands import annotate_outputs
+
+        ds.polygons, ds.targets, sinfo = annotate_outputs(cfg, ds.polygons, ds.targets)
+        typer.echo(f"Stands: {sinfo}")
     written = write_detect_outputs(cfg, st, ds)
 
     year = cfg.time.monitor_year
@@ -314,6 +319,78 @@ def missions(config: Path = ConfigArg, verbose: bool = VerboseOpt):
     for _, m in top.iterrows():
         typer.echo(f"  {m['mission_id']}: {m['n_stress']} stress + {m['n_cut_edge']} cut edges, "
                    f"{m['flight_area_ha']:.1f} ha, best value {m['max_value']:.2f}")
+
+
+@app.command()
+def stands(config: Path = ConfigArg, verbose: bool = VerboseOpt):
+    """Add forest stand attributes (species, spruce share, age, forest type) to the
+    suspect polygons and drone targets of an existing run (informative only)."""
+    import geopandas as gpd
+
+    from .stands import STAND_COLUMNS, annotate_outputs
+
+    cfg = _setup(config, verbose)
+    if cfg.stands.path is None:
+        typer.echo("No stand data configured (stands.path).")
+        return
+    year = cfg.time.monitor_year
+    gpkg = cfg.run_dir / "vectors" / "suspects.gpkg"
+    polys = gpd.read_file(gpkg, layer=f"suspects_{year}").drop(
+        columns=STAND_COLUMNS, errors="ignore")
+    targets = gpd.read_file(gpkg, layer="drone_targets")
+    polys, targets, info = annotate_outputs(cfg, polys, targets)
+    polys.to_file(gpkg, layer=f"suspects_{year}", driver="GPKG", engine="pyogrio")
+    tdir = cfg.run_dir / "tables"
+    polys.drop(columns="geometry").to_csv(tdir / f"suspects_{year}.csv", index=False)
+    if targets is not None:
+        targets.to_file(gpkg, layer="drone_targets", driver="GPKG", engine="pyogrio")
+        targets.drop(columns="geometry").to_csv(tdir / f"drone_targets_{year}.csv", index=False)
+    typer.echo(f"Stands: {info}")
+    _write_metadata(cfg, {"stands": info})
+
+
+@app.command("field-prepare")
+def field_prepare(config: Path = ConfigArg,
+                  ids: list[int] = typer.Option(..., "--id", help="stress polygon id (repeat)"),
+                  verbose: bool = VerboseOpt):
+    """Field / drone check package: selected stress polygons, highest-risk cut edge and a
+    healthy control site -> GPKG, KML (polygons and points) and a CSV form template."""
+    from .fieldcheck import prepare
+
+    cfg = _setup(config, verbose)
+    out = prepare(cfg, ids, cfg.run_dir / "field_check")
+    for k, v in out.items():
+        typer.echo(f"{k}: {v}")
+
+
+@app.command("field-import")
+def field_import(config: Path = ConfigArg,
+                 form: Path = typer.Argument(..., exists=True, dir_okay=False,
+                                             help="filled field form (CSV)"),
+                 verbose: bool = VerboseOpt):
+    """Read a filled field form -> reference polygons for `validate` + predicted vs observed."""
+    import geopandas as gpd
+
+    from .fieldcheck import form_to_references, read_form
+
+    cfg = _setup(config, verbose)
+    year = cfg.time.monitor_year
+    fdir = cfg.run_dir / "field_check"
+    df, problems = read_form(form)
+    for p in problems:
+        typer.echo(f"PROBLĒMA: {p}", err=True)
+    if problems:
+        raise typer.Exit(code=1)
+    targets = gpd.read_file(fdir / f"field_check_{year}.gpkg", layer="targets")
+    ref, table = form_to_references(df, targets)
+    out = fdir / f"field_references_{year}.gpkg"
+    ref.to_file(out, driver="GPKG", engine="pyogrio")
+    table.to_csv(fdir / f"field_predicted_vs_observed_{year}.csv")
+    typer.echo("Prognoze (rinda) pret lauka secinājumu (kolonna):")
+    typer.echo(table.to_string())
+    typer.echo(f"References: {out}")
+    typer.echo("Validācijai konfigurācijā: reference.path = šis fails, date_field: datums, "
+               "id_field: merka_id, reason_field: secinajums, reason_values: [mizgrauzi]")
 
 
 @app.command()

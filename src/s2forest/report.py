@@ -91,6 +91,19 @@ def method_lines(cfg: Config) -> list[str]:
     return lines
 
 
+def stands_note(cfg: Config, meta: dict, stress) -> str | None:
+    """Explain where the stand columns come from (informative only)."""
+    if cfg.stands.path is None:
+        return None
+    n = len(stress)
+    with_stand = int((stress["stand_cover_share"] > 0).sum()) if "stand_cover_share" in stress else 0
+    return (f"Nogabalu dati: {Path(cfg.stands.path).name}; egļu īpatsvars pēc šķērslaukuma. "
+            f"Tikai informatīvi — netiek izmantoti ticamībā vai prioritātē (iesaldētā versija). "
+            f"Nogabals atrasts {with_stand} no {n} stresa poligoniem"
+            + (" — pārējie atrodas mežā, kura dati atvērtajos datos nav pieejami (valsts meži)."
+               if with_stand < n else "."))
+
+
 def build_report(cfg: Config, n_series: int = 5) -> Path:
     from .pipeline import index_stage
 
@@ -184,7 +197,12 @@ def build_report(cfg: Config, n_series: int = 5) -> Path:
                            "linear": "jā" if bool(r.get("linear_feature", False)) else "",
                            "near_road": "jā" if bool(r.get("near_road", False)) else "",
                            "autumn": "jā" if bool(r.get("onset_prev_autumn", False)) else "nē",
-                           "road": _fmt(r.get("dist_to_road_m"), 0)})
+                           "road": _fmt(r.get("dist_to_road_m"), 0),
+                           "stand": (f"{r.get('stand_dom_species') or '–'}, "
+                                     f"{_fmt(r.get('stand_dom_age'), 0)} g., "
+                                     f"{r.get('stand_forest_type') or '–'}")
+                           if r.get("stand_id") else "nav datu",
+                           "spruce": _fmt(r.get("stand_spruce_share"), 2) if r.get("stand_id") else "–"})
     mission_rows = []
     if missions is not None:
         for _, m in missions.iterrows():
@@ -241,6 +259,7 @@ def build_report(cfg: Config, n_series: int = 5) -> Path:
                          "n": int(r["size"]), "ha": _fmt(r["sum"])} for _, r in status_tab.iterrows()],
         "top_stress": top_stress, "prim": prim.upper(), "missions": mission_rows,
         "ring_rows": ring_rows, "ring_years": ring_years,
+        "stands_note": stands_note(cfg, meta, stress),
         "n_season_start": int(stress["onset_before_season"].astype(bool).sum())
         if "onset_before_season" in stress else 0,
         "val_rows": val_rows, "val_detail": val_detail,
@@ -342,13 +361,14 @@ prioritārās drona misijas (pārtraukta līnija). Fails: figures/report/{{ fig_
 <b>Noturīgs</b>: izmaiņa saglabājas. <b>Atkopies</b>: atgriezies normā. Poligoni netiek dzēsti.</p>
 {% if top_stress %}
 <div class="tablewrap"><table>
-<tr><th>ID</th><th>Statuss</th><th>Pirmoreiz</th><th class="num">Platība, ha</th><th class="num">{{ prim }} izmaiņa</th><th class="num">Ticamība</th><th>Pirms sezonas</th><th>Sācies iepr. rudenī</th><th>Iegarens</th><th>Pie ceļa</th><th class="num">Līdz ceļam, m</th></tr>
-{% for r in top_stress %}<tr><td>#{{ r.id }}</td><td>{{ r.status }}</td><td>{{ r.first }}</td><td class="num">{{ r.area }}</td><td class="num">{{ r.delta }}</td><td class="num">{{ r.conf }}</td><td>{{ r.before }}</td><td>{{ r.autumn }}</td><td>{{ r.linear }}</td><td>{{ r.near_road }}</td><td class="num">{{ r.road }}</td></tr>{% endfor %}
+<tr><th>ID</th><th>Statuss</th><th>Pirmoreiz</th><th class="num">Platība, ha</th><th class="num">{{ prim }} izmaiņa</th><th class="num">Ticamība</th><th>Pirms sezonas</th><th>Sācies iepr. rudenī</th><th>Iegarens</th><th>Pie ceļa</th><th class="num">Līdz ceļam, m</th><th>Nogabals (valdošā suga, vecums, meža tips)</th><th class="num">Egļu īpatsvars</th></tr>
+{% for r in top_stress %}<tr><td>#{{ r.id }}</td><td>{{ r.status }}</td><td>{{ r.first }}</td><td class="num">{{ r.area }}</td><td class="num">{{ r.delta }}</td><td class="num">{{ r.conf }}</td><td>{{ r.before }}</td><td>{{ r.autumn }}</td><td>{{ r.linear }}</td><td>{{ r.near_road }}</td><td class="num">{{ r.road }}</td><td>{{ r.stand }}</td><td class="num">{{ r.spruce }}</td></tr>{% endfor %}
 </table></div>
 {% if n_season_start %}<p class="callout"><b>"Pirmoreiz" sezonas sākumā nav izmaiņas sākuma
 datums.</b> {{ n_season_start }} stresa poligoni pirmoreiz noteikti sezonas pirmajā derīgajā novērojumā:
 izmaiņa tobrīd jau pastāvēja, un pavasara augstais {{ prim }} līmenis starpību vēl pastiprina. Izmaiņas
 sākumu rāda kolonna "Sācies iepr. rudenī" un sadaļa "Kontroles gredzens" (iepriekšējā gada vēlā sezona).</p>{% endif %}
+{% if stands_note %}<p class="note">{{ stands_note }}</p>{% endif %}
 <p class="note">Ticamība ir heuristisks 0–1 rādītājs (z lielums, indeksu saskaņa, noturība,
 bāzes novērojumu skaits), nevis varbūtība.</p>
 {% endif %}

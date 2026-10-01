@@ -88,7 +88,29 @@ python -m uv run s2forest validate configs/test_kalsnava.yaml   # salīdzinājum
 ```bash
 python -m uv run s2forest report   configs/test_kalsnava.yaml   # HTML atskaite
 python -m uv run s2forest missions configs/test_kalsnava.yaml   # pārgrupēt misijas (pēc targets.mission_* maiņas)
+python -m uv run s2forest stands   configs/test_kalsnava.yaml   # nogabalu atribūti (informatīvi)
+python -m uv run s2forest field-prepare configs/test_kalsnava.yaml --id 25 --id 26 --id 31   # lauka pārbaudes pakete
+python -m uv run s2forest field-import  configs/test_kalsnava.yaml lauka_veidlapa_2026.csv   # aizpildītās veidlapas ielasīšana
 ```
+
+Lauka pārbaudes instrukcija: [`docs/LAUKA_PARBAUDE.md`](docs/LAUKA_PARBAUDE.md).
+
+### Nogabalu dati (4. posms, informatīvi)
+
+`stands.path` — Meža valsts reģistra nogabali (VMD atvērtie dati, data.gov.lv, CC0;
+`vidzemes.zip` u. c.), izgriezti pēc AOI ar `s2forest.stands.clip_stands`. Atvērtajos
+datos **nav sugu koeficientu**, tāpēc egļu īpatsvars = egles (kodi 3, 15) šķērslaukums
+`g1x` / kopējais šķērslaukums (ja tā nav — koku skaits `n1x`). Katram poligonam un
+drona mērķim: lielākās pārklāšanās nogabals (`stand_id` = kadastrs-kvartāls-nogabals,
+valdošā suga, vecums, meža tips, egļu īpatsvars), laukumā svērtais egļu īpatsvars un
+nogabalu pārklājuma daļa. Iesaldētajā versijā tas **netiek** izmantots ticamībā vai
+prioritātē.
+
+**Ierobežojums Kalsnavā:** VMD atvērtie dati satur tikai privātos mežus — AOI tie
+pārklāj 1,2 % analizētā meža (73 nogabali, 7 kadastra vienības); valsts mežu (LVM)
+nogabalu ar sugu sastāvu atvērtajos datos nav (LVM publiskajā nogabalu kopā ir tikai
+numuri un platības; saite 2026-10-01 atgriež 404). Neviens no 15 stresa poligoniem
+(2025: 12, 2026: 3) nav nogabalos ar datiem → **vajadzīgi LVM taksācijas dati**.
 
 Atskaite: `output/<run_name>/atskaite_<run_name>_<gads>.html` (viens fails ar
 iegultiem attēliem). Visi atskaites attēli ir arī atsevišķi PNG failos (200 dpi)
