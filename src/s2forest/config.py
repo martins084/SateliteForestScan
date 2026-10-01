@@ -181,6 +181,16 @@ class AnomalyConfig(BaseModel):
     huber_k: float = 1.345
     z_threshold: float = 2.5
     persistence: int = 2
+    # The persistent run must also span at least this many days (first to last
+    # anomalous observation): two images a few days apart share weather and
+    # atmosphere and are not independent confirmations. A run still shorter than
+    # this at the end of the season is kept with status "new".
+    persistence_min_days: int = 7
+    # Previous-autumn check: median primary z of the polygon in the previous
+    # year's observations from `prev_autumn_start` to the season end; at or above
+    # `onset_prev_autumn_z` the change is flagged as having started last autumn.
+    prev_autumn_start: str = "08-15"
+    onset_prev_autumn_z: float = 1.25
     doy_window: int = 30
     min_baseline_obs: int = 5
     # Minimum z-score scale per index. MAD from ~10-15 baseline observations in a

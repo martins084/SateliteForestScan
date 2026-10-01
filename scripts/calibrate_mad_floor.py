@@ -34,7 +34,7 @@ def flag_rate(v, doy, year, p, ref_sel, test_sel, m):
     z, _, _ = zscores(v[:, idx], doy[idx], sub_ref, p)
     z = z[:, ref_sel.sum():]
     anom, valid, _ = anomalous_obs(z, p)
-    flag, _, _ = persistent_runs(anom, valid, p.persistence)
+    flag, *_ = persistent_runs(anom, valid, p.persistence)
     return float(flag[m].mean()), float(np.nanmean(z[p.primary][:, m] >= p.k))
 
 

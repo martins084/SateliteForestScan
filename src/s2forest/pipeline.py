@@ -243,7 +243,8 @@ def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
     feats = apply_baseline_exclusion(feats, min_px)
     gdf = polygonize(feats, z, delta, cfg.data.crs, cfg.anomaly.min_area_ha, p.k,
                      p.persistence, p.min_obs, primary=cfg.anomaly.primary_index,
-                     status_min_obs=cfg.anomaly.status_min_obs)
+                     status_min_obs=cfg.anomaly.status_min_obs,
+                     onset_prev_autumn_z=cfg.anomaly.onset_prev_autumn_z)
     gdf = add_linear_attributes(gdf, st.linear_lines, cfg.linear_features.elongation_threshold)
 
     codes = np.full(st.forest_codes.shape, STATUS_NOT_ANALYSED, dtype="uint8")

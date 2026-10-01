@@ -40,6 +40,7 @@ from dataclasses import dataclass
 
 import dask.array as da
 import numpy as np
+import pandas as pd
 import xarray as xr
 
 from .config import AnomalyConfig
@@ -60,6 +61,8 @@ FEATURES = [
     "baseline_disturbed",  # 1 if disturbed during the baseline period
     "max_z_primary",     # max primary z in the monitoring year
     "baseline_cut_year",  # latest baseline year with a persistent cut signature (NaN: none)
+    "pending",           # 1: run reached N observations but not yet the minimum span (season end)
+    "prev_autumn_z",     # median primary z in the previous year's late season (NaN: no data)
 ]
 
 
@@ -81,6 +84,8 @@ class DetectParams:
     ndvi_i: int | None
     baseline_years: list[int]
     monitor_year: int
+    min_days: int = 0
+    prev_autumn_doy: int = 227
     baseline_method: str = "harmonic"
     harmonics: int = 1
     robust_iterations: int = 5
@@ -100,6 +105,8 @@ def params_from_config(cfg: AnomalyConfig, names: list[str], baseline_years: lis
         cut_ndmi_drop=cfg.cut_ndmi_drop, ndmi_i=names.index("ndmi") if "ndmi" in names else None,
         ndvi_i=names.index("ndvi") if "ndvi" in names else None,
         baseline_years=baseline_years, monitor_year=monitor_year,
+        min_days=cfg.persistence_min_days,
+        prev_autumn_doy=int(pd.Timestamp(f"2001-{cfg.prev_autumn_start}").dayofyear),
         baseline_method=cfg.baseline_method, harmonics=cfg.harmonics,
         robust_iterations=cfg.robust_iterations, huber_k=cfg.huber_k,
     )
@@ -155,27 +162,38 @@ def anomalous_obs(z: np.ndarray, p: DetectParams) -> tuple[np.ndarray, np.ndarra
     return anom, valid, n_agree
 
 
-def persistent_runs(anom: np.ndarray, valid: np.ndarray, n: int
-                    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Scan time (axis 0). Returns (flag, first_idx, longest_run) per pixel.
+def persistent_runs(anom: np.ndarray, valid: np.ndarray, n: int, days: np.ndarray | None = None,
+                    min_days: int = 0
+                    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Scan time (axis 0). Returns (flag, first_idx, longest_run, pending, pending_start).
 
     A run counts consecutive VALID observations that are anomalous; invalid
-    observations are skipped. first_idx = start of the first run reaching n.
+    observations are skipped. A pixel is flagged when a run reaches `n`
+    observations AND spans at least `min_days` (days: (T,) day numbers);
+    first_idx = start of the first such run. `pending`: not flagged, but the
+    run active at the end of the series already has >= n observations and is
+    still shorter than `min_days` (to be confirmed later -> status "new").
     """
     shape = anom.shape[1:]
+    if days is None:
+        days = np.arange(anom.shape[0])
     run = np.zeros(shape, dtype="int16")
     start = np.full(shape, -1, dtype="int32")
+    start_day = np.zeros(shape, dtype="float64")
     longest = np.zeros(shape, dtype="int16")
     first = np.full(shape, -1, dtype="int32")
     for t in range(anom.shape[0]):
         a, v = anom[t], valid[t]
         new_run = v & a & (run == 0)
         start = np.where(new_run, t, start)
+        start_day = np.where(new_run, days[t], start_day)
         run = np.where(v, np.where(a, run + 1, 0), run)
         longest = np.maximum(longest, run)
-        hit = (run >= n) & (first < 0)
+        hit = (run >= n) & (first < 0) & ((days[t] - start_day) >= min_days)
         first = np.where(hit, start, first)
-    return first >= 0, first, longest
+    flag = first >= 0
+    pending = ~flag & (run >= n)
+    return flag, first, longest, pending, np.where(pending, start, -1)
 
 
 def detect_block(values: np.ndarray, doy: np.ndarray, year: np.ndarray, p: DetectParams
@@ -206,19 +224,23 @@ def detect_block(values: np.ndarray, doy: np.ndarray, year: np.ndarray, p: Detec
         zb, medb, _ = zscores(sub, sub_doy, sub_ref, p)
         zb, medb = zb[:, ref_sel.sum():], medb[:, ref_sel.sum():]
         anom, valid, _ = anomalous_obs(zb, p)
-        flag, _, _ = persistent_runs(anom, valid, p.persistence)
+        flag, *_ = persistent_runs(anom, valid, p.persistence, doy[sel], p.min_days)
         disturbed |= flag
         cut = cut_signature(sub[:, ref_sel.sum():], medb, p)
         if cut is not None:
-            cflag, _, _ = persistent_runs(cut, np.isfinite(sub[p.primary, ref_sel.sum():]),
-                                          p.persistence)
+            cflag, *_ = persistent_runs(cut, np.isfinite(sub[p.primary, ref_sel.sum():]),
+                                        p.persistence, doy[sel], p.min_days)
             disturbed |= cflag
             cut_year = np.where(cflag, np.float32(by), cut_year)
 
     # --- monitoring year ------------------------------------------------------------
     zm = z[:, mon_sel]
     anom, valid, n_agree = anomalous_obs(zm, p)
-    flag, first, longest = persistent_runs(anom, valid, p.persistence)
+    confirmed, first_c, longest, pending, pstart = persistent_runs(
+        anom, valid, p.persistence, doy[mon_sel], p.min_days)
+    # pending runs (season end, span not yet reached) are kept and get status "new"
+    flag = confirmed | pending
+    first = np.where(confirmed, first_c, pstart)
 
     feats = np.full((len(FEATURES),) + shape, np.nan, dtype="float32")
     analysable = (cnt[mon_sel] > 0).any(axis=0) if mon_sel.any() else np.zeros(shape, bool)
@@ -226,6 +248,11 @@ def detect_block(values: np.ndarray, doy: np.ndarray, year: np.ndarray, p: Detec
     feats[FEATURES.index("baseline_obs")] = base_count
     feats[FEATURES.index("baseline_disturbed")] = disturbed
     feats[FEATURES.index("baseline_cut_year")] = cut_year
+    prev_sel = (year == p.monitor_year - 1) & (doy >= p.prev_autumn_doy)
+    if prev_sel.any():
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            feats[FEATURES.index("prev_autumn_z")] = np.nanmedian(z[p.primary][prev_sel], axis=0)
     with np.errstate(invalid="ignore"):
         feats[FEATURES.index("max_z_primary")] = np.nanmax(
             np.where(valid, zm[p.primary], -np.inf), axis=0) if zm.shape[1] else np.nan
@@ -238,6 +265,7 @@ def detect_block(values: np.ndarray, doy: np.ndarray, year: np.ndarray, p: Detec
     feats[FEATURES.index("flag")] = np.where(ok, flag, np.nan)
     feats[FEATURES.index("first_idx")] = np.where(ok & flag, first, np.nan)
     feats[FEATURES.index("run_len")] = np.where(ok & flag, longest, np.nan)
+    feats[FEATURES.index("pending")] = np.where(ok & flag, pending, np.nan)
 
     # Run statistics for flagged pixels: observations from first detection on.
     tm = np.arange(zm.shape[1])[:, None, None]

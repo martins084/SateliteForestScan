@@ -30,7 +30,7 @@ def confidence_score(z_primary: float, n_agree: float, n_other: int, run_len: fl
 
 
 def polygon_status(z_primary: np.ndarray, sel: np.ndarray, first_t: int, k: float,
-                   min_obs: int) -> tuple[str, int, float]:
+                   min_obs: int, pending: bool = False) -> tuple[str, int, float]:
     """Status of one polygon from its primary-index z after the first detection.
 
     z_primary: (Tm, y, x); sel: polygon pixels. A date counts as a valid
@@ -47,14 +47,22 @@ def polygon_status(z_primary: np.ndarray, sel: np.ndarray, first_t: int, k: floa
         series = np.nanmedian(zs[valid], axis=1) if valid.any() else np.array([])
     n = int(valid.sum())
     med = float(np.median(series)) if n else float("nan")
-    if n < min_obs:
+    if n < min_obs or pending:
         return "new", n, med
     return ("persistent" if med >= k / 2 else "recovered"), n, med
 
 
+def _first_valid(z_primary: np.ndarray, sel: np.ndarray) -> int:
+    """Index of the first date where >= 50 % of the polygon's pixels are valid."""
+    share = np.isfinite(z_primary[:, sel]).mean(axis=1)
+    ok = np.flatnonzero(share >= 0.5)
+    return int(ok[0]) if ok.size else 0
+
+
 def polygonize(feats: xr.Dataset, zm: xr.DataArray, index_delta: xr.DataArray, crs: str,
                min_area_ha: float, k: float, persistence: int, min_obs: int,
-               primary: str | None = None, status_min_obs: int = 2) -> gpd.GeoDataFrame:
+               primary: str | None = None, status_min_obs: int = 2,
+               onset_prev_autumn_z: float | None = None) -> gpd.GeoDataFrame:
     """Connected (8-neighbour) groups of flagged pixels -> polygons.
 
     index_delta: (index, time_mon, y, x) change x' - baseline median (index units),
@@ -81,9 +89,7 @@ def polygonize(feats: xr.Dataset, zm: xr.DataArray, index_delta: xr.DataArray, c
     F = {f: feats[f].values for f in FEATURES}
     first_idx = F["first_idx"]
     tm = np.arange(len(times))[:, None]
-    # First monitoring-season date with valid data anywhere; detections starting
-    # there mean the change happened before the season (e.g. winter felling).
-    first_valid_t = int(np.argmax(np.isfinite(zm.values).any(axis=(0, 2, 3))))
+    zp_all = zm.values[names.index(primary)] if primary is not None else zm.values[-1]
     rows = []
     for lab in range(1, n + 1):
         sel = labels == lab
@@ -96,7 +102,9 @@ def polygonize(feats: xr.Dataset, zm: xr.DataArray, index_delta: xr.DataArray, c
         row = {
             "first_detected": first.strftime("%Y-%m-%d"),
             "first_detected_median": times[int(np.median(fi))].strftime("%Y-%m-%d"),
-            "onset_before_season": bool(np.median(fi) <= first_valid_t),
+            # detected at the polygon's first valid observation of the season
+            # (>= 50 % of its pixels valid): the change already existed then
+            "onset_before_season": bool(fi.min() <= _first_valid(zp_all, sel)),
             "area_ha": round(area, 3),
             "n_pixels": npx,
             "type": "cut" if np.nanmean(F["is_cut"][sel]) >= 0.5 else "stress",
@@ -113,9 +121,18 @@ def polygonize(feats: xr.Dataset, zm: xr.DataArray, index_delta: xr.DataArray, c
             with np.errstate(invalid="ignore"):
                 row[f"delta_{name}"] = round(float(np.nanmedian(np.where(after, d, np.nan))), 4)
                 row[f"z_{name}"] = round(float(np.nanmedian(np.where(after, z, np.nan))), 2)
+        pend = float(np.nanmean(F["pending"][sel])) if "pending" in F else 0.0
+        row["pending_share"] = round(pend, 2)
+        if "prev_autumn_z" in F:
+            pa = F["prev_autumn_z"][sel]
+            paz = float(np.nanmedian(pa)) if np.isfinite(pa).any() else float("nan")
+            row["prev_autumn_z"] = round(paz, 2) if np.isfinite(paz) else None
+            thr = k / 2 if onset_prev_autumn_z is None else onset_prev_autumn_z
+            row["onset_prev_autumn"] = bool(np.isfinite(paz) and paz >= thr)
         if primary is not None:
             st, n_after, z_after = polygon_status(zm.values[names.index(primary)], sel,
-                                                  int(fi.min()), k, status_min_obs)
+                                                  int(fi.min()), k, status_min_obs,
+                                                  pending=pend >= 0.5)
             row["status"] = st
             row["obs_after_detection"] = n_after
             row["z_after_detection"] = round(z_after, 2) if np.isfinite(z_after) else None

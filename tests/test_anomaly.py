@@ -52,9 +52,9 @@ def test_persistent_runs_skip_invalid_and_need_n():
     anom = np.array([0, 1, 0, 1, 0, 1, 1], bool)[:, None]
     valid = np.array([1, 1, 1, 1, 0, 1, 1], bool)[:, None]
     # t=3 anomalous, t=4 cloudy (skipped), t=5 anomalous -> run of 2 starting at t=3
-    flag, first, longest = persistent_runs(anom, valid, 2)
+    flag, first, longest, pending, _ = persistent_runs(anom, valid, 2)
     assert flag[0] and first[0] == 3 and longest[0] == 3   # t=3, 5, 6
-    flag3, _, _ = persistent_runs(anom, valid, 5)
+    flag3, *_ = persistent_runs(anom, valid, 5)
     assert not flag3[0]
 
 
@@ -175,3 +175,49 @@ def test_winter_clearcut_with_regrowth_is_cut_via_ndmi():
     v[3, mon, 4, 4] = 0.85
     f, _, _ = detect_block(v, doy, year, _params())
     assert _feat(f, "flag", 4, 4) == 1 and _feat(f, "is_cut", 4, 4) == 1
+
+
+
+def test_persistence_min_days_and_pending_at_season_end():
+    days = np.array([125, 128, 140, 150, 260, 263])
+    anom = np.zeros((6, 3), bool)
+    valid = np.ones((6, 3), bool)
+    anom[0:2, 0] = True          # 2 obs, 3 days apart, then normal -> not flagged
+    anom[0:3, 1] = True          # 3 obs over 15 days -> flagged from the first
+    anom[4:6, 2] = True          # season end: 2 obs 3 days apart, still active -> pending
+    flag, first, longest, pending, pstart = persistent_runs(anom, valid, 2, days, 7)
+    assert list(flag) == [False, True, False]
+    assert first[1] == 0
+    assert list(pending) == [False, False, True] and pstart[2] == 4
+    # without the span requirement pixel 0 would have been flagged
+    flag0, *_ = persistent_runs(anom, valid, 2, days, 0)
+    assert flag0[0]
+
+
+def test_pending_run_becomes_new_polygon_and_prev_autumn_flag():
+    times, v = _cube(ny=30, nx=30)
+    doy, year = time_info(times)
+    # stress only on the last two dates of 2026 (8 days apart in this cube) with a
+    # 10-day minimum span -> pending, kept as polygon with status "new"
+    last2 = np.flatnonzero(year == 2026)[-2:]
+    v[3][np.ix_(last2, range(5, 12), range(5, 12))] += 0.08
+    v[2][np.ix_(last2, range(5, 12), range(5, 12))] -= 0.06
+    # a second patch already elevated in late 2025 and through 2026
+    late25 = np.flatnonzero((year == 2025) & (doy >= 227))
+    on = np.concatenate([late25, np.flatnonzero(year == 2026)])
+    v[3][np.ix_(on, range(18, 25), range(18, 25))] += 0.08
+    v[2][np.ix_(on, range(18, 25), range(18, 25))] -= 0.06
+    x = 614000 + 10 * np.arange(30) + 5
+    y = 284000 - 10 * np.arange(30) - 5
+    da = xr.DataArray(v, dims=("index", "time", "y", "x"),
+                      coords={"index": NAMES, "time": times, "y": y, "x": x})
+    p = _params(persistence_min_days=10)
+    feats, z, delta = run_detection(da, p, chunk=30)
+    gdf = polygonize(feats, z, delta, "EPSG:3059", 0.1, p.k, p.persistence, p.min_obs,
+                     primary="crswir")
+    by_x = gdf.assign(cx=gdf.geometry.centroid.x).sort_values("cx")
+    pend, autumn = by_x.iloc[0], by_x.iloc[1]
+    assert pend["status"] == "new" and pend["pending_share"] == 1.0
+    assert not pend["onset_prev_autumn"]
+    assert autumn["onset_prev_autumn"] and autumn["onset_before_season"]
+    assert autumn["prev_autumn_z"] > 2
