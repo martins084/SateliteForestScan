@@ -191,7 +191,7 @@ def build_report(cfg: Config, n_series: int = 5) -> Path:
         tp = val_refs[(val_refs["scope"] == "in_scope") & (val_refs["outcome"] == "stress_before_cut")]
         by_id = polys.set_index("id")
         for _, r in tp.iterrows():
-            ids = [int(x) for x in str(r["matched_ids"]).split(",") if x]
+            ids = [int(float(x)) for x in str(r["matched_ids"]).split(",") if x and x != "nan"]
             st_txt = ", ".join(f"#{i} {STATUS_LV.get(by_id.at[i, 'status'], by_id.at[i, 'status'])}"
                                for i in ids if i in by_id.index and by_id.at[i, "type"] == "stress")
             val_detail.append({"id": r["ref_id"], "date": r["ref_date"], "first": r["first_detected"],
