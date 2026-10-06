@@ -70,7 +70,7 @@ python -m pip install --user uv
 python -m uv sync                     # Python 3.12 + atkarības mapē .venv
 ```
 
-Projekta vieta: `C:\Users\varna\projects\s2-forest-screening`. API atslēgas
+Projekta vieta: šī repozitorija sakne (`s2-forest-screening`). API atslēgas
 vai paroles nav vajadzīgas.
 
 | Komanda | Ko dara |
