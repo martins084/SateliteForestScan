@@ -766,16 +766,16 @@ conifer 0,3}, `risk_peak_azimuth` 225, `mission_max_area_ha` 30,
 
 | Commit | Laiks | Saturs |
 |---|---|---|
-| `96c2885` | 2026-09-30 20:54 | 0.–1. posms: skelets, STAC ieguve ar kešu, harmonizācija, SCL maska |
-| `98317f7` | 2026-09-30 23:11 | 2.–3. posms: indeksi, dūmakas tests, meža maska, anomālijas, poligoni |
-| `2f5d562` | 2026-09-30 23:47 | 3. posma pabeigšana un 5. posms: statuss, drona mērķi, validācija, `run` |
-| `b667d9f` | 2026-10-01 00:44 | mērķu prioritizācija, misijas, 2025 ziemas ciršu validācija, HTML atskaite (6. posms) |
-| `be50163` | 2026-10-01 01:02 | harmoniskā bāze + sezonālās nobīdes diagnostika |
-| `87bc2d2` | 2026-10-01 01:06 | OSM ceļu buferis + `linear_feature` |
-| `a16e7c4` | 2026-10-01 01:12 | sezonālās amplitūdas maska (NDVI) |
-| `ff69b1b` | 2026-10-01 01:23 | starpgadu / platformu pārbaude (bez korekcijas) |
-| `4363bf8` | 2026-10-01 10:39 | metodes teksts no faktiskās konfigurācijas |
-| `06b960b` | 2026-10-01 10:39 | noturība ≥ 7 dienas, gaidošie skrējieni, iepriekšējā rudens karogs |
-| `19cba28` | 2026-10-01 10:40 | ceļu bagātinājuma tests, `near_road` |
-| `fdaf3d5` | 2026-10-01 11:27 | atskaite: ID nolasīšana no CSV |
-| `7ebc630` | 2026-10-01 11:37 | kontroles gredzens kā standarta izvade; `near_road` informatīvs |
+| `041d46e` | 2026-09-30 20:54 | 0.–1. posms: skelets, STAC ieguve ar kešu, harmonizācija, SCL maska |
+| `85acd22` | 2026-09-30 23:11 | 2.–3. posms: indeksi, dūmakas tests, meža maska, anomālijas, poligoni |
+| `eba253c` | 2026-09-30 23:47 | 3. posma pabeigšana un 5. posms: statuss, drona mērķi, validācija, `run` |
+| `cded046` | 2026-10-01 00:44 | mērķu prioritizācija, misijas, 2025 ziemas ciršu validācija, HTML atskaite (6. posms) |
+| `05ee00b` | 2026-10-01 01:02 | harmoniskā bāze + sezonālās nobīdes diagnostika |
+| `a4d9085` | 2026-10-01 01:06 | OSM ceļu buferis + `linear_feature` |
+| `e74cd06` | 2026-10-01 01:12 | sezonālās amplitūdas maska (NDVI) |
+| `be6bbe9` | 2026-10-01 01:23 | starpgadu / platformu pārbaude (bez korekcijas) |
+| `8d1613c` | 2026-10-01 10:39 | metodes teksts no faktiskās konfigurācijas |
+| `af66dbb` | 2026-10-01 10:39 | noturība ≥ 7 dienas, gaidošie skrējieni, iepriekšējā rudens karogs |
+| `e2e9b4b` | 2026-10-01 10:40 | ceļu bagātinājuma tests, `near_road` |
+| `0758f03` | 2026-10-01 11:27 | atskaite: ID nolasīšana no CSV |
+| `4794cee` | 2026-10-01 11:37 | kontroles gredzens kā standarta izvade; `near_road` informatīvs |
