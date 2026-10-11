@@ -215,3 +215,29 @@ def summarize(det: pd.DataFrame, fa: pd.DataFrame, cfg) -> tuple[pd.DataFrame, p
         else:
             rec[name] = {"fa_limit": lim}
     return rate, table.sort_values(["window", "k"]), rec
+
+
+def candidate_polygons(cfg, comps, masks, grid, k: float):
+    """Windthrow candidate polygons (after MMU) for one method configuration and k, with the
+    mean index / dVH / dVV; same processing as `evaluate` without injection."""
+    from .detect import CLASS_WINDTHROW as WT
+    from .detect import polygonize
+    w = cfg.detection.smoothing_window
+    deltas = deltas_from_composites(comps, masks.analysis, w)
+    comb = combine_orbits(deltas)
+    analysis = masks.analysis & np.isfinite(comb["index"])
+    z, _ = z_by_class(comb["index"], masks.stable, analysis, masks.dlt,
+                      cfg.forest_mask.hrl_dlt_classes if cfg.detection.z_by_class else None)
+    analysis &= np.isfinite(z)
+    min_px = math.ceil(cfg.detection.min_area_ha / grid.pixel_ha - 1e-9)
+    if cfg.detection.version == "v3":
+        kernels = object_setup(cfg, grid.pixel_ha)
+        zw, _ = object_window_z(z, analysis, masks.stable, kernels, cfg.detection.object_min_valid)
+        raw = object_classes(zw, kernels, analysis, k)[0]
+    else:
+        raw = classify(z, analysis, k)
+    cls, labels = apply_mmu(raw, min_px)
+    labels = np.where(cls == WT, labels, 0)
+    return polygonize(labels, cls, grid.geobox.affine, cfg.grid.crs,
+                      {"mean_z": z, "index": comb["index"], "mean_dVH": comb["d_vh"],
+                       "mean_dVV": comb["d_vv"]}, grid.pixel_ha)
