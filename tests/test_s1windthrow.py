@@ -201,3 +201,48 @@ def test_batches_stay_below_share_per_class():
             for c in (1, 2):
                 assert sum(sites[i].cls == c for i in b) * size < 0.02 * stable_ha[c]
     assert make_batches(sites, 5.0, stable_ha, None) == [list(range(60))]
+
+
+# --- v3: object-level windows ------------------------------------------------------------
+from s1windthrow.method import (disc_kernel, footprint_union, object_classes,  # noqa: E402
+                                window_mean, window_z)
+
+
+def test_window_mean_uses_only_valid_pixels_and_min_share():
+    z = np.zeros((40, 40), "float32")
+    z[:, :20] = 10.0                       # outside the analysed forest
+    valid = np.zeros((40, 40), bool)
+    valid[:, 20:] = True
+    ker = disc_kernel(50)
+    m = window_mean(z, valid, ker, 0.7)
+    assert np.allclose(m[6:-6, 30:35], 0.0)   # invalid values never leak in
+    assert np.isnan(m[6:-6, 20]).all()        # window only ~half valid -> NaN
+
+
+def test_object_windows_detect_weak_compact_change():
+    rng = np.random.default_rng(6)
+    z = rng.normal(0, 1, (150, 150)).astype("float32")
+    yy, xx = np.mgrid[:150, :150]
+    site = np.hypot(yy - 75, xx - 75) <= 5.6        # ~1 ha
+    z[site] += 1.8                                  # below the pixel threshold, see stage 3b
+    ok = np.ones(z.shape, bool)
+    kernels = {0.5: disc_kernel(50), 1.0: disc_kernel(100), 2.0: disc_kernel(200)}
+    zw = {s: window_z(window_mean(z, ok, k, 0.7), ok & ~footprint_union(site, k))[0]
+          for s, k in kernels.items()}
+    cls, _, _ = object_classes(zw, kernels, ok, 3.0)
+    cls, _ = apply_mmu(cls, MMU_PX)
+    assert (cls == CLASS_WINDTHROW)[75, 75]          # pixel z +1.8 alone would not pass k = 3
+
+
+def test_window_z_is_standardized_on_noise():
+    # NOTE: the maximum over all sliding windows is NOT bounded by k (scan statistic: on
+    # 400 ha of white noise max |window z| reaches ~4.3-4.9), so noise-only false alarms are
+    # measured by the injection test on real data, not asserted here.
+    rng = np.random.default_rng(7)
+    z = rng.normal(0, 1, (200, 200)).astype("float32")
+    ok = np.ones(z.shape, bool)
+    for n in (50, 100, 200):
+        w, st = window_z(window_mean(z, ok, disc_kernel(n), 0.7), ok)
+        v = w[np.isfinite(w)]
+        assert abs(np.median(v)) < 0.05 and 0.9 < v.std() < 1.15
+        assert st["mad"] * 1.4826 == pytest.approx(1 / np.sqrt(n), rel=0.15)

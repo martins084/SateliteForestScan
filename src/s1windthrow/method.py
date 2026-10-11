@@ -96,3 +96,72 @@ def z_by_class(index: np.ndarray, stable: np.ndarray, analysis: np.ndarray, dlt:
         if mad > 0:
             z[tgt] = (index[tgt] - med) / (MAD_SCALE * mad)
     return z, stats
+
+
+# --- v3: object-level windows on the pixel z raster ------------------------------------
+def disc_offsets(n_px: int) -> np.ndarray:
+    """Offsets (dy, dx) of the n pixels closest to the centre (compact shape); first = (0, 0)."""
+    import math
+    r = int(math.ceil(math.sqrt(n_px / math.pi))) + 2
+    yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
+    d = np.hypot(yy, xx) + 1e-6 * (yy * (2 * r + 1) + xx)   # deterministic tie-break
+    order = np.argsort(d.ravel())[:n_px]
+    return np.stack([yy.ravel()[order], xx.ravel()[order]], axis=1)
+
+
+def disc_kernel(n_px: int) -> np.ndarray:
+    off = disc_offsets(n_px)
+    r = int(np.abs(off).max())
+    k = np.zeros((2 * r + 1, 2 * r + 1), "float64")
+    k[off[:, 0] + r, off[:, 1] + r] = 1.0
+    return k
+
+
+def window_mean(z: np.ndarray, valid: np.ndarray, kernel: np.ndarray, min_valid: float
+                ) -> np.ndarray:
+    """Mean of z over the kernel footprint, using only `valid` pixels; NaN where the share of
+    valid pixels in the window is < min_valid. Value at the window centre."""
+    from scipy.signal import fftconvolve
+    ok = valid & np.isfinite(z)
+    num = fftconvolve(np.where(ok, z, 0.0), kernel, mode="same")
+    den = np.round(fftconvolve(ok.astype("float64"), kernel, mode="same"), 6)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = num / den
+    out[den / kernel.sum() < min_valid] = np.nan
+    return out.astype("float32")
+
+
+def window_z(mean: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray, dict]:
+    """Robust z of window means, statistics from the window means at `centers`
+    (stable-forest window centres), so the spatial correlation is included empirically."""
+    v = mean[centers & np.isfinite(mean)]
+    med = float(np.median(v))
+    mad = float(np.median(np.abs(v - med)))
+    return ((mean - med) / (MAD_SCALE * mad)).astype("float32"), {"median": med, "mad": mad,
+                                                                 "n": int(v.size)}
+
+
+def footprint_union(centers: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """Union of the kernel footprints around the True centres."""
+    from scipy.signal import fftconvolve
+    if not centers.any():
+        return np.zeros(centers.shape, bool)
+    return fftconvolve(centers.astype("float64"), kernel, mode="same") > 0.5
+
+
+def object_classes(zw: dict[float, np.ndarray], kernels: dict[float, np.ndarray],
+                   analysis: np.ndarray, k: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Class raster (1 windthrow, 2 cut_like) = union of the window footprints whose window
+    z >= k (<= -k) at any scale, inside `analysis`; windthrow wins where both overlap.
+    Returns (classes, windthrow footprint union, cut_like footprint union)."""
+    from .detect import CLASS_CUT_LIKE, CLASS_WINDTHROW
+    up = np.zeros(analysis.shape, bool)
+    down = np.zeros(analysis.shape, bool)
+    for s, w in zw.items():
+        with np.errstate(invalid="ignore"):
+            up |= footprint_union(w >= k, kernels[s])
+            down |= footprint_union(w <= -k, kernels[s])
+    cls = np.zeros(analysis.shape, "uint8")
+    cls[down & analysis] = CLASS_CUT_LIKE
+    cls[up & analysis] = CLASS_WINDTHROW
+    return cls, up, down

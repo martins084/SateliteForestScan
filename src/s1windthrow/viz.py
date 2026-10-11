@@ -85,8 +85,7 @@ def injection_plot(rate: pd.DataFrame, cfg, path: Path) -> Path:
     inj = cfg.injection
     ks, ws = inj.k, inj.windows
     fig, axes = plt.subplots(len(ks), len(ws), figsize=(3.2 * len(ws), 2.6 * len(ks)), dpi=150,
-                             sharex=True, sharey=True)
-    axes = np.atleast_2d(axes)
+                             sharex=True, sharey=True, squeeze=False)
     colors = {0.5: "#9ecae1", 1.0: "#3182bd", 2.0: "#08306b"}
     styles = {1: "--", 2: "-"}
     names = {1: "lapu koki", 2: "skujkoki"}

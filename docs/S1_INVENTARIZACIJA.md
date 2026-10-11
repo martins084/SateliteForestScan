@@ -220,3 +220,19 @@ pārlidojuma statuss `failed` nevis `accepted`) pilnajā palaišanā neizdodas a
 2 reizes no 5, atsevišķi iziet. Iespējamais cēlonis — paralēlā ielāde
 (`ThreadPoolExecutor`, `fetch.py:287`) [N]. Uzdevums: atkārtot pilno `pytest` palaišanu cilpā,
 noteikt cēloni, labot tā, lai detekcijas rezultāti nemainās.
+
+## 10. Atsevišķs uzdevums: S2 plūsma (s2forest) izlaida audzi nomainošu izmaiņu jauktā audzē
+
+Konstatēts S1 3b posmā (2026-10-11), tikai lasot s2forest izvadi `output/test_kalsnava/rasters/`.
+s2forest kods **netiek mainīts** (iesaldēts `v0.2-kalsnava`); risināt atsevišķi pēc LVM datiem.
+
+- Vieta: S1 cut_like kandidāts #1, 56,6913 N, 25,8507 E, 0,66 ha (HRL: skujkoki). S2 izmaiņa notikusi
+  starp 2026-07-29 un 2026-08-11 (poligona CRSWIR mediāna 0,77 → 1,06 → 1,17 → 1,31; NDMI 0,40 → −0,05).
+- **62 no 66 pikseļiem nav analizēti** — meža maskas kods 5 (NDVI sezonālā amplitūda p90−p10 2023–25,
+  mediāna poligonā 0,276 > robeža 0,22). Amplitūdas maska izslēdz jauktas / nelīdzenas audzes.
+- Atlikušie 4 pikseļi: 1 atzīmēts kā cirte (11.08.), bet 0,01 ha < MMU 0,1 ha; 1 — tikai viens novērojums
+  ar CRSWIR z ≥ 2,5 (2,19 / 2,45 / 3,49), 09-12 un 09-15 nomaskēti → noturība nav izpildīta; 2 — „traucēti
+  bāzē“ (28 m no 2025. g. poligona).
+- Signāls bija spēcīgs: no 08-11 visos 4 indeksos z ≥ 2,5 (CRSWIR līdz 4,8, NDVI līdz 7,1).
+- Jautājums S2 plūsmai: vai amplitūdas maska jāpiemēro tikai stresa (ne cirtes) noteikšanai, vai audzi
+  nomainošām izmaiņām vajadzīgs atsevišķs ceļš bez amplitūdas maskas.

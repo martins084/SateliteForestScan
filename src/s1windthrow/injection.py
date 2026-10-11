@@ -19,16 +19,8 @@ from rasterio.features import rasterize
 from scipy import ndimage
 
 from .detect import CLASS_WINDTHROW, apply_mmu, classify, combine_orbits
-from .method import deltas_from_composites, z_by_class
-
-
-def disc_offsets(n_px: int) -> np.ndarray:
-    """Offsets (dy, dx) of the n pixels closest to the centre (compact shape)."""
-    r = int(math.ceil(math.sqrt(n_px / math.pi))) + 2
-    yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
-    d = np.hypot(yy, xx) + 1e-6 * (yy * (2 * r + 1) + xx)   # deterministic tie-break
-    order = np.argsort(d.ravel())[:n_px]
-    return np.stack([yy.ravel()[order], xx.ravel()[order]], axis=1)
+from .method import (deltas_from_composites, disc_kernel, disc_offsets, footprint_union,  # noqa: F401
+                     object_classes, window_mean, window_z, z_by_class)
 
 
 @dataclass
@@ -83,9 +75,29 @@ def eligible_masks(masks, grid, cfg, suspects) -> dict[int, np.ndarray]:
     return {int(c): base & (masks.dlt == c) for c in cfg.forest_mask.hrl_dlt_classes}
 
 
+def object_setup(cfg, pixel_ha: float) -> dict[float, np.ndarray]:
+    return {s: disc_kernel(int(round(s / pixel_ha))) for s in cfg.detection.object_scales_ha}
+
+
+def object_window_z(z: np.ndarray, analysis: np.ndarray, stable: np.ndarray,
+                    kernels: dict[float, np.ndarray], min_valid: float,
+                    exclude: np.ndarray | None = None) -> tuple[dict, dict]:
+    """Window z per scale; statistics from stable-forest window centres whose window does not
+    touch `exclude` (injected pixels)."""
+    zw, stats = {}, {}
+    for s, ker in kernels.items():
+        mean = window_mean(z, analysis, ker, min_valid)
+        centers = stable & analysis
+        if exclude is not None and exclude.any():
+            centers &= ~footprint_union(exclude, ker)
+        zw[s], stats[s] = window_z(mean, centers)
+    return zw, stats
+
+
 def evaluate(comps, masks, dlt, cfg, window: int, ks: list[float], sites: list[Site],
              strength: float, min_px: int, pixel_ha: float) -> tuple[list[dict], list[dict]]:
-    """Detection per site and false alarms for one window and all k."""
+    """Detection per site and false alarms for one window and all k.
+    v3 (cfg.detection.version == "v3"): `window` must be 1; candidates from object windows."""
     shape = masks.analysis.shape
     inj = np.zeros(shape, bool)
     factor = {p: np.ones(shape, "float32") for p in ("vv", "vh")}
@@ -104,13 +116,20 @@ def evaluate(comps, masks, dlt, cfg, window: int, ks: list[float], sites: list[S
                       cfg.forest_mask.hrl_dlt_classes if cfg.detection.z_by_class else None)
     analysis &= np.isfinite(z)
     area_ha = float((analysis & ~inj).sum() * pixel_ha)
+    v3 = cfg.detection.version == "v3"
+    if v3:
+        kernels = object_setup(cfg, pixel_ha)
+        zw, _ = object_window_z(z, analysis, masks.stable, kernels, cfg.detection.object_min_valid,
+                                inj if sites else None)
     det_rows, fa_rows = [], []
     for k in ks:
-        cls, labels = apply_mmu(classify(z, analysis, k), min_px)
+        raw = object_classes(zw, kernels, analysis, k)[0] if v3 else classify(z, analysis, k)
+        cls, labels = apply_mmu(raw, min_px)
         wt = cls == CLASS_WINDTHROW
         for i, s in enumerate(sites):
             det_rows.append({"window": window, "k": k, "site": i, "class": s.cls,
-                             "detected_share": float(wt[s.rows, s.cols].mean())})
+                             "detected_share": float(wt[s.rows, s.cols].mean()),
+                             "center_in": bool(wt[s.rows[0], s.cols[0]])})
         lab_wt = np.unique(labels[wt])
         hit = np.unique(labels[wt & inj])
         n_fa = int(len(set(lab_wt.tolist()) - set(hit.tolist())))
@@ -164,11 +183,15 @@ def run_injection(cfg, comps, masks, grid, suspects, progress=print) -> tuple[pd
                     fa_all += [{**r, "size_ha": size, "strength": strength, "batch": b} for r in fa]
     det = pd.DataFrame(det_all)
     det["detected"] = det["detected_share"] >= inj.detected_fraction
+    # "hit": the candidate covers >= hit_fraction of the site OR the site centre is inside it
+    det["hit"] = (det["detected_share"] >= inj.hit_fraction) | det["center_in"]
     return det, pd.DataFrame(fa_all), pd.DataFrame(site_info)
 
 
 def summarize(det: pd.DataFrame, fa: pd.DataFrame, cfg) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     inj = cfg.injection
+    det = det.copy()
+    det["detected"] = det["hit"] if inj.criterion == "hit" else det["detected_share"] >= inj.detected_fraction
     rate = (det.groupby(["window", "k", "size_ha", "strength", "class"])
             .agg(n=("detected", "size"), n_detected=("detected", "sum")).reset_index())
     rate["rate"] = rate.n_detected / rate.n

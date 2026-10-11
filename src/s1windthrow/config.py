@@ -70,6 +70,9 @@ class DetectionConfig(BaseModel):
     normalize_per_acquisition: bool = False   # divide each acquisition by its stable-forest median
     smoothing_window: int = 1                 # masked box mean (linear) on the composites, pixels
     z_by_class: bool = False                  # z statistics separately per HRL class
+    # v3: object-level circular windows on the pixel z raster (smoothing_window must be 1)
+    object_scales_ha: list[float] = Field(default_factory=lambda: [0.5, 1.0, 2.0])
+    object_min_valid: float = 0.7             # share of analysed-forest pixels in a window
 
 
 class InjectionConfig(BaseModel):
@@ -89,6 +92,8 @@ class InjectionConfig(BaseModel):
     recommend_size_ha: float = 1.0
     recommend_strength: float = 1.0
     max_false_alarms_operational_per_1000ha: float = 5.0
+    hit_fraction: float = 0.25                # "hit": >= this share of the site OR centre inside
+    criterion: str = "detected"               # summary criterion: "detected" (>= 50 %) or "hit"
     # Batches: at most this share (%) of each class's stable forest injected per run; None = all
     # sites of one size at once (first test).
     max_batch_share_pct: float | None = None

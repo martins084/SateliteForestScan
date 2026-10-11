@@ -240,19 +240,47 @@ def run_variant(cfg: Config, grid: Grid, masks: Masks, table: pd.DataFrame, data
     analysis &= np.isfinite(z)
     thr = det.threshold
     min_px = math.ceil(det.min_area_ha / grid.pixel_ha - 1e-9)
+    v3 = det.version == "v3"
+    if v3:
+        from .injection import object_setup, object_window_z
+        from .method import object_classes
+        kernels = object_setup(cfg, grid.pixel_ha)
+        zw, wstats = object_window_z(z, analysis, masks.stable, kernels, det.object_min_valid)
+
+        def raw_classes(k):
+            return object_classes(zw, kernels, analysis, k)[0]
+    else:
+        def raw_classes(k):
+            return classify(z, analysis, k)
     sens = []
     for k in thr.sensitivity_k:
-        c, lab = apply_mmu(classify(z, analysis, k), min_px)
+        c, lab = apply_mmu(raw_classes(k), min_px)
         row = {"variant": name, "k": k, **count_area(c, lab, grid.pixel_ha)}
-        for g, st in stats.items():
-            row[f"thr_up_db_{g}"] = round(st["median"] + k * 1.4826 * st["mad"], 3)
-            row[f"thr_down_db_{g}"] = round(st["median"] - k * 1.4826 * st["mad"], 3)
+        if not v3:
+            for g, st in stats.items():
+                row[f"thr_up_db_{g}"] = round(st["median"] + k * 1.4826 * st["mad"], 3)
+                row[f"thr_down_db_{g}"] = round(st["median"] - k * 1.4826 * st["mad"], 3)
         sens.append(row)
-    cls, labels = apply_mmu(classify(z, analysis, thr.k), min_px)
+    cls, labels = apply_mmu(raw_classes(thr.k), min_px)
     layers = {"mean_dVH": comb["d_vh"], "mean_dVV": comb["d_vv"], "index": comb["index"],
               "mean_z": z, "mean_n_orbits": comb["n_orbits"].astype("float32")}
     polys = polygonize(labels, cls, grid.geobox.affine, cfg.grid.crs, layers, grid.pixel_ha)
     polys = polygon_orbit_attrs(polys, deltas, grid, masks.dlt)
+    if v3 and not polys.empty:
+        # scale (ha) and max window z of the window centres inside the polygon (sign by class)
+        from rasterio.features import geometry_mask as gm
+        best_s, best_z = [], []
+        for _, p in polys.iterrows():
+            m = ~gm([p.geometry], out_shape=z.shape, transform=grid.geobox.affine)
+            sgn = 1.0 if p["class"] == "windthrow" else -1.0
+            vals = {sc: float(np.nanmax(sgn * w[m])) if np.isfinite(w[m]).any() else np.nan
+                    for sc, w in zw.items()}
+            sc = max(vals, key=lambda k_: -np.inf if np.isnan(vals[k_]) else vals[k_])
+            best_s.append(sc)
+            best_z.append(round(sgn * vals[sc], 3))
+        polys["scale_ha"] = best_s
+        polys["max_window_z"] = best_z
+        stats = {**stats, **{f"window_{sc}ha": st for sc, st in wstats.items()}}
     if not polys.empty:
         polys.insert(1, "variant", name)
         for c in ["mean_dVH", "mean_dVV", "index", "mean_z", "mean_n_orbits"]:

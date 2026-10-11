@@ -50,7 +50,7 @@ detection:
   # v2 (stage 3b): per-acquisition normalization, masked spatial averaging, z per HRL class.
   version: v2
   normalize_per_acquisition: true
-  smoothing_window: 3         # recommended by the injection test 2026-10-11 (1 ha, 1x: 15 % detected, 0 FA)
+  smoothing_window: 3         # strict recommendation (FA <= 1 / 1000 ha), injection test v2b 2026-10-11
   z_by_class: true
   threshold:
     # z = (x - median_stable) / (1.4826 * MAD_stable); stable forest = forest mask minus
