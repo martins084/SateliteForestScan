@@ -1,0 +1,59 @@
+# Sentinel-1 windthrow screening — event configuration (s1windthrow).
+# Event: storm 22-23 Aug 2026 (Ministry of Agriculture reports fallen and broken trees
+# in many places in Latvia; no specific areas known). First test on the Kalsnava AOI.
+# Relative paths are resolved against this file's folder.
+
+run_name: s1_kalsnava_2026-08
+aoi: ../data/test_aoi_kalsnava.geojson     # same AOI as s2forest
+output_dir: ../output
+cache_dir: ../cache
+
+grid:
+  crs: EPSG:3059
+  resolution: 10
+
+data:
+  stac_url: https://planetarycomputer.microsoft.com/api/stac/v1
+  collection: sentinel-1-rtc
+  polarizations: [vv, vh]
+  nodata: -32768              # not converted to NaN by odc-stac -> masked explicitly
+  resampling: bilinear        # on linear gamma0
+  min_aoi_cover: 0.0          # keep partially covering orbits (7, 153); NaN outside footprint
+
+event:
+  name: "Vētra 22.-23.08.2026"
+  date: 2026-08-22            # first storm day (pre/post distance is measured from here)
+  pre_window: [2026-07-25, 2026-08-21]
+  post_window: [2026-08-24, 2026-09-20]
+  n_pre_max: 5                # per relative orbit, closest to the event
+  n_post_max: 5
+  orbits: all                 # each relative orbit processed separately
+
+weather:
+  source: open-meteo-archive  # precipitation recorded for both windows (wet vegetation)
+  freeze_filter: false        # summer event: not critical (user decision 2026-10-11)
+
+forest_mask:
+  hrl_dlt_classes: [1, 2]     # broadleaved + coniferous (HRL Dominant Leaf Type 2018)
+  road_buffer_m: 20           # OSM roads, as in s2forest
+  s2_ndvi_refinement: false
+
+detection:
+  index: dvh_plus_dvv         # dVH + dVV [dB], post minus pre; dVH, dVV kept separately
+  min_area_ha: 0.5
+  threshold:                  # from the stable-forest control distribution (stage 3)
+    method: null              # TODO stage 3: z-score or percentile - to be agreed
+    value: null
+
+checks:
+  # Independent S2 check of S1 candidates (>= 0.5 ha): S2 indices before / after 23.08,
+  # read-only from the s2forest outputs. Labelled "S2 vizuāla/indeksa pārbaude", NOT validation.
+  s2_run_dir: ../output/test_kalsnava
+  s2_event_split: 2026-08-23
+  # PROXY (aizvietotājs) only for "does S1 see stand-replacing change and with which sign":
+  # S2 cuts 2025/2026 >= 0.5 ha. A clear-cut may change backscatter with the opposite sign
+  # to windthrow (Rüetschi et al. 2019: windthrow -> increase).
+  proxy_cuts:
+    - {path: ../output/test_kalsnava/vectors/suspects.gpkg, layer: suspects_2026}
+    - {path: ../output/test_kalsnava_2025/vectors/suspects.gpkg, layer: suspects_2025}
+  proxy_min_area_ha: 0.5
