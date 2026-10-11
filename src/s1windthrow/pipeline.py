@@ -24,9 +24,11 @@ from s2forest.linear import linear_mask
 from . import checks
 from .config import Config
 from .detect import (CLASS_CUT_LIKE, CLASS_WINDTHROW, OrbitDelta, apply_mmu, classify,
-                     combine_orbits, count_area, polygonize, robust_z)
+                     combine_orbits, count_area, polygonize)
 from .event import Acquisition, group_acquisitions, select_window
 from .load import acquisition_key, composite_db, load_acquisition, to_db
+from .method import (OrbitComposite, deltas_from_composites, linear_mean, normalize_acquisition,
+                     z_by_class)
 from .stac import open_client, search_s1
 from .weather import hourly_weather, precip_before
 
@@ -140,26 +142,38 @@ def acquisition_table(cfg: Config, acqs: list[Acquisition], weather: pd.DataFram
                           ignore_index=True)
 
 
-def orbit_deltas(cfg: Config, grid: Grid, table: pd.DataFrame, use_col: str,
-                 data: dict) -> list[OrbitDelta]:
-    out = []
+def orbit_composites(cfg: Config, table: pd.DataFrame, use_col: str, data: dict,
+                     stable: np.ndarray) -> tuple[list[OrbitComposite], pd.DataFrame]:
+    """Per orbit: linear mean of the (optionally normalized) acquisitions in each window.
+    Returns (composites, per-acquisition normalization medians)."""
+    norm = cfg.detection.normalize_per_acquisition
+    out, meds = [], []
     for orb, g in table[table[use_col]].groupby("rel_orbit"):
-        comp, dates = {}, {}
+        lin, cnt, dates = {}, {}, {}
         for win in ("pre", "post"):
             gw = g[g.window == win]
             dates[win] = [f"{d}" for d in gw.date]
             for pol in cfg.data.polarizations:
-                comp[(win, pol)] = composite_db([data[acquisition_key(a)][pol] for a in gw.key])
+                stack = []
+                for a in gw.key:
+                    x = data[acquisition_key(a)][pol]
+                    if norm:
+                        x, m = normalize_acquisition(x, stable)
+                        meds.append({"rel_orbit": orb, "window": win, "date": a.date, "pol": pol,
+                                     "stable_median_db": round(10 * np.log10(m), 3)})
+                    stack.append(x)
+                if stack:
+                    lin[(win, pol)], cnt[(win, pol)] = linear_mean(stack)
         if not dates["pre"] or not dates["post"]:
             log.warning("orbit %s skipped: empty window", orb)
             continue
-        out.append(OrbitDelta(int(orb), g.direction.iloc[0],
-                              comp[("post", "vv")][0] - comp[("pre", "vv")][0],
-                              comp[("post", "vh")][0] - comp[("pre", "vh")][0],
-                              np.minimum(comp[("pre", "vv")][1], comp[("pre", "vh")][1]),
-                              np.minimum(comp[("post", "vv")][1], comp[("post", "vh")][1]),
-                              dates["pre"], dates["post"]))
-    return out
+        out.append(OrbitComposite(int(orb), g.direction.iloc[0],
+                                  {p: lin[("pre", p)] for p in cfg.data.polarizations},
+                                  {p: lin[("post", p)] for p in cfg.data.polarizations},
+                                  np.minimum(cnt[("pre", "vv")], cnt[("pre", "vh")]),
+                                  np.minimum(cnt[("post", "vv")], cnt[("post", "vh")]),
+                                  dates["pre"], dates["post"]))
+    return out, pd.DataFrame(meds)
 
 
 def polygon_orbit_attrs(polys: gpd.GeoDataFrame, deltas: list[OrbitDelta], grid: Grid,
@@ -195,29 +209,34 @@ class VariantResult:
     deltas: list[OrbitDelta]
     combined: dict
     z: np.ndarray
-    med: float
-    mad: float
-    n_stable: int
+    stats: dict            # per z group ("all" or HRL class): median, mad, n
     cls: np.ndarray
     labels: np.ndarray
     polygons: gpd.GeoDataFrame
     sensitivity: pd.DataFrame
+    norm_medians: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 def run_variant(cfg: Config, grid: Grid, masks: Masks, table: pd.DataFrame, data: dict,
                 name: str) -> VariantResult:
-    deltas = orbit_deltas(cfg, grid, table, f"used_{name}", data)
+    det = cfg.detection
+    comps, norm_meds = orbit_composites(cfg, table, f"used_{name}", data, masks.stable)
+    deltas = deltas_from_composites(comps, masks.analysis, det.smoothing_window)
     comb = combine_orbits(deltas)
     analysis = masks.analysis & np.isfinite(comb["index"])
-    z, med, mad, n_st = robust_z(comb["index"], masks.stable & analysis)
-    thr = cfg.detection.threshold
-    min_px = math.ceil(cfg.detection.min_area_ha / grid.pixel_ha - 1e-9)
+    z, stats = z_by_class(comb["index"], masks.stable, analysis, masks.dlt,
+                          cfg.forest_mask.hrl_dlt_classes if det.z_by_class else None)
+    analysis &= np.isfinite(z)
+    thr = det.threshold
+    min_px = math.ceil(det.min_area_ha / grid.pixel_ha - 1e-9)
     sens = []
     for k in thr.sensitivity_k:
         c, lab = apply_mmu(classify(z, analysis, k), min_px)
-        sens.append({"variant": name, "k": k, **count_area(c, lab, grid.pixel_ha),
-                     "threshold_db_up": round(med + k * 1.4826 * mad, 3),
-                     "threshold_db_down": round(med - k * 1.4826 * mad, 3)})
+        row = {"variant": name, "k": k, **count_area(c, lab, grid.pixel_ha)}
+        for g, st in stats.items():
+            row[f"thr_up_db_{g}"] = round(st["median"] + k * 1.4826 * st["mad"], 3)
+            row[f"thr_down_db_{g}"] = round(st["median"] - k * 1.4826 * st["mad"], 3)
+        sens.append(row)
     cls, labels = apply_mmu(classify(z, analysis, thr.k), min_px)
     layers = {"mean_dVH": comb["d_vh"], "mean_dVV": comb["d_vv"], "index": comb["index"],
               "mean_z": z, "mean_n_orbits": comb["n_orbits"].astype("float32")}
@@ -227,7 +246,7 @@ def run_variant(cfg: Config, grid: Grid, masks: Masks, table: pd.DataFrame, data
         polys.insert(1, "variant", name)
         for c in ["mean_dVH", "mean_dVV", "index", "mean_z", "mean_n_orbits"]:
             polys[c] = polys[c].round(3)
-    return VariantResult(name, deltas, comb, z, med, mad, n_st, cls, labels, polys, pd.DataFrame(sens))
+    return VariantResult(name, deltas, comb, z, stats, cls, labels, polys, pd.DataFrame(sens), norm_meds)
 
 
 def compare_variants(a: VariantResult, b: VariantResult) -> dict:
@@ -337,11 +356,19 @@ def write_rasters(cfg: Config, grid: Grid, masks: Masks, res: VariantResult) -> 
     return out
 
 
-def run(cfg: Config, progress=print) -> dict:
-    rd = cfg.run_dir
-    (rd / "tables").mkdir(parents=True, exist_ok=True)
-    (rd / "vectors").mkdir(parents=True, exist_ok=True)
-    (rd / "figures").mkdir(parents=True, exist_ok=True)
+@dataclass
+class Prepared:
+    grid: Grid
+    client: object
+    table: pd.DataFrame
+    data: dict
+    masks: Masks
+    weather: pd.DataFrame
+    wmeta: dict
+
+
+def prepare(cfg: Config, progress=print) -> Prepared:
+    """Search, weather, acquisition selection, loading (cached) and masks."""
     grid = build_grid(cfg)
     client = open_client(cfg.data.stac_url)
     progress("searching S1 acquisitions ...")
@@ -354,10 +381,22 @@ def run(cfg: Config, progress=print) -> dict:
     progress(f"loading {int(table.used_A.sum())} acquisitions ...")
     data = {}
     for a in table[table.used_A].key:
-        data[acquisition_key(a)] = load_acquisition(a, grid.geobox, cfg.data.polarizations, cfg.data.nodata,
-                                   cfg.data.resampling, cache_dir(cfg, grid) / "acq")
+        data[acquisition_key(a)] = load_acquisition(a, grid.geobox, cfg.data.polarizations,
+                                                    cfg.data.nodata, cfg.data.resampling,
+                                                    cache_dir(cfg, grid) / "acq")
     progress("masks ...")
-    masks = build_masks(cfg, grid)
+    return Prepared(grid, client, table, data, build_masks(cfg, grid), weather, wmeta)
+
+
+def run(cfg: Config, progress=print) -> dict:
+    rd = cfg.run_dir
+    (rd / "tables").mkdir(parents=True, exist_ok=True)
+    (rd / "vectors").mkdir(parents=True, exist_ok=True)
+    (rd / "figures").mkdir(parents=True, exist_ok=True)
+    pr = prepare(cfg, progress)
+    grid, client, table, data, masks = pr.grid, pr.client, pr.table, pr.data, pr.masks
+    weather, wmeta = pr.weather, pr.wmeta
+    ev = cfg.event
     results = {}
     for v in ("A", "B"):
         progress(f"variant {v} ...")
@@ -396,15 +435,21 @@ def run(cfg: Config, progress=print) -> dict:
     t.to_csv(rd / "tables" / "acquisitions.csv", index=False)
     pd.concat([r.sensitivity for r in results.values()]).to_csv(rd / "tables" / "sensitivity.csv", index=False)
     series.to_csv(rd / "tables" / "stable_forest_series.csv", index=False)
+    for v, r in results.items():
+        if not r.norm_medians.empty:
+            r.norm_medians.to_csv(rd / "tables" / f"normalization_medians_{v}.csv", index=False)
     s2_sum.to_csv(rd / "tables" / "s2_check_summary.csv", index=False)
     s2_long.to_csv(rd / "tables" / "s2_check_by_date.csv", index=False)
     proxy.to_csv(rd / "tables" / "proxy_cuts.csv", index=False)
     proxy_dropped.to_csv(rd / "tables" / "proxy_cuts_excluded.csv", index=False)
-    stats = {v: {"stable_median_db": round(r.med, 4), "stable_mad_db": round(r.mad, 4),
-                 "stable_pixels": r.n_stable, "k": cfg.detection.threshold.k,
-                 "threshold_db_up": round(r.med + cfg.detection.threshold.k * 1.4826 * r.mad, 3),
-                 "threshold_db_down": round(r.med - cfg.detection.threshold.k * 1.4826 * r.mad, 3),
-                 "orbits": [d.rel_orbit for d in r.deltas]} for v, r in results.items()}
+    k = cfg.detection.threshold.k
+    stats = {v: {"orbits": [d.rel_orbit for d in r.deltas],
+                 "groups": {str(g): {"stable_median_db": round(st["median"], 4),
+                                     "stable_mad_db": round(st["mad"], 4), "stable_pixels": st["n"],
+                                     "k": k,
+                                     "threshold_db_up": round(st["median"] + k * 1.4826 * st["mad"], 3),
+                                     "threshold_db_down": round(st["median"] - k * 1.4826 * st["mad"], 3)}
+                            for g, st in r.stats.items()}} for v, r in results.items()}
     meta = {"config": json.loads(cfg.model_dump_json()), "grid_key": grid.key, "weather": wmeta,
             "stats": stats, "comparison_A_B": comparison, "mask_notes": masks.notes,
             "areas_ha": {"aoi": round(float(grid.aoi_mask.sum() * grid.pixel_ha), 1),

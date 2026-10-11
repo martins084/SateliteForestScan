@@ -62,6 +62,29 @@ class DetectionConfig(BaseModel):
     index: str = "dvh_plus_dvv"
     min_area_ha: float = 0.5
     threshold: ThresholdConfig = Field(default_factory=ThresholdConfig)
+    # v2 options; the defaults reproduce v1
+    version: str = "v1"
+    normalize_per_acquisition: bool = False   # divide each acquisition by its stable-forest median
+    smoothing_window: int = 1                 # masked box mean (linear) on the composites, pixels
+    z_by_class: bool = False                  # z statistics separately per HRL class
+
+
+class InjectionConfig(BaseModel):
+    """Synthetic windthrow injected into the post composites of the stable forest."""
+    sizes_ha: list[float] = Field(default_factory=lambda: [0.5, 1.0, 2.0, 5.0])
+    strengths: list[float] = Field(default_factory=lambda: [0.5, 1.0, 2.0])
+    base_db: dict[str, float] = Field(default_factory=lambda: {"vv": 0.45, "vh": 0.68})  # Rüetschi 2019
+    n_per_combo: int = 30
+    seed: int = 42
+    min_dist_suspects_m: float = 100.0
+    min_gap_m: float = 50.0
+    class_purity: float = 0.9
+    windows: list[int] = Field(default_factory=lambda: [1, 3, 5, 7])
+    k: list[float] = Field(default_factory=lambda: [2.5, 3.0, 3.5, 4.0])
+    detected_fraction: float = 0.5
+    max_false_alarms_per_1000ha: float = 1.0
+    recommend_size_ha: float = 1.0
+    recommend_strength: float = 1.0
 
 
 class LayerRef(BaseModel):
@@ -93,6 +116,7 @@ class Config(BaseModel):
     forest_mask: ForestMaskConfig = Field(default_factory=ForestMaskConfig)
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
     checks: ChecksConfig = Field(default_factory=ChecksConfig)
+    injection: InjectionConfig = Field(default_factory=InjectionConfig)
 
     @property
     def run_dir(self) -> Path:

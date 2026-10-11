@@ -123,3 +123,67 @@ def test_variant_b_drops_wet_only_if_two_remain():
     assert row(date(2026, 8, 8)).used_A and not row(date(2026, 8, 8)).used_B   # 2 pre remain
     assert row(date(2026, 9, 1)).used_B                                          # only 1 would remain
     assert t.used_A.all() and int(t.used_B.sum()) == 4
+
+
+# --- v2: normalization, masked spatial averaging, per-class z, injection ------------------
+from s1windthrow.injection import disc_offsets, sample_sites  # noqa: E402
+from s1windthrow.method import masked_mean_filter, normalize_acquisition, z_by_class  # noqa: E402
+
+
+def test_normalization_equals_subtracting_stable_median_in_db():
+    lin = np.full((4, 4), 0.2, "float32")
+    lin[0, 0] = 0.8
+    stable = np.ones((4, 4), bool)
+    out, med = normalize_acquisition(lin, stable)
+    assert med == pytest.approx(0.2)
+    assert 10 * np.log10(out[0, 0]) == pytest.approx(10 * np.log10(0.8) - 10 * np.log10(0.2), abs=1e-5)
+
+
+def test_masked_filter_ignores_pixels_outside_mask():
+    lin = np.full((5, 5), 1.0, "float32")
+    lin[:, 0] = 100.0                         # e.g. a road / field next to the forest
+    mask = np.ones((5, 5), bool)
+    mask[:, 0] = False
+    out = masked_mean_filter(lin, mask, 3)
+    assert np.isnan(out[:, 0]).all()
+    assert np.allclose(out[:, 1:], 1.0)        # outside values do not leak in
+    assert np.allclose(masked_mean_filter(lin, mask, 1)[:, 1:], 1.0)
+
+
+def test_masked_filter_reduces_noise():
+    rng = np.random.default_rng(4)
+    lin = rng.gamma(4.4, 0.1 / 4.4, (200, 200)).astype("float32")   # speckle-like
+    mask = np.ones(lin.shape, bool)
+    assert masked_mean_filter(lin, mask, 5)[10:-10, 10:-10].std() < lin.std() / 3
+
+
+def test_z_by_class_uses_own_statistics():
+    index = np.zeros((10, 10), "float32")
+    dlt = np.full((10, 10), 2, "uint8")
+    dlt[:, :5] = 1
+    rng = np.random.default_rng(5)
+    index[:, :5] = 1.0 + rng.normal(0, 0.1, (10, 5))   # broadleaf: other level and spread
+    index[:, 5:] = rng.normal(0, 0.5, (10, 5))
+    ok = np.ones(index.shape, bool)
+    z, stats = z_by_class(index, ok, ok, dlt, [1, 2])
+    assert stats[1]["median"] == pytest.approx(1.0, abs=0.1) and abs(stats[2]["median"]) < 0.3
+    assert abs(np.median(z[:, :5])) < 0.2 and abs(np.median(z[:, 5:])) < 0.2
+
+
+def test_disc_offsets_compact_and_exact():
+    off = disc_offsets(100)
+    assert len(off) == 100 and len({tuple(o) for o in off}) == 100
+    assert np.hypot(off[:, 0], off[:, 1]).max() < 6.5      # ~ radius sqrt(100/pi) = 5.6
+
+
+def test_sample_sites_respect_class_mask_and_gap():
+    dlt = np.full((120, 120), 2, "uint8")
+    dlt[:, :60] = 1
+    elig = {1: dlt == 1, 2: dlt == 2}
+    sites = sample_sites(elig, dlt, 50, 5, 0.9, 5, np.random.default_rng(0))
+    assert sum(s.cls == 1 for s in sites) == 5 and sum(s.cls == 2 for s in sites) == 5
+    occ = np.zeros(dlt.shape, int)
+    for s in sites:
+        assert (dlt[s.rows, s.cols] == s.cls).mean() >= 0.9
+        occ[s.rows, s.cols] += 1
+    assert occ.max() == 1

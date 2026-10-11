@@ -29,6 +29,10 @@ def write_report(cfg, meta, table, results, s2, proxy, proxy_dropped, path: Path
          f"pēc {ev.post_window[0]} … {ev.post_window[1]}. AOI: `{Path(cfg.aoi).name}`, "
          f"{cfg.grid.crs} {cfg.grid.resolution:g} m. Avots: PC `{cfg.data.collection}` (VV, VH, lineārs γ⁰).", "",
          "## Metode (no šī skrējiena konfigurācijas)", "",
+         f"- Metodes versija **{cfg.detection.version}**: normalizācija katram uzņēmumam "
+         f"{'jā' if cfg.detection.normalize_per_acquisition else 'nē'}; telpiskā vidējošana "
+         f"{cfg.detection.smoothing_window}×{cfg.detection.smoothing_window} (lineāri, tikai analizētajā mežā); "
+         f"z statistika {'atsevišķi katrai HRL klasei' if cfg.detection.z_by_class else 'vienota visam mežam'}.",
          f"- Katrai relatīvajai orbītai atsevišķi: pirms un pēc vidējais **lineārajā skalā** → dB; "
          f"ΔVV, ΔVH = pēc − pirms. Nodata {cfg.data.nodata:g} un γ⁰ ≤ 0 → NaN pirms aprēķiniem.",
          "- ΔVV un ΔVH vidējais pāri orbītām, kas pikselim pieejamas (`n_orbits` slānis); "
@@ -65,11 +69,14 @@ def write_report(cfg, meta, table, results, s2, proxy, proxy_dropped, path: Path
 
     L += ["## Slieksnis", ""]
     rows = []
+    grp_name = {"all": "viss mežs", "1": "HRL 1 lapu koki", "2": "HRL 2 skujkoki"}
     for v, s in meta["stats"].items():
-        rows.append({"variants": v, "stabilā mediāna, dB": s["stable_median_db"],
-                     "MAD, dB": s["stable_mad_db"], "stabilie pikseļi": s["stable_pixels"],
-                     "k": s["k"], "slieksnis ↑, dB": s["threshold_db_up"],
-                     "slieksnis ↓, dB": s["threshold_db_down"], "orbītas": ",".join(map(str, s["orbits"]))})
+        for g, st in s["groups"].items():
+            rows.append({"variants": v, "z grupa": grp_name.get(g, g),
+                         "stabilā mediāna, dB": st["stable_median_db"], "MAD, dB": st["stable_mad_db"],
+                         "stabilie pikseļi": st["stable_pixels"], "k": st["k"],
+                         "slieksnis ↑, dB": st["threshold_db_up"], "slieksnis ↓, dB": st["threshold_db_down"],
+                         "orbītas": ",".join(map(str, s["orbits"]))})
     L += [md_table(pd.DataFrame(rows)), ""]
 
     L += ["## Kandidāti", ""]
@@ -117,5 +124,51 @@ def write_report(cfg, meta, table, results, s2, proxy, proxy_dropped, path: Path
           "- `rasters/`: indekss, ΔVV, ΔVH, z, n_orbits, klases, katras orbītas Δ (A un B), maskas",
           "- `figures/preview_A.png`, `preview_B.png`, `stable_forest_series.png`",
           "- `tables/`: uzņēmumi, jutīgums, stabilā meža laika rinda, S2 pārbaude, aizvietotājs", ""]
+    path.write_text("\n".join(L), encoding="utf-8")
+    return path
+
+
+def write_injection_report(cfg, rate, table, fa, sites, rec, path: Path) -> Path:
+    inj, det = cfg.injection, cfg.detection
+    L = [f"# Injekcijas tests — {cfg.run_name}", "",
+         "> **PROVIZORISKS rezultāts** (izstrādes stāvoklis): metode un testa uzbūve vēl tiek pārbaudīta; "
+         "skaitļus neizmantot kā galīgu jutības novērtējumu.", "",
+         f"Metode: {det.version}; normalizācija katram uzņēmumam "
+         f"{'jā' if det.normalize_per_acquisition else 'nē'}; z statistika "
+         f"{'pa HRL klasēm' if det.z_by_class else 'vienota'}; MMU {det.min_area_ha:g} ha; uzņēmumi: variants A.",
+         "",
+         f"- Sintētiskas vējgāzes: kompakti diski {', '.join(f'{s:g}' for s in inj.sizes_ha)} ha; "
+         f"stiprums × {', '.join(f'{s:g}' for s in inj.strengths)} no "
+         f"+{inj.base_db['vv']:g} dB VV / +{inj.base_db['vh']:g} dB VH (Rüetschi u. c. 2019 vidējais).",
+         f"- Ievietotas visos 'pēc' kompozītos (visas orbītas), reizinot lineāro γ⁰. {inj.n_per_combo} vietas "
+         f"katrai platībai un HRL klasei (seed {inj.seed}); tās pašas vietas visiem stiprumiem un logiem.",
+         f"- Vietas: stabilajā mežā, ≥ {inj.min_dist_suspects_m:g} m no S2 suspects, ≥ {inj.min_gap_m:g} m "
+         f"viena no otras, ≥ {inj.class_purity:.0%} pikseļu mērķa klasē.",
+         "- z statistika (mediāna, MAD) — no stabilā meža **bez** injicētajiem pikseļiem [pieņēmums: reāla "
+         "vējgāze aizņem mazu meža daļu].",
+         f"- Atklāta: ≥ {inj.detected_fraction:.0%} vietas platības ir windthrow poligonā ≥ {det.min_area_ha:g} ha.",
+         "- Viltus trauksmes: windthrow poligoni bez injekcijas uz 1000 ha analizētā meža — **reālajos datos "
+         "bez injekcijām** (ja AOI ir īstas vējgāzes, tās arī tiek skaitītas kā viltus).", "",
+         "## Vietu skaits", "", md_table(sites), "",
+         f"## Ieteikuma tabula ({inj.recommend_size_ha:g} ha, stiprums {inj.recommend_strength:g}×, abas klases)", "",
+         md_table(table[["window", "k", "n", "n_detected", "rate", "n_false", "area_ha", "fa_per_1000ha",
+                         "fa_per_1000ha_injection_runs"]], "{:.3f}"), ""]
+    if rec:
+        L += [f"**Ieteikums** (augstākais atklāšanas īpatsvars pie {inj.recommend_size_ha:g} ha un "
+              f"{inj.recommend_strength:g}×, ja viltus trauksmes ≤ {inj.max_false_alarms_per_1000ha:g} / 1000 ha): "
+              f"logs **{rec['window']}×{rec['window']}**, k = **{rec['k']:g}** — atklāti "
+              f"{rec['rate_1ha_1x']:.0%}, viltus trauksmes {rec['fa_per_1000ha']:.2f} / 1000 ha.", ""]
+        if len(rec["ties"]) > 1:
+            L += ["Vienāds atklāšanas īpatsvars arī: " + "; ".join(
+                f"{t['window']}×{t['window']}, k {t['k']:g} (FA {t['fa_per_1000ha']:.2f})" for t in rec["ties"]), ""]
+    else:
+        L += [f"**Nevienai kombinācijai** viltus trauksmes nav ≤ {inj.max_false_alarms_per_1000ha:g} / 1000 ha.", ""]
+    piv = rate.pivot_table(index=["k", "window"], columns=["strength", "size_ha"], values="rate",
+                           aggfunc="mean").round(2)
+    piv.columns = [f"{s:g}×, {a:g} ha" for s, a in piv.columns]
+    L += ["## Atklāšanas īpatsvars (abu klašu vidējais)", "", md_table(piv.reset_index(), "{:.2f}"), "",
+          "Pa klasēm: `injection_rates.csv`; grafiks: `injection_detection_vs_area.png`.", "",
+          "## Viltus trauksmes reālajos datos (bez injekcijām)", "",
+          md_table(fa[fa.strength == 0.0][["window", "k", "n_false", "area_ha", "fa_per_1000ha"]], "{:.2f}")]
     path.write_text("\n".join(L), encoding="utf-8")
     return path
