@@ -1,0 +1,103 @@
+# Sentinel-1 windthrow screening — NULL (placebo) event without a storm, same window lengths and
+# orbit logic as the 22-23 Aug 2026 storm; used to calibrate k from false alarms only.
+# Event: storm 22-23 Aug 2026 (Ministry of Agriculture reports fallen and broken trees
+# in many places in Latvia; no specific areas known). First test on the Kalsnava AOI.
+# Relative paths are resolved against this file's folder.
+
+run_name: s1_kalsnava_null_2026-07
+aoi: ../data/test_aoi_kalsnava.geojson     # same AOI as s2forest
+output_dir: ../output
+cache_dir: ../cache
+
+grid:
+  crs: EPSG:3059
+  resolution: 10
+
+data:
+  stac_url: https://planetarycomputer.microsoft.com/api/stac/v1
+  collection: sentinel-1-rtc
+  polarizations: [vv, vh]
+  nodata: -32768              # not converted to NaN by odc-stac -> masked explicitly
+  resampling: bilinear        # on linear gamma0
+  min_aoi_cover: 0.0          # keep partially covering orbits (7, 153); NaN outside footprint
+
+event:
+  name: "Null notikums (bez vētras) 25.07.2026"
+  date: 2026-07-25            # placebo split (first post day)
+  pre_window: [2026-06-27, 2026-07-24]
+  post_window: [2026-07-25, 2026-08-21]   # ends before the storm (22.08.)
+  n_pre_max: 5                # per relative orbit, closest to the event
+  n_post_max: 5
+  orbits: all                 # each relative orbit processed separately
+
+weather:
+  source: open-meteo-archive  # precipitation recorded for both windows (wet vegetation)
+  freeze_filter: false        # summer event: not critical (user decision 2026-10-11)
+  # Variant B (variant A = all acquisitions): drop acquisitions with > 5 mm in the 6 h
+  # before the overpass, if >= 2 remain in that orbit/window.
+  wet_precip_mm: 5.0
+  wet_hours: 6
+  wet_min_remaining: 2
+
+forest_mask:
+  hrl_dlt_classes: [1, 2]     # broadleaved + coniferous (HRL Dominant Leaf Type 2018)
+  road_buffer_m: 20           # OSM roads, as in s2forest
+  s2_ndvi_refinement: false
+  exclude_s2_cuts_buffer_m: 20   # known S2 cuts removed from the ANALYSIS mask (decision 2026-10-11)
+
+detection:
+  index: dvh_plus_dvv         # dVH + dVV [dB], post minus pre; dVH, dVV kept separately
+  min_area_ha: 0.5
+  # v2 (stage 3b): per-acquisition normalization, masked spatial averaging, z per HRL class.
+  version: v2
+  normalize_per_acquisition: true
+  smoothing_window: 3         # strict recommendation (FA <= 1 / 1000 ha), injection test v2b 2026-10-11
+  z_by_class: true
+  threshold:
+    # z = (x - median_stable) / (1.4826 * MAD_stable); stable forest = forest mask minus
+    # S2 suspects 2025/2026 buffered by 30 m. z >= k -> windthrow candidate (one-sided);
+    # z <= -k -> separate class "cut_like" (not called windthrow). Then MMU.
+    method: robust_z
+    k: 2.5                    # recommended by the injection test 2026-10-11 (v1: 3.0)
+    sensitivity_k: [2.5, 3.0, 3.5, 4.0]
+    exclude_buffer_m: 30
+
+checks:
+  # Independent S2 check of S1 candidates (>= 0.5 ha): S2 indices before / after 23.08,
+  # read-only from the s2forest outputs. Labelled "S2 vizuāla/indeksa pārbaude", NOT validation.
+  s2_run_dir: ../output/test_kalsnava
+  s2_event_split: 2026-07-25
+  s2_exclude:                 # removed (with 30 m buffer) from the stable forest
+    - {path: ../output/test_kalsnava/vectors/suspects.gpkg, layer: suspects_2026}
+    - {path: ../output/test_kalsnava_2025/vectors/suspects.gpkg, layer: suspects_2025}
+  # PROXY (aizvietotājs) only for "does S1 see stand-replacing change and with which sign":
+  # S2 cuts 2025/2026 >= 0.5 ha. A clear-cut may change backscatter with the opposite sign
+  # to windthrow (Rüetschi et al. 2019: windthrow -> increase).
+  # Summer cuts only (first_detected May-Sep, winter cuts excluded), >= 0.5 ha.
+  # Windows per cut: pre = 28 days up to the previous clear S2 date before
+  # first_detected; post = 28 days from first_detected.
+  proxy_cuts:
+    - {path: ../output/test_kalsnava/vectors/suspects.gpkg, layer: suspects_2026, run_dir: ../output/test_kalsnava}
+    - {path: ../output/test_kalsnava_2025/vectors/suspects.gpkg, layer: suspects_2025, run_dir: ../output/test_kalsnava_2025}
+  proxy_min_area_ha: 0.5
+  proxy_months: [5, 9]
+  proxy_window_days: 28
+
+injection:                    # s1windthrow inject: synthetic windthrow in the stable forest
+  sizes_ha: [0.5, 1, 2, 5]
+  strengths: [0.5, 1, 2]      # x Rüetschi et al. 2019 mean (+0.45 dB VV, +0.68 dB VH)
+  base_db: {vv: 0.45, vh: 0.68}
+  n_per_combo: 30
+  seed: 42
+  min_dist_suspects_m: 100
+  min_gap_m: 50
+  class_purity: 0.9
+  windows: [1, 3, 5, 7]
+  k: [2.5, 3.0, 3.5, 4.0]
+  detected_fraction: 0.5
+  max_false_alarms_per_1000ha: 1.0            # strict
+  max_false_alarms_operational_per_1000ha: 5.0  # operational
+  max_batch_share_pct: 2.0      # < 2 % of each class's stable forest injected per run
+  exclude_spill_ring: true      # smoothing spill-over ring excluded from z statistics
+  recommend_size_ha: 1
+  recommend_strength: 1
