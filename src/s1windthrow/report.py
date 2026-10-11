@@ -144,8 +144,13 @@ def write_injection_report(cfg, rate, table, fa, sites, rec, path: Path) -> Path
          f"katrai platībai un HRL klasei (seed {inj.seed}); tās pašas vietas visiem stiprumiem un logiem.",
          f"- Vietas: stabilajā mežā, ≥ {inj.min_dist_suspects_m:g} m no S2 suspects, ≥ {inj.min_gap_m:g} m "
          f"viena no otras, ≥ {inj.class_purity:.0%} pikseļu mērķa klasē.",
-         "- z statistika (mediāna, MAD) — no stabilā meža **bez** injicētajiem pikseļiem [pieņēmums: reāla "
-         "vējgāze aizņem mazu meža daļu].",
+         "- z statistika (mediāna, MAD) — no stabilā meža **bez** injicētajiem pikseļiem"
+         + (" un bez vidējošanas izplūduma joslas ap tiem" if inj.exclude_spill_ring else "")
+         + " [pieņēmums: reāla vējgāze aizņem mazu meža daļu].",
+         (f"- Partijas: vienā palaišanā injicēts < {inj.max_batch_share_pct:g} % no katras klases stabilā meža."
+          if inj.max_batch_share_pct else "- Visas viena izmēra vietas injicētas vienlaicīgi."),
+         (f"- Analīzes maskā izslēgtas zināmās S2 cirtes (buferis {cfg.forest_mask.exclude_s2_cuts_buffer_m:g} m)."
+          if cfg.forest_mask.exclude_s2_cuts_buffer_m is not None else "- S2 cirtes analīzes maskā netiek izslēgtas."),
          f"- Atklāta: ≥ {inj.detected_fraction:.0%} vietas platības ir windthrow poligonā ≥ {det.min_area_ha:g} ha.",
          "- Viltus trauksmes: windthrow poligoni bez injekcijas uz 1000 ha analizētā meža — **reālajos datos "
          "bez injekcijām** (ja AOI ir īstas vējgāzes, tās arī tiek skaitītas kā viltus).", "",
@@ -153,16 +158,20 @@ def write_injection_report(cfg, rate, table, fa, sites, rec, path: Path) -> Path
          f"## Ieteikuma tabula ({inj.recommend_size_ha:g} ha, stiprums {inj.recommend_strength:g}×, abas klases)", "",
          md_table(table[["window", "k", "n", "n_detected", "rate", "n_false", "area_ha", "fa_per_1000ha",
                          "fa_per_1000ha_injection_runs"]], "{:.3f}"), ""]
-    if rec:
-        L += [f"**Ieteikums** (augstākais atklāšanas īpatsvars pie {inj.recommend_size_ha:g} ha un "
-              f"{inj.recommend_strength:g}×, ja viltus trauksmes ≤ {inj.max_false_alarms_per_1000ha:g} / 1000 ha): "
-              f"logs **{rec['window']}×{rec['window']}**, k = **{rec['k']:g}** — atklāti "
-              f"{rec['rate_1ha_1x']:.0%}, viltus trauksmes {rec['fa_per_1000ha']:.2f} / 1000 ha.", ""]
-        if len(rec["ties"]) > 1:
-            L += ["Vienāds atklāšanas īpatsvars arī: " + "; ".join(
-                f"{t['window']}×{t['window']}, k {t['k']:g} (FA {t['fa_per_1000ha']:.2f})" for t in rec["ties"]), ""]
-    else:
-        L += [f"**Nevienai kombinācijai** viltus trauksmes nav ≤ {inj.max_false_alarms_per_1000ha:g} / 1000 ha.", ""]
+    names = {"strict": "stingrais", "operational": "operatīvais"}
+    for key, r in rec.items():
+        if "window" in r:
+            L += [f"**Ieteikums — {names.get(key, key)} kritērijs** (augstākais atklāšanas īpatsvars pie "
+                  f"{inj.recommend_size_ha:g} ha un {inj.recommend_strength:g}×, viltus trauksmes ≤ "
+                  f"{r['fa_limit']:g} / 1000 ha): logs **{r['window']}×{r['window']}**, k = **{r['k']:g}** — "
+                  f"atklāti {r['rate_1ha_1x']:.0%}, viltus trauksmes {r['fa_per_1000ha']:.2f} / 1000 ha.", ""]
+            if len(r["ties"]) > 1:
+                L += ["Vienāds atklāšanas īpatsvars arī: " + "; ".join(
+                    f"{t['window']}×{t['window']}, k {t['k']:g} (FA {t['fa_per_1000ha']:.2f})"
+                    for t in r["ties"]), ""]
+        else:
+            L += [f"**{names.get(key, key)} kritērijs:** nevienai kombinācijai viltus trauksmes nav ≤ "
+                  f"{r['fa_limit']:g} / 1000 ha.", ""]
     piv = rate.pivot_table(index=["k", "window"], columns=["strength", "size_ha"], values="rate",
                            aggfunc="mean").round(2)
     piv.columns = [f"{s:g}×, {a:g} ha" for s, a in piv.columns]

@@ -47,6 +47,9 @@ class ForestMaskConfig(BaseModel):
     hrl_dlt_classes: list[int] = Field(default_factory=lambda: [1, 2])
     road_buffer_m: float = 20.0
     s2_ndvi_refinement: bool = False
+    # Known S2 cuts (type == "cut" in checks.s2_exclude layers) removed from the ANALYSIS
+    # mask with this buffer; None = not removed (v1 / first v2 runs).
+    exclude_s2_cuts_buffer_m: float | None = None
 
 
 class ThresholdConfig(BaseModel):
@@ -85,6 +88,12 @@ class InjectionConfig(BaseModel):
     max_false_alarms_per_1000ha: float = 1.0
     recommend_size_ha: float = 1.0
     recommend_strength: float = 1.0
+    max_false_alarms_operational_per_1000ha: float = 5.0
+    # Batches: at most this share (%) of each class's stable forest injected per run; None = all
+    # sites of one size at once (first test).
+    max_batch_share_pct: float | None = None
+    # Exclude the smoothing spill-over ring around injected sites from the z statistics.
+    exclude_spill_ring: bool = False
 
 
 class LayerRef(BaseModel):

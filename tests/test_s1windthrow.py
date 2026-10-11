@@ -187,3 +187,17 @@ def test_sample_sites_respect_class_mask_and_gap():
         assert (dlt[s.rows, s.cols] == s.cls).mean() >= 0.9
         occ[s.rows, s.cols] += 1
     assert occ.max() == 1
+
+
+def test_batches_stay_below_share_per_class():
+    from s1windthrow.injection import Site, make_batches
+    sites = [Site(1, np.array([0]), np.array([0])) for _ in range(30)] + \
+            [Site(2, np.array([0]), np.array([0])) for _ in range(30)]
+    stable_ha = {1: 391.4, 2: 1297.9}
+    for size in (0.5, 1.0, 2.0, 5.0):
+        batches = make_batches(sites, size, stable_ha, 2.0)
+        assert sorted(i for b in batches for i in b) == list(range(60))
+        for b in batches:
+            for c in (1, 2):
+                assert sum(sites[i].cls == c for i in b) * size < 0.02 * stable_ha[c]
+    assert make_batches(sites, 5.0, stable_ha, None) == [list(range(60))]

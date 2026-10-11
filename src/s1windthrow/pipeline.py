@@ -81,6 +81,17 @@ def build_masks(cfg: Config, grid: Grid) -> Masks:
     else:
         roads_ = roads
     analysis = forest & ~roads_
+    cut_buf = cfg.forest_mask.exclude_s2_cuts_buffer_m
+    if cut_buf is not None:
+        cuts = [gpd.read_file(r.path, layer=r.layer).to_crs(cfg.grid.crs) for r in cfg.checks.s2_exclude]
+        cuts = pd.concat(cuts, ignore_index=True) if cuts else gpd.GeoDataFrame()
+        cuts = cuts[cuts["type"] == "cut"] if len(cuts) else cuts
+        if len(cuts):
+            cm = rasterize([(g, 1) for g in cuts.geometry.buffer(cut_buf)], out_shape=forest.shape,
+                           transform=grid.geobox.affine, fill=0, dtype="uint8").astype(bool)
+            notes.append(f"analīzes maskā izslēgtas S2 cirtes: {len(cuts)} poligoni, buferis {cut_buf:g} m, "
+                         f"{(analysis & cm).sum() * grid.pixel_ha:.1f} ha")
+            analysis &= ~cm
     excl = np.zeros(forest.shape, bool)
     thr = cfg.detection.threshold
     for ref in cfg.checks.s2_exclude:

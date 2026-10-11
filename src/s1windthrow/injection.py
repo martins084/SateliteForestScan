@@ -96,7 +96,11 @@ def evaluate(comps, masks, dlt, cfg, window: int, ks: list[float], sites: list[S
     deltas = deltas_from_composites(comps, masks.analysis, window, factor if sites else None)
     comb = combine_orbits(deltas)
     analysis = masks.analysis & np.isfinite(comb["index"])
-    z, _ = z_by_class(comb["index"], masks.stable & ~inj, analysis, dlt,
+    excl = inj
+    r = (window - 1) // 2
+    if cfg.injection.exclude_spill_ring and r and sites:
+        excl = ndimage.binary_dilation(inj, iterations=r)   # injected + smoothing spill-over
+    z, _ = z_by_class(comb["index"], masks.stable & ~excl, analysis, dlt,
                       cfg.forest_mask.hrl_dlt_classes if cfg.detection.z_by_class else None)
     analysis &= np.isfinite(z)
     area_ha = float((analysis & ~inj).sum() * pixel_ha)
@@ -115,6 +119,18 @@ def evaluate(comps, masks, dlt, cfg, window: int, ks: list[float], sites: list[S
     return det_rows, fa_rows
 
 
+def make_batches(sites: list[Site], size_ha: float, stable_ha: dict[int, float],
+                 max_share_pct: float | None) -> list[list[int]]:
+    """Split site indices into batches with < max_share_pct of each class's stable forest."""
+    if not max_share_pct:
+        return [list(range(len(sites)))]
+    per_class = {c: [i for i, s in enumerate(sites) if s.cls == c] for c in stable_ha}
+    cap = {c: max(1, int(math.ceil(max_share_pct / 100 * stable_ha[c] / size_ha)) - 1)
+           for c in stable_ha}   # strictly below the share
+    n_b = max((math.ceil(len(v) / cap[c]) for c, v in per_class.items() if v), default=0)
+    return [sum((v[b * cap[c]:(b + 1) * cap[c]] for c, v in per_class.items()), []) for b in range(n_b)]
+
+
 def run_injection(cfg, comps, masks, grid, suspects, progress=print) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     inj = cfg.injection
     min_px = math.ceil(cfg.detection.min_area_ha / grid.pixel_ha - 1e-9)
@@ -122,6 +138,8 @@ def run_injection(cfg, comps, masks, grid, suspects, progress=print) -> tuple[pd
     elig = eligible_masks(masks, grid, cfg, suspects)
     rng = np.random.default_rng(inj.seed)
     det_all, fa_all, site_info = [], [], []
+    stable_ha = {int(c): float((masks.stable & (masks.dlt == c)).sum() * grid.pixel_ha)
+                 for c in cfg.forest_mask.hrl_dlt_classes}
     # baseline without injection: false alarms of the real data
     for w in inj.windows:
         _, fa = evaluate(comps, masks, masks.dlt, cfg, w, inj.k, [], 0.0, min_px, grid.pixel_ha)
@@ -130,15 +148,20 @@ def run_injection(cfg, comps, masks, grid, suspects, progress=print) -> tuple[pd
         n_px = int(round(size / grid.pixel_ha))
         sites = sample_sites(elig, masks.dlt, n_px, inj.n_per_combo, inj.class_purity, gap_px, rng)
         for c in elig:
-            site_info.append({"size_ha": size, "class": c, "n_sites": sum(s.cls == c for s in sites),
-                              "requested": inj.n_per_combo})
-        progress(f"injection {size} ha: {len(sites)} sites")
+            n = sum(s.cls == c for s in sites)
+            site_info.append({"size_ha": size, "class": c, "n_sites": n, "requested": inj.n_per_combo,
+                              "injected_share_pct_total": round(100 * n * size / stable_ha[c], 2)})
+        batches = make_batches(sites, size, stable_ha, inj.max_batch_share_pct)
+        progress(f"injection {size} ha: {len(sites)} sites, {len(batches)} batch(es)")
         for strength in inj.strengths:
             for w in inj.windows:
-                det, fa = evaluate(comps, masks, masks.dlt, cfg, w, inj.k, sites, strength,
-                                   min_px, grid.pixel_ha)
-                det_all += [{**r, "size_ha": size, "strength": strength} for r in det]
-                fa_all += [{**r, "size_ha": size, "strength": strength} for r in fa]
+                for b, batch in enumerate(batches):
+                    det, fa = evaluate(comps, masks, masks.dlt, cfg, w, inj.k,
+                                       [sites[i] for i in batch], strength, min_px, grid.pixel_ha)
+                    for row in det:   # site index back to the position in `sites`
+                        row["site"] = batch[row["site"]]
+                    det_all += [{**r, "size_ha": size, "strength": strength, "batch": b} for r in det]
+                    fa_all += [{**r, "size_ha": size, "strength": strength, "batch": b} for r in fa]
     det = pd.DataFrame(det_all)
     det["detected"] = det["detected_share"] >= inj.detected_fraction
     return det, pd.DataFrame(fa_all), pd.DataFrame(site_info)
@@ -157,11 +180,15 @@ def summarize(det: pd.DataFrame, fa: pd.DataFrame, cfg) -> tuple[pd.DataFrame, p
               .rename("fa_per_1000ha_injection_runs").reset_index())
     table = (both[(both.size_ha == inj.recommend_size_ha) & (both.strength == inj.recommend_strength)]
              .merge(base_fa, on=["window", "k"]).merge(inj_fa, on=["window", "k"]))
-    ok = table[table.fa_per_1000ha <= inj.max_false_alarms_per_1000ha]
     rec = {}
-    if len(ok):
-        best = ok.sort_values(["rate", "fa_per_1000ha", "k"], ascending=[False, True, False]).iloc[0]
-        rec = {"window": int(best.window), "k": float(best.k), "rate_1ha_1x": float(best.rate),
-               "fa_per_1000ha": float(best.fa_per_1000ha),
-               "ties": ok[ok.rate == best.rate][["window", "k", "fa_per_1000ha"]].to_dict("records")}
+    for name, lim in (("strict", inj.max_false_alarms_per_1000ha),
+                      ("operational", inj.max_false_alarms_operational_per_1000ha)):
+        ok = table[table.fa_per_1000ha <= lim]
+        if len(ok):
+            best = ok.sort_values(["rate", "fa_per_1000ha", "k"], ascending=[False, True, False]).iloc[0]
+            rec[name] = {"fa_limit": lim, "window": int(best.window), "k": float(best.k),
+                         "rate_1ha_1x": float(best.rate), "fa_per_1000ha": float(best.fa_per_1000ha),
+                         "ties": ok[ok.rate == best.rate][["window", "k", "fa_per_1000ha"]].to_dict("records")}
+        else:
+            rec[name] = {"fa_limit": lim}
     return rate, table.sort_values(["window", "k"]), rec
