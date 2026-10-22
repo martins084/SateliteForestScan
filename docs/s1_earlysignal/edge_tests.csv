@@ -1,0 +1,13 @@
+metric,targets_median,vs,other_median,U,p,n_targets,n_other
+centre_dist_m,44.721359549995796,pseudo,83.0313074680804,184.0,0.016982975741428725,13,50.0
+centre_dist_m,44.721359549995796,controls,92.19544457292886,259.5,0.007447845931190386,13,75.0
+edge_share_20m,0.0,pseudo,0.0,401.5,0.06795792348879769,13,50.0
+edge_share_20m,0.0,controls,0.0,613.5,0.02820685374680141,13,75.0
+spearman baseline_vv ~ centre_dist_m,-0.2448420473069246,targets (13),,,0.42011354710149906,13,
+spearman baseline_vv ~ (edge share - controls' edge share),0.23626373626373626,targets (13),,,0.43708354383118136,13,
+spearman baseline_vv ~ centre_dist_m,-0.07138568558032721,pseudo (50),,,0.6222704038026109,50,
+spearman baseline_vv ~ (edge share - controls' edge share),0.05523882783135414,pseudo (50),,,0.7031963429564707,50,
+spearman baseline_k0 ~ centre_dist_m,-0.4071530674317398,targets (13),,,0.1673371134192111,13,
+spearman baseline_k0 ~ (edge share - controls' edge share),0.34615384615384615,targets (13),,,0.24662526251007172,13,
+spearman baseline_k0 ~ centre_dist_m,-0.13719886811400706,pseudo (50),,,0.3420574281063163,50,
+spearman baseline_k0 ~ (edge share - controls' edge share),0.1466251693137523,pseudo (50),,,0.3095924114719056,50,
