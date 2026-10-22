@@ -1,0 +1,48 @@
+# S1 early-signal test (Hechtl et al. 2025): backscatter drop before S2 sees bark-beetle stress.
+# Targets: s2forest stress polygons ("S2 aizdomas", not confirmed bark beetle).
+# Relative paths are resolved against this file's folder.
+run_name: s1_earlysignal_kalsnava
+aoi: ../data/test_aoi_kalsnava.geojson
+output_dir: ../output
+cache_dir: ../cache
+period: [2023-01-01, 2026-10-11]
+
+grid: {crs: EPSG:3059, resolution: 10}
+data:
+  collection: sentinel-1-rtc
+  polarizations: [vv, vh]
+  nodata: -32768
+  resampling: bilinear
+
+forest_mask:                    # same analysed / stable forest as the windthrow module (v2b)
+  hrl_dlt_classes: [1, 2]
+  road_buffer_m: 20
+  exclude_s2_cuts_buffer_m: 20
+detection:
+  threshold: {exclude_buffer_m: 30}
+checks:
+  s2_exclude:                   # all suspects (stable forest; controls / pseudo outside + 50 m)
+    - {path: ../output/test_kalsnava/vectors/suspects.gpkg, layer: suspects_2026}
+    - {path: ../output/test_kalsnava_2025/vectors/suspects.gpkg, layer: suspects_2025}
+
+targets:
+  - {path: ../output/test_kalsnava_2025/vectors/suspects.gpkg, layer: suspects_2025, year: 2025,
+     run_dir: ../output/test_kalsnava_2025}                      # no z rasters for 2024
+  - {path: ../output/test_kalsnava/vectors/suspects.gpkg, layer: suspects_2026, year: 2026,
+     run_dir: ../output/test_kalsnava, prev_run_dir: ../output/test_kalsnava_2025}
+exclude_ids: {"2025": [57, 60]}  # main group without #57 (linear_feature) and #60 (recovered)
+single: ["2025#71"]               # the only "stress before cut" (ZC-019)
+
+n_controls: 5
+control_dist_m: [200, 2000]
+suspects_buffer_m: 50
+min_px: 10
+n_pseudo: 50
+seed: 2025
+freeze_temp_c: 0.0
+smooth_days: 30                   # trailing median
+baseline_months: [24, 12]         # baseline: 24-12 months before t_first
+drop_db: 0.5
+persist_days: 60
+sea_bins: [-540, 180, 30]         # days relative to t_last_normal
+bootstrap: 2000

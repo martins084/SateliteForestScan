@@ -65,3 +65,19 @@ def inject(config: Path = typer.Argument(..., exists=True, help="YAML configurat
     viz.injection_plot(rate, cfg, out / "injection_detection_vs_area.png")
     write_injection_report(cfg, rate, table, fa, sites, rec, out / "injekcijas_tests.md")
     typer.echo(f"recommendation: {rec}")
+
+
+@app.command()
+def earlysignal(config: Path = typer.Argument(..., exists=True, help="YAML configuration"),
+                reuse: bool = typer.Option(True, help="reuse the cached per-acquisition series"),
+                verbose: bool = typer.Option(False, "--verbose", "-v")):
+    """S1 early-signal test (backscatter drop before S2 stress)."""
+    logging.basicConfig(level=logging.INFO if verbose else logging.WARNING,
+                        format="%(levelname)s %(name)s: %(message)s")
+    from .earlysignal import load_early_config
+    from .earlysignal_run import run as run_es
+
+    cfg = load_early_config(config)
+    out = run_es(cfg, progress=typer.echo, reuse=reuse)
+    typer.echo(out["summary"].to_string(index=False))
+    typer.echo(f"report: {cfg.run_dir / f'atskaite_{cfg.run_name}.md'}")
