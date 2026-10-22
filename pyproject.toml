@@ -46,8 +46,11 @@ packages = ["src/s2forest", "src/s1windthrow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["network: tests that need internet access (deselected by default)"]
-addopts = "-m 'not network'"
+markers = [
+    "network: tests that need internet access (deselected by default)",
+    "golden: v0.2-kalsnava regression on the local cache, ~10 min (deselected by default)",
+]
+addopts = "-m 'not network and not golden'"
 filterwarnings = [
     "ignore:Use `@` matmul:PendingDeprecationWarning",
 ]

@@ -140,6 +140,7 @@ class DetectStage:
     status_codes: np.ndarray    # STATUS_* per pixel
     targets: "gpd.GeoDataFrame"  # drone target layer (with mission_id)
     missions: "gpd.GeoDataFrame"  # drone missions, ranked
+    edge_summary: pd.DataFrame | None = None   # diagnostics.forest_edge only
 
 
 # Per-pixel status raster codes.
@@ -225,6 +226,15 @@ def add_linear_attributes(gdf: "gpd.GeoDataFrame", lines, threshold: float,
     return gdf
 
 
+def keep_only_cuts(feats: xr.Dataset, z: xr.DataArray, delta: xr.DataArray, pixels: np.ndarray
+                   ) -> tuple[xr.Dataset, xr.DataArray, xr.DataArray]:
+    """In `pixels` keep only flagged cut (stand-replacing) detections; everything else there is
+    set to NaN, i.e. treated as not analysed (no stress, no baseline statistics)."""
+    keep = pixels & (np.nan_to_num(feats["flag"].values) > 0) & (np.nan_to_num(feats["is_cut"].values) > 0)
+    drop = xr.DataArray(pixels & ~keep, dims=("y", "x"))
+    return feats.where(~drop), z.where(~drop), delta.where(~drop)
+
+
 def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
     from .anomaly import apply_baseline_exclusion, params_from_config, run_detection
     from .vectorize import polygonize
@@ -232,7 +242,14 @@ def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
     names = list(cfg.indices)
     p = params_from_config(cfg.anomaly, names, cfg.time.baseline_year_list, cfg.time.monitor_year)
     values = _stack(st.indices, names)
-    values = values.where(xr.DataArray(st.analysis_mask, dims=("y", "x")))
+    # amplitude_scope "stress_only": high-amplitude pixels are processed too, but only cut
+    # (stand-replacing) detections are kept there (see below). Default "all" = v0.2 behaviour.
+    from .forestmask import FOREST_HIGH_AMPLITUDE
+    amp_px = (st.forest_codes == FOREST_HIGH_AMPLITUDE
+              if cfg.forest_mask.amplitude_scope == "stress_only"
+              else np.zeros(st.forest_codes.shape, bool))
+    detect_mask = st.analysis_mask | amp_px
+    values = values.where(xr.DataArray(detect_mask, dims=("y", "x")))
 
     if cfg.anomaly.normalization.enabled:
         offsets, off = context_offsets(cfg, st, p)
@@ -242,6 +259,8 @@ def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
         offsets = pd.DataFrame({"time": pd.DatetimeIndex(values.time.values)})
 
     feats, z, delta = run_detection(values, p)
+    if amp_px.any():
+        feats, z, delta = keep_only_cuts(feats, z, delta, amp_px)
     min_px = int(np.ceil(cfg.anomaly.min_area_ha * 1e4 / cfg.data.resolution ** 2))
     feats = apply_baseline_exclusion(feats, min_px)
     gdf = polygonize(feats, z, delta, cfg.data.crs, cfg.anomaly.min_area_ha, p.k,
@@ -258,14 +277,42 @@ def detect_stage(cfg: Config, st: IndexStage) -> DetectStage:
     codes[(flag == 1) & ~cut] = STATUS_STRESS
     codes[(flag == 1) & cut] = STATUS_CUT
     codes[np.nan_to_num(feats["baseline_disturbed"].values) > 0] = STATUS_BASELINE_DISTURBED
-    codes[~st.analysis_mask] = STATUS_NOT_ANALYSED
+    codes[~detect_mask] = STATUS_NOT_ANALYSED
+    codes[amp_px & ~((flag == 1) & cut)] = STATUS_NOT_ANALYSED
     codes[st.forest_codes == OUTSIDE_AOI] = OUTSIDE_AOI
     from .targets import build_missions, build_targets
 
     targets = build_targets(cfg, gdf, feats, st.analysis_mask, st.cube.B04.isel(time=0, drop=True))
     missions, targets = build_missions(cfg, targets)
+    edge_tab = None
+    if cfg.diagnostics.forest_edge:
+        gdf, targets, edge_tab = add_edge_attributes(cfg, st, feats, codes, gdf, targets)
     return DetectStage(features=feats, z=z, delta=delta, polygons=gdf, offsets=offsets,
-                       status_codes=codes, targets=targets, missions=missions)
+                       status_codes=codes, targets=targets, missions=missions,
+                       edge_summary=edge_tab)
+
+
+def add_edge_attributes(cfg: Config, st: IndexStage, feats: xr.Dataset, codes: np.ndarray,
+                        gdf: "gpd.GeoDataFrame", targets: "gpd.GeoDataFrame"):
+    """Informative forest-edge attributes (s2forest.edges); detection is not changed."""
+    from .edges import distance_to_open, edge_summary, open_mask, polygon_edge_attributes
+    from .forestmask import FOREST_LINEAR
+
+    dg = cfg.diagnostics
+    tree = forest_mask(st.grid.geobox, cfg.cache_dir / st.grid.key, cfg.forest_mask.source,
+                       dg.edge_tree_classes)
+    if tree is None:
+        tree = np.ones(codes.shape, bool)
+    cut_base = np.isfinite(feats["baseline_cut_year"].values)
+    open_px = open_mask(tree, st.forest_codes == FOREST_LINEAR, cut_base, codes == STATUS_CUT)
+    dist = distance_to_open(open_px, cfg.data.resolution)
+    tr = st.grid.geobox.affine
+    if len(gdf):
+        gdf = gdf.join(polygon_edge_attributes(gdf, open_px, tr, cfg.data.resolution, dg.edge_near_m))
+    if len(targets):
+        targets = targets.join(polygon_edge_attributes(targets, open_px, tr, cfg.data.resolution,
+                                                       dg.edge_near_m))
+    return gdf, targets, edge_summary(gdf, dist, st.analysis_mask, dg.edge_near_m)
 
 
 def status_summary(polygons: "gpd.GeoDataFrame") -> pd.DataFrame:
@@ -317,6 +364,8 @@ def write_detect_outputs(cfg: Config, st: IndexStage, ds: DetectStage) -> dict[s
     ds.polygons.drop(columns="geometry", errors="ignore").to_csv(tdir / f"suspects_{year}.csv", index=False)
     ds.offsets.to_csv(tdir / "regional_offsets.csv", index=False)
     status_summary(ds.polygons).to_csv(tdir / f"polygon_status_{year}.csv", index=False)
+    if ds.edge_summary is not None:
+        ds.edge_summary.to_csv(tdir / f"edge_diagnostics_{year}.csv", index=False)
 
     from .targets import write_targets
 

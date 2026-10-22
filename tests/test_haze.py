@@ -98,7 +98,8 @@ def test_widespread_haze_on_last_date_is_masked_in_open_cube(base_config):
     spec = [{"date": date(2023, 9, 1)}, {"date": date(2023, 9, 10)},
             {"date": date(2024, 9, 1)}, {"date": date(2024, 9, 10), "hazy": True}]
     src = FakeSource(spec)
-    fetch(base_config, progress=lambda m: None, sources=[src])
+    table = fetch(base_config, progress=lambda m: None, sources=[src])
+    assert (table["status"] == "accepted").all(), table.to_dict("records")  # diagnose failed loads
     base_config.data.min_valid_fraction = 0.0
     cube = open_cube(base_config)
     assert bool(cube.haze_last_obs_scene.values[-1])

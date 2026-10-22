@@ -42,9 +42,12 @@ def test_fetch_caches_filters_and_harmonizes(base_config):
     src = FakeSource(spec)
     table = fetch(base_config, progress=lambda m: None, sources=[src])
     status = dict(zip(table["key"], table["status"]))
+    errors = table.get("error", None)
     assert status == {"20230610_S2a": "accepted", "20230710_S2a": "accepted",
                       "20240610_S2a": "rejected", "20240701_S2a": "accepted",
-                      "20240801_S2a": "accepted"}
+                      "20240801_S2a": "accepted"}, (
+        f"status {status}; errors of failed acquisitions: "
+        f"{dict(zip(table['key'], errors)) if errors is not None else None}")
 
     cube = open_cube(base_config)
     assert cube.sizes["time"] == 4

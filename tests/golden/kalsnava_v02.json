@@ -1,0 +1,270 @@
+{
+ "rasters": {
+  "rasters/anomaly/first_detected_doy_2026.tif": {
+   "sha256": "bc8a18f8957e5ecc7a2febdc1c9b38f132a07ce7769a86d4c388abe16465423f",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/anomaly/max_z_crswir_2026.tif": {
+   "sha256": "4cdb6993a1bded9586f1d4dd583ad440b8eda6c550f7298da19131c6c32a5142",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/anomaly/status_2026.tif": {
+   "sha256": "7f721d98586c25c2f2c046d46064bcd939e2797a84a81a6325b8cec8fb286118",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/anomaly/z_crswir_2026.tif": {
+   "sha256": "7732e820717bb8750e90d190f6ab9e79d9a40c68f8416b361fee4cc4b06ae565",
+   "shape": [
+    16,
+    500,
+    500
+   ]
+  },
+  "rasters/anomaly/z_ndmi_2026.tif": {
+   "sha256": "40fab8ad1de833b53640c444d411de0f8843e6c52fa73cf147bfeef8391ba224",
+   "shape": [
+    16,
+    500,
+    500
+   ]
+  },
+  "rasters/anomaly/z_ndre_2026.tif": {
+   "sha256": "46dccb0a1e111708d65e86a278022d3ab372fe367bd918e7a655a1794f272e53",
+   "shape": [
+    16,
+    500,
+    500
+   ]
+  },
+  "rasters/anomaly/z_ndvi_2026.tif": {
+   "sha256": "ebf711b49db4c2082a532114489f071bf0407e9ef713232d5212cb981ce1e291",
+   "shape": [
+    16,
+    500,
+    500
+   ]
+  },
+  "rasters/forest_mask.tif": {
+   "sha256": "f07cca2731066364bed40e7160627298a5772960a1b725c77e38d2e2e2be92ab",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/crswir_summer_median_2023.tif": {
+   "sha256": "550a45003dd7a7cc253c4a0770f1d51cbabecacea31a605636b49eb8567bc688",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/crswir_summer_median_2024.tif": {
+   "sha256": "9ed5e5e2e38fc87b33895065e4d42c0ec56fa84adfca0dfcfc99013557e1b427",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/crswir_summer_median_2025.tif": {
+   "sha256": "afffe8c6b019674061f7bcba8b6f8fd4861f40cf4cc884985fe7d5e970049ff9",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/crswir_summer_median_2026.tif": {
+   "sha256": "cb793f9ae6c2ae2fa9426d9be078011872649d8ebe2720fb0211743c86a04c85",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/crswir_timeseries.tif": {
+   "sha256": "1b9109deabba4832cc44982e85569f016f6d6201e4989dadc93c406c4b0ef083",
+   "shape": [
+    64,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndmi_summer_median_2023.tif": {
+   "sha256": "dea3fab4c32e08bffdf88add8fb217d76c63858196d14d671003ef8bfb6a7777",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndmi_summer_median_2024.tif": {
+   "sha256": "97afda46d6e5bf625956a6aed1a5d5b85f1ab31c9e1acb381f631e0e1d231748",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndmi_summer_median_2025.tif": {
+   "sha256": "15813641fd5d03d37c62bd67ebc3697feef4dec661800a76e68f370198ed1dd4",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndmi_summer_median_2026.tif": {
+   "sha256": "50cbcf9a43a0189e7c176d667f9204c7568023a39ed7eebadd7c2538c203d721",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndmi_timeseries.tif": {
+   "sha256": "bbfcb34582dc47a4aabc53e60a81553aa6dc551e49fcc2d313e9688b0a6e77e7",
+   "shape": [
+    64,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndre_summer_median_2023.tif": {
+   "sha256": "da8ac52113cfa61bf5d05221971b46e21363d2659015c594105a2e18b61a6bba",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndre_summer_median_2024.tif": {
+   "sha256": "ee6466cd8379a536bd99a1a901c011bb514e709877c5b3186f11da3a9e64b801",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndre_summer_median_2025.tif": {
+   "sha256": "3e1f0eb4a9eb32fce0acd40dc3d56d9d2b5f079f9a4120a5eae886e4fba91fd8",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndre_summer_median_2026.tif": {
+   "sha256": "811d7d628e237410f05a300e1fe29a688ffecdcd6e3c5bbf56170f0698c739cb",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndre_timeseries.tif": {
+   "sha256": "13ff831fe8052e9dae98a50e3c554a53d216ea240d596e9577dac4c9ba07a6e0",
+   "shape": [
+    64,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndvi_summer_median_2023.tif": {
+   "sha256": "cbd87df10cd16620f2e55c8c366912f84e2b57d6015c068887d428bdee94a420",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndvi_summer_median_2024.tif": {
+   "sha256": "2742d651e4cbdf67075aba6b4f05d140529fd0027ccf191e2247158cbab98e04",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndvi_summer_median_2025.tif": {
+   "sha256": "83057990bade17e76a4433ee4da3222f57aa22e54210b6f73511f441e9377244",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndvi_summer_median_2026.tif": {
+   "sha256": "efc7b66259379478c85081a66f841206b0ea84d3b973169890105e30eca3e0ae",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  },
+  "rasters/indices/ndvi_timeseries.tif": {
+   "sha256": "db748a03261989c03e6cee679a7c2262444308c9b8b00af26e34286975ff3d98",
+   "shape": [
+    64,
+    500,
+    500
+   ]
+  },
+  "rasters/ndvi_summer_median_baseline.tif": {
+   "sha256": "5f78488c67681b25966cfce7063f6ffda4b57c53ba538dad07f7126124a4a830",
+   "shape": [
+    1,
+    500,
+    500
+   ]
+  }
+ },
+ "tables": {
+  "drone_missions_2026.csv": {
+   "sha256": "2f43f78bdba5f74b4974d24cb8564c0077472db5e615e3c2fd21fb014542139b"
+  },
+  "drone_targets_2026.csv": {
+   "sha256": "663a849d69ed2d97727a7cd20af2311ad6d6b0c844d6a99012b6ff402013fb8e"
+  },
+  "polygon_status_2026.csv": {
+   "sha256": "38a3ba62c89f8c07a104d28aa7c7ab8b6e8aa98b5fb6aba4ed219c0aaa546916"
+  },
+  "regional_offsets.csv": {
+   "sha256": "28eb738cb0760500e16d30a866b320e4bb2f561f6c82d38d0e6ef08c5d006b69"
+  },
+  "ring_control_2026.csv": {
+   "sha256": "fa37d8a109791b5d5a7c6be9284d9cda9de641fb5d907242450c0f11fb6bb99b"
+  },
+  "suspects_2026.csv": {
+   "sha256": "64e6dad5ed098f22b2e027c091ef384e7ba3b2beb0107f476b1717ae2719674d"
+  }
+ },
+ "vectors": {
+  "drone_missions": {
+   "rows": 10,
+   "sha256": "760ecba030cc60b35733af4c6ec67f12f79696a6699f920450fe8eea0c312e2d"
+  },
+  "drone_targets": {
+   "rows": 46,
+   "sha256": "ecef602d539aaf18edaaf229e8f406518215b56e83d41e730b79254288160662"
+  },
+  "suspects_2026": {
+   "rows": 31,
+   "sha256": "c895c0d172c727c546e2a0e3bfca0748893440f663e641d476a479352bb65769"
+  }
+ }
+}

@@ -221,6 +221,10 @@ pārlidojuma statuss `failed` nevis `accepted`) pilnajā palaišanā neizdodas a
 (`ThreadPoolExecutor`, `fetch.py:287`) [N]. Uzdevums: atkārtot pilno `pytest` palaišanu cilpā,
 noteikt cēloni, labot tā, lai detekcijas rezultāti nemainās.
 
+**Statuss (2026-10-23, RM 3. posms):** kļūme neatkārtojās 120 palaišanās; labots pierādāms defekts — globālais
+`dask.config.set` pavedienos (`fetch.py`); 20/20 pilnas palaišanas zaļas; cēlonis nav pierādīts [N].
+Sk. [RM_3_S2_UZLABOJUMI.md](RM_3_S2_UZLABOJUMI.md) 1.
+
 ## 10. Atsevišķs uzdevums: S2 plūsma (s2forest) izlaida audzi nomainošu izmaiņu jauktā audzē
 
 Konstatēts S1 3b posmā (2026-10-11), tikai lasot s2forest izvadi `output/test_kalsnava/rasters/`.
@@ -236,3 +240,6 @@ s2forest kods **netiek mainīts** (iesaldēts `v0.2-kalsnava`); risināt atsevi�
 - Signāls bija spēcīgs: no 08-11 visos 4 indeksos z ≥ 2,5 (CRSWIR līdz 4,8, NDVI līdz 7,1).
 - Jautājums S2 plūsmai: vai amplitūdas maska jāpiemēro tikai stresa (ne cirtes) noteikšanai, vai audzi
   nomainošām izmaiņām vajadzīgs atsevišķs ceļš bez amplitūdas maskas.
+
+**Statuss (2026-10-23, RM 3. posms):** opcija `forest_mask.amplitude_scope: stress_only` (noklusējums nemainīts).
+Ar to šī vieta ir cirtes poligons #24 (1,25 ha, pirmoreiz 2026-08-11). Sk. [RM_3_S2_UZLABOJUMI.md](RM_3_S2_UZLABOJUMI.md) 3.

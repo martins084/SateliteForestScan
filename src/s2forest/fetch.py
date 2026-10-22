@@ -28,7 +28,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-import dask
 import numpy as np
 import pandas as pd
 import rioxarray  # noqa: F401  (registers .rio accessor)
@@ -183,7 +182,7 @@ def _load_harmonized(acq: Acquisition, src: DataSource, gbox: GeoBox, refl_rs: s
     layers = []
     for s in acq.scenes:
         raw = _retry(lambda s=s: src.load(s, REFLECTANCE_BANDS + [SCL_BAND], gbox, refl_rs,
-                                          scl_rs).compute())
+                                          scl_rs).compute(scheduler="synchronous"))
         layer = xr.Dataset({SCL_BAND: raw[SCL_BAND]})
         for b in REFLECTANCE_BANDS:
             refl = harmonize(raw[b], s.scale, s.offset)
@@ -201,7 +200,10 @@ def _write_store(ds: xr.Dataset, path: Path, attrs: dict) -> None:
     if tmp.exists():
         shutil.rmtree(tmp)
     ds = ds.drop_vars([c for c in ds.coords if c not in ("x", "y")], errors="ignore")
-    ds.chunk({"x": 1024, "y": 1024}).to_zarr(tmp, mode="w", consolidated=False)
+    # explicit per-call scheduler: this runs in worker threads (see fetch), where a global
+    # dask.config.set is not thread-safe
+    ds.chunk({"x": 1024, "y": 1024}).to_zarr(tmp, mode="w", consolidated=False,
+                                             compute=False).compute(scheduler="synchronous")
     if path.exists():
         shutil.rmtree(path)
     tmp.rename(path)
@@ -227,21 +229,23 @@ def fetch_acquisition(acq: Acquisition, src: DataSource, grid: Grid, cfg: Config
         "cloud_cover": s0.cloud_cover,
     }
 
-    with dask.config.set(scheduler="synchronous"):
-        scl_layers = [
-            _retry(lambda s=s: src.load(s, [SCL_BAND], grid.geobox).compute()) for s in acq.scenes
-        ]
-        scl = _fuse(scl_layers)[SCL_BAND]
-        vf = float(valid_fraction(valid_mask(scl, m.invalid_scl, buffer_px), grid.aoi_mask))
-        entry["valid_fraction"] = round(vf, 4)
-        if vf < cfg.data.min_valid_fraction:
-            entry["status"] = "rejected"
-            return entry
+    # Scheduler chosen per call (not a global dask.config.set): this runs in worker threads,
+    # and the global dask config is shared by all threads.
+    scl_layers = [
+        _retry(lambda s=s: src.load(s, [SCL_BAND], grid.geobox).compute(scheduler="synchronous"))
+        for s in acq.scenes
+    ]
+    scl = _fuse(scl_layers)[SCL_BAND]
+    vf = float(valid_fraction(valid_mask(scl, m.invalid_scl, buffer_px), grid.aoi_mask))
+    entry["valid_fraction"] = round(vf, 4)
+    if vf < cfg.data.min_valid_fraction:
+        entry["status"] = "rejected"
+        return entry
 
-        aoi_ds = _load_harmonized(acq, src, grid.geobox, cfg.data.reflectance_resampling, "nearest")
-        ctx_ds = None
-        if grid.context is not None:
-            ctx_ds = _load_harmonized(acq, src, grid.context, "average", "mode")
+    aoi_ds = _load_harmonized(acq, src, grid.geobox, cfg.data.reflectance_resampling, "nearest")
+    ctx_ds = None
+    if grid.context is not None:
+        ctx_ds = _load_harmonized(acq, src, grid.context, "average", "mode")
 
     if ctx_ds is not None:
         _write_store(ctx_ds, cache.store_path(acq.key, context=True), entry)

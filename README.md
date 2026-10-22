@@ -42,6 +42,19 @@ svari. Pilns saraksts: `docs/PROJEKTA_APRAKSTS.md`, 22. sadaļa.
 **Atļautas izmaiņas** (nemaina detekciju): informatīvi atribūti (piem., nogabalu
 dati), atskaites, lauka pārbaudes rīki, kļūdu labojumi, kas neietekmē rezultātus.
 
+**Zelta regresijas tests** (`tests/test_golden_kalsnava.py`, marķieris `golden`, ~6 min, vajag lokālo
+kešu): ar `v0.2-kalsnava` konfigurāciju pašreizējam kodam jāiegūst baitu līmenī identiski poligoni,
+drona mērķi, rastri un tabulas kā taga kodam (`tests/golden/kalsnava_v02.json`,
+`scripts/golden_s2forest.py`). Palaišana: `python -m uv run pytest -m golden`.
+
+**Jaunas opcijas (izslēgtas pēc noklusējuma, v0.2 izvade nemainās):**
+
+- `forest_mask.amplitude_scope: stress_only` — amplitūdas maskas (kods 5) pikseļos analizē tikai
+  cirtes (audzi nomainošas izmaiņas); stresa signāli tur paliek neanalizēti. Noklusējums `all` = v0.2.
+- `diagnostics.forest_edge: true` — informatīvi atribūti `edge_dist_m` (attālums līdz atklātai vietai:
+  ne HRL koku klase, ceļa buferis, bāzes vai monitoringa gada cirte) un `edge_share_20m` poligoniem un
+  drona mērķiem + tabula `tables/edge_diagnostics_<gads>.csv`.
+
 ## Uzstādīšana
 
 Nepieciešams: Windows / Linux / macOS, interneta pieslēgums datu ieguvei.
@@ -92,6 +105,20 @@ python -m uv run s2forest stands   configs/test_kalsnava.yaml   # nogabalu atrib
 python -m uv run s2forest field-prepare configs/test_kalsnava.yaml --id 25 --id 26 --id 31   # lauka pārbaudes pakete
 python -m uv run s2forest field-import  configs/test_kalsnava.yaml lauka_veidlapa_2026.csv   # aizpildītās veidlapas ielasīšana
 ```
+
+Ortofoto galda pārbaude (QGIS, bez attēlu lejupielādes):
+
+```bash
+python -m uv run s2forest desk-prepare configs/test_kalsnava.yaml   # desk_check/: GPKG, QGIS projekts, CSV veidlapa
+python -m uv run s2forest desk-import  configs/test_kalsnava.yaml galda_veidlapa_2026.csv   # marķējuma ielasīšana
+```
+
+`desk_check_<gads>.qgs` satur poligonus un drona mērķus (`merka_id`: `P<id>` / `D<target_id>`) un — ja
+konfigurācijā norādīts `desk_check.wms_url` / `wms_layers` — LĢIA ortofoto WMS slāni bez lietotājvārda un
+paroles (tos ievada QGIS autentifikācijā pēc LĢIA licences). Rīks pats WMS neizsauc un attēlus nesaglabā.
+Vērtējumi: `koki_stav`, `koki_gulus`, `izcirsts`, `nav_skaidrs`; to var aizpildīt CSV vai QGIS atribūtu
+formā (GPKG laukā `vertejums`) — `desk-import` pieņem abus. Projekts pārbaudīts QGIS 3.44 bez GUI (slāņi
+derīgi, CRS EPSG:3059, vērtību saraksts, labojums → `desk-import`); interaktīvi vēl nav lietots.
 
 Lauka pārbaudes instrukcija: [`docs/LAUKA_PARBAUDE.md`](docs/LAUKA_PARBAUDE.md).
 

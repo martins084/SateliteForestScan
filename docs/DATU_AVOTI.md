@@ -31,6 +31,17 @@ detaļas — [RM_1_DATU_PARBAUDE.md](RM_1_DATU_PARBAUDE.md). **[P]** = pārbaud�
 | **PHENIPS (oriģināls)** | **slēgta piekļuve** [P: OpenAlex `is_oa: False`] | Baier, Pennerstorfer, Schopf (2007) For. Ecol. Manage. 249:171–186, doi:10.1016/j.foreco.2007.05.020 | vērtības tikai caur atvērtiem sekundāriem avotiem (Ogris 2020) |
 | **SPEI metode** | raksts „bronze OA“ (OpenAlex), PDF lejupielāde atgrieza HTTP 403 [P] | Vicente-Serrano u. c. (2010) J. Climate 23(7), doi:10.1175/2009JCLI2909.1 | kā norādīts |
 
+## Pārbaudīti 3. posmā (2026-10-22/23)
+
+| Avots | Licence | Versija / DOI | Atsauce |
+|---|---|---|---|
+| **HRL Water & Wetness 2018** (EEA ImageServer `GioLandPublic/HRL_WaterWetness_2018`, `exportImage`; lietotāja rokasgrāmata `land.copernicus.eu/en/technical-library/hrl-water-wetness-2018-user-manual`) | Copernicus Land Monitoring Service [N: datu politikas / licences teksts nav atvērts] | 2018, 10 m, U8 [P: servisa metadati]; klases 0 sauss, 1 pastāvīgs ūdens, 2 īslaicīgs ūdens, 3 pastāvīgi mitrs, 4 īslaicīgi mitrs [P: rokasgrāmata] | Copernicus Land Monitoring Service [N: precīzs atsauces teksts] |
+
+Kalsnavas tests [P] (`cache/rm_test/hrl_waw2018_kalsnava.tif`, 296 kB, nav git): 97,3 % sauss, 1,8 % īslaicīgi mitrs,
+0,9 % pastāvīgs ūdens. Slānis ir kategorisks un gandrīz viss AOI ir „sauss“ → kā TWI aizstājējs vājš.
+Nepārtrauktais mitruma indekss (WWPI) atrasts tikai kā 2015. g. serviss bez metadatiem → netiek izmantots.
+Ieteikums 4. posmam: slīpums + TPI no LĢIA DTM; WAW mitro klašu (3, 4) īpatsvars šūnā — tikai kā papildu pazīme.
+
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 
 | Pakotne | Versija (PyPI) | Licence [P] |

@@ -1,0 +1,56 @@
+# Golden regression config: identical to configs/test_kalsnava.yaml at tag v0.2-kalsnava (paths relative to tests/golden/).
+# Provisional test area (5 x 5 km, ~65 % coniferous by HRL DLT 2018) near Kalsnava,
+# used until the LVM test area is available.
+run_name: golden_current
+aoi: ../../data/test_aoi_kalsnava.geojson
+output_dir: ../../output/golden
+cache_dir: ../../cache
+
+time:
+  monitor_year: 2026
+  baseline_years: 3
+  season_start: "05-01"
+  season_end: "09-30"
+
+data:
+  sources:
+    - {name: earthsearch, collection: sentinel-2-c1-l2a}
+    - {name: planetary, collection: sentinel-2-l2a}
+  crs: EPSG:3059
+  resolution: 10
+  max_scene_cloud_cover: 95
+  min_valid_fraction: 0.6
+  workers: 4
+
+masking:
+  invalid_scl: [0, 1, 3, 8, 9, 10, 11]
+  cloud_buffer_m: 20
+
+forest_mask:
+  source: hrl_dlt_2018
+  classes: [2]
+
+indices: [ndvi, ndre, ndmi, crswir]
+
+anomaly:
+  z_threshold: 2.5
+  persistence: 2
+  doy_window: 30
+  min_baseline_obs: 5
+  primary_index: crswir
+  min_confirming: 1
+  min_area_ha: 0.1
+  normalization:
+    enabled: true
+    buffer_m: 5000
+
+# DEMO references (scripts/make_demo_references.py): synthetic, built from the
+# tool's own cut detections - they exercise the validation module only and say
+# nothing about accuracy. Replace with LVM sanitary-cut data when available.
+reference:
+  path: ../../data/local/test_kalsnava_demo_references.gpkg
+  id_field: nr
+  date_field: cirtes_datums
+  reason_field: iemesls
+  reason_values: ["sanitārā cirte (DEMO)"]
+  description: "DEMO: sintētiskas references no rīka paša 2026. gada cirtēm. Pārbauda tikai moduļa darbību, neko neliecina par precizitāti."

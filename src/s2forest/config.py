@@ -145,6 +145,11 @@ class ForestMaskConfig(BaseModel):
     # median + 3 robust sd = 0.21 (baseline 2022-24) / 0.22 (2023-25).
     seasonal_range_index: str = "ndvi"
     max_seasonal_range: float | None = 0.22
+    # Scope of the seasonal-range (amplitude) exclusion. "all" (default, = v0.2-kalsnava):
+    # excluded pixels are not analysed at all. "stress_only": they are still not used for
+    # STRESS, but stand-replacing change (cut signature) is detected there too, so cuts in
+    # mixed stands are not missed (S1_INVENTARIZACIJA.md, section 10).
+    amplitude_scope: Literal["all", "stress_only"] = "all"
     summer_start: str = "06-01"  # MM-DD
     summer_end: str = "08-31"
 
@@ -263,6 +268,25 @@ class TargetsConfig(BaseModel):
     max_missions: int = 10             # missions exported (by priority)
 
 
+class DiagnosticsConfig(BaseModel):
+    """Optional, informative diagnostics (do not change detection). Defaults keep the
+    v0.2-kalsnava outputs unchanged."""
+    # forest-edge attributes `edge_dist_m`, `edge_share_20m` on polygons / drone targets and
+    # tables/edge_diagnostics_<year>.csv (s2forest.edges)
+    forest_edge: bool = False
+    edge_tree_classes: list[int] = Field(default_factory=lambda: [1, 2])   # HRL DLT tree cover
+    edge_near_m: float = 20.0
+
+
+class DeskCheckConfig(BaseModel):
+    """Orthophoto desk check (s2forest.deskcheck). The WMS URL / layer names are entered here
+    after obtaining access (LĢIA licence); credentials are never stored in the project."""
+    wms_url: str | None = None
+    wms_layers: str | None = None
+    wms_crs: str = "EPSG:3059"
+    wms_format: str = "image/jpeg"
+
+
 class Config(BaseModel):
     run_name: str
     aoi: Path
@@ -278,6 +302,8 @@ class Config(BaseModel):
     targets: TargetsConfig = Field(default_factory=TargetsConfig)
     stands: StandsConfig = Field(default_factory=StandsConfig)
     reference: ReferenceConfig = Field(default_factory=ReferenceConfig)
+    diagnostics: DiagnosticsConfig = Field(default_factory=DiagnosticsConfig)
+    desk_check: DeskCheckConfig = Field(default_factory=DeskCheckConfig)
 
     @model_validator(mode="after")
     def _check_primary(self) -> "Config":
