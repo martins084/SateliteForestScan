@@ -66,6 +66,8 @@ def method_lines(cfg: Config) -> list[str]:
         + (f"; izslēgts, ja bāzes vasaras NDVI < {f(fm.min_summer_ndvi)}" if fm.min_summer_ndvi is not None else "")
         + (f"; izslēgts, ja bāzes {fm.seasonal_range_index.upper()} sezonālais diapazons (p90−p10) > "
            f"{f(fm.max_seasonal_range)}" if fm.max_seasonal_range is not None else "")
+        + ("" if fm.amplitude_scope == "all" else
+           " (amplitūdas izslēgšana attiecas tikai uz stresu; cirtes nosaka arī šajos pikseļos)")
         + (f"; izslēgts ≤ {lf.buffer_m:.0f} m no OSM ceļiem" if lf.enabled else "; ceļu maska izslēgta")
         + ".",
     ]

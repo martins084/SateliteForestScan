@@ -393,6 +393,52 @@ def field_import(config: Path = ConfigArg,
                "id_field: merka_id, reason_field: secinajums, reason_values: [mizgrauzi]")
 
 
+@app.command("desk-prepare")
+def desk_prepare(config: Path = ConfigArg, verbose: bool = VerboseOpt):
+    """Orthophoto desk check: GPKG of suspects / drone targets, CSV marking form and a QGIS
+    project (WMS layer only if desk_check.wms_url is set; no images are fetched or saved)."""
+    from .deskcheck import prepare
+
+    cfg = _setup(config, verbose)
+    out = prepare(cfg, cfg.run_dir / "desk_check")
+    for k, v in out.items():
+        typer.echo(f"{k}: {v}")
+    if not cfg.desk_check.wms_url:
+        typer.echo("WMS URL nav norādīts (desk_check.wms_url): ortofoto slāni pievienojiet QGIS "
+                   "pēc LĢIA licences.")
+
+
+@app.command("desk-import")
+def desk_import(config: Path = ConfigArg,
+                form: Path = typer.Argument(..., exists=True, dir_okay=False,
+                                            help="filled marking form (CSV) or edited desk_check GPKG"),
+                verbose: bool = VerboseOpt):
+    """Read the desk-check marking -> detector class vs. desk verdict."""
+    import geopandas as gpd
+
+    from .deskcheck import read_form, results
+
+    cfg = _setup(config, verbose)
+    year = cfg.time.monitor_year
+    ddir = cfg.run_dir / "desk_check"
+    df, problems = read_form(form)
+    for p in problems:
+        typer.echo(f"PROBLĒMA: {p}", err=True)
+    if problems:
+        raise typer.Exit(code=1)
+    g = ddir / f"desk_check_{year}.gpkg"
+    sus = gpd.read_file(g, layer="suspects")
+    try:
+        tg = gpd.read_file(g, layer="targets")
+    except Exception:  # noqa: BLE001
+        tg = None
+    rows, tab = results(df, sus, tg)
+    rows.to_csv(ddir / f"desk_check_results_{year}.csv", index=False)
+    tab.to_csv(ddir / f"desk_check_crosstab_{year}.csv")
+    typer.echo("Detektora klase (rinda) pret galda vērtējumu (kolonna):")
+    typer.echo(tab.to_string())
+
+
 @app.command()
 def report(config: Path = ConfigArg, verbose: bool = VerboseOpt):
     """Single-file HTML report (Latvian); figures also saved as 200 dpi PNG."""

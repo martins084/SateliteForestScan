@@ -1,0 +1,40 @@
+Subject: EFDA v3.0.0 (Zenodo 10.5281/zenodo.21722408): Latvia.zip and Lithuania.zip appear to be swapped
+
+Dear Dr. Viana-Soto, dear Dr. Senf,
+
+Thank you for publishing the European Forest Disturbance Atlas. While testing version 3.0.0
+(Zenodo record 21722408, published 2026-09-13, DOI 10.5281/zenodo.21722408) for a forest-risk
+project in Latvia, we noticed that the country archives for Latvia and Lithuania appear to contain
+each other's data.
+
+Files concerned (EFDA v3.0.0):
+  - Latvia.zip     (649.6 MB), e.g. forestlanduse_mask_latvia_v30.tif
+  - Lithuania.zip  (971.8 MB), e.g. forestlanduse_mask_lithuania_v30.tif
+
+Observed raster extents (EPSG:3035 bounds transformed to WGS84 corners):
+  - forestlanduse_mask_latvia_v30.tif (from Latvia.zip):
+      EPSG:3035 bounds left 5007397.9, bottom 3507310.4, right 5379847.9, top 3800200.4
+      approx. 21.28 E / 56.82 N (NW corner) to 26.15 E / 53.60 N (SE corner)
+      -> latitude range ~53.6-56.8 N, i.e. Lithuania; Riga (56.95 N) lies north of the raster.
+  - forestlanduse_mask_lithuania_v30.tif (from Lithuania.zip):
+      approx. 21.56 E / 58.46 N (NW corner) to 27.78 E / 55.30 N (SE corner)
+      -> latitude range ~55.3-58.5 N, i.e. Latvia.
+  - For comparison, v2.1.1 (Zenodo 10.5281/zenodo.13333034) latvia.zip / forest_mask_latvia.tif:
+      approx. 21.19 E / 58.73 N to 27.85 E / 55.05 N, i.e. Latvia (as expected).
+
+How it was checked:
+  1. Single GeoTIFF members were extracted from the remote zip archives (HTTP range requests,
+     Python zipfile) and opened with rasterio; bounds were transformed to WGS84 with pyproj.
+  2. A 5 x 5 km test area in central Latvia (Kalsnava, approx. 25.83-25.91 E, 56.65-56.70 N)
+     falls completely outside the Latvia.zip rasters (rasterio mask: "Input shapes do not overlap
+     raster") but is fully covered by forestlanduse_mask_lithuania_v30.tif from Lithuania.zip
+     (25,863 forest pixels) and by forest_mask_latvia.tif from v2.1.1 (25,857 forest pixels).
+  3. The layers checked from Latvia.zip were disturbance_agent_aggregated, latest_disturbance and
+     forestlanduse_mask; from Lithuania.zip forestlanduse_mask, disturbance_agent_aggregated and
+     latest_disturbance. All show the same pattern. We did not check other countries.
+
+The file names inside each archive (_latvia_v30 / _lithuania_v30) match the archive names, so the
+swap seems to have happened when the country rasters were named or packed.
+
+Best regards,
+[name, affiliation]
