@@ -341,6 +341,13 @@ Salīdzinājums ar CSP MEZ012 „vienlaidus” cirtēm 2014–2024 (Latvija kop�
   - Pēc sanitārās cirtes bojājuma iemesls (mizgrauži vai vējš) nav redzams. Iemeslu var redzēt tikai `BV`
     stāvošām audzēm.
   - Vēsturisku momentuzņēmumu arhīvs data.gov.lv nav atrasts [N].
+- **Atjaunināts 5a posmā [P]:**
+  - visas 5 virsmežniecības nolasītas pilnībā (26/26 nodaļas, 3 063 409 nogabali);
+  - `P_CIRP = 31` platība valstī ir 0,84–1,06 no CSP visu īpašnieku sanitāro vienlaidus ciršu platības;
+  - MVR satur arī LVM zemi;
+  - Kalsnavas Meža pētīšanas stacijas mežu MVR praktiski nav.
+
+  Sk. `RM_5a_LVM_BOJAJUMI.md`.
   - Pēc noklusējuma 7z vajag 7-Zip. Lauku pārbaudei izmantots Windows iebūvētais `tar.exe` (libarchive), jauna
     atkarība nav pievienota.
 

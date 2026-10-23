@@ -266,3 +266,134 @@ def all_figures(cfg, fdir: Path, regions, counts, cross, p, grid, forest_cells, 
     if kal is not None:
         out["kalsnava"] = kalsnava_fig(kal[0], fdir / "rm5_kalsnava.png")
     return out
+
+
+# --- stage 5a: LVM open damage polygons ------------------------------------------------------
+
+def lvm_annual(cmp: pd.DataFrame, ann: pd.DataFrame, path: Path) -> Path:
+    """LVM registered stem pests / wind vs CSP MEB012 state-forest stem-pest damage."""
+    fig, axes = plt.subplots(2, 1, figsize=(9, 6), dpi=200, sharex=True)
+    ax = axes[0]
+    for code, col, lab in ((620, S2, "LVM: stumbra kaitēkļi (620)"), (100, S1, "LVM: vējgāze, snieglauze (100)")):
+        s = ann[ann.subtype == code].set_index("year")["ha"]
+        s = s[s.index.to_series().between(2008, 2024)]
+        ax.plot(s.index, s.values, color=col, marker="o", ms=3, label=lab)
+    ax.plot(cmp.index, cmp["csp_state_dead_stands_ha"], color=INK2, marker="s", ms=3, ls="--",
+            label="CSP MEB012 valsts meži: bojā aizgājušās audzes, stumbra kaitēkļi")
+    ax.set_title("Reģistrētā bojājumu platība, ha gadā (LVM pēc reģistrācijas gada)", loc="left")
+    ax.legend(loc="upper left", fontsize=7)
+    ax.set_ylim(0, None)
+    ax = axes[1]
+    ax.plot(cmp.index, cmp["lvm_n"], color=S2, marker="o", ms=3, label="LVM 620 poligonu skaits")
+    ax.set_ylabel("poligoni")
+    ax.set_title("LVM 620: poligonu skaits gadā (2025 – tikai līdz arhīva datumam 2025-04-27)", loc="left")
+    ax.set_ylim(0, None)
+    ax.set_xlim(2007.5, 2025.5)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def lvm_sizes(g, path: Path) -> Path:
+    fig, axes = plt.subplots(1, 2, figsize=(9, 3.4), dpi=200)
+    bins = np.logspace(-2, 2, 41)
+    for code, col, lab in ((620, S2, "620 stumbra kaitēkļi"), (100, S1, "100 vējgāze, snieglauze")):
+        x = g[(g.subtype == code) & ~g["empty"]].ha
+        axes[0].hist(x, bins=bins, color=col, alpha=0.6, label=f"{lab} (n={len(x):,})")
+    axes[0].set_xscale("log")
+    axes[0].axvline(0.5, color=INK2, ls=":", lw=1)
+    axes[0].set_xlabel("poligona platība, ha (log)")
+    axes[0].set_title("Poligonu izmērs", loc="left")
+    axes[0].legend(fontsize=7)
+    x = g[(g.subtype == 620) & ~g["empty"] & g.year.between(2013, 2025)]
+    q = x.groupby("year").ha.quantile([0.25, 0.5, 0.75]).unstack()
+    axes[1].fill_between(q.index.astype(int), q[0.25], q[0.75], color=S2, alpha=0.25, lw=0)
+    axes[1].plot(q.index.astype(int), q[0.5], color=S2, marker="o", ms=3)
+    axes[1].set_title("620: mediāna un kvartiles pa gadiem, ha", loc="left")
+    axes[1].set_ylim(0, None)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def lvm_regions(regions, reg: pd.DataFrame, m11: pd.DataFrame, path: Path, years=(2023, 2024)) -> Path:
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.9), dpi=200, gridspec_kw={"width_ratios": [1.3, 1]})
+    rate = 1000 * reg[list(years)].sum(axis=1) / reg["lvm_land_ha"] / len(years)
+    r = regions.merge(rate.rename("rate"), left_on="NAME_LATN", right_index=True)
+    r.plot(ax=axes[0], column="rate", cmap=SEQ, vmin=0, linewidth=0.5, edgecolor=INK2, legend=True,
+           legend_kwds={"shrink": 0.7, "label": "ha gadā uz 1000 ha LVM zemes"})
+    for _, row in r.iterrows():
+        p = row.geometry.representative_point()
+        axes[0].annotate(f"{row.NAME_LATN}\n{row.rate:.1f}", (p.x, p.y), ha="center", fontsize=7, color=INK)
+    axes[0].set_axis_off()
+    axes[0].set_title(f"LVM 620, {years[0]}–{years[-1]}", loc="left")
+    ax = axes[1]
+    d = m11.dropna(subset=["lvm_ha", "csp_state_dead_stands_ha"])
+    for yr, mk in zip(sorted(d.year.unique()), "os^D"):
+        x = d[d.year == yr]
+        ax.scatter(x["csp_state_dead_stands_ha"], x["lvm_ha"], marker=mk, s=30, color=S2, edgecolor=SURF,
+                   label=str(yr), zorder=3)
+    rho = d["csp_state_dead_stands_ha"].corr(d["lvm_ha"], method="spearman")
+    ax.set_xlabel("CSP MEB011 valsts meži: bojā aizgājušās audzes, ha")
+    ax.set_ylabel("LVM 620, ha")
+    ax.set_title(f"Reģions × gads, Spīrmena ρ = {rho:.2f} (n={len(d)})", loc="left", fontsize=8)
+    ax.legend(fontsize=7)
+    fig.text(0.01, 0.01, "Robežas: © EuroGeographics for the administrative boundaries (GISCO NUTS 2024)",
+             fontsize=6, color=INK2)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def lvm_timing(t: pd.DataFrame, path: Path) -> Path:
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), dpi=200, sharey=True)
+    cols = {-1: INK2, 0: S1, 1: S2, 2: S3}
+    for off, col in cols.items():
+        x = t[t.offset == off].set_index("reg_year")
+        axes[0].plot(x.index, 100 * x["harvest"], color=col, marker="o", ms=3, label=f"r{off:+d}" if off else "r")
+    b = t[t.offset == 0].set_index("reg_year")
+    axes[0].plot(b.index, 100 * b["base_harvest"], color=INK, ls=":", lw=1.2, label="bāze: visa LVM meža zeme (gads r)")
+    axes[0].set_title("EFDA v3.0 cirte LVM 620 poligonos, % pikseļu", loc="left")
+    axes[0].set_xlabel("reģistrācijas gads r")
+    axes[0].legend(fontsize=7, title="EFDA gads", title_fontsize=7)
+    s = t[t.reg_year.between(2019, 2022)].groupby("offset")[["harvest", "class1", "any"]].mean()
+    w = 0.25
+    for i, (k, col, lab) in enumerate((("harvest", S1, "klase 3"), ("class1", S2, "klase 1"), ("any", INK2, "jebkurš"))):
+        axes[1].bar(s.index + (i - 1) * w, 100 * s[k], width=w, color=col, label=lab)
+    axes[1].set_xticks(s.index, [f"r{o:+d}" if o else "r" for o in s.index])
+    axes[1].set_title("Vidēji reģistrācijas gadiem 2019–2022", loc="left")
+    axes[1].legend(fontsize=7)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def lvm_kalsnava(aoi, layers: dict, path: Path) -> Path:
+    """Owner / data coverage in the Kalsnava AOI with s2forest polygons on top."""
+    fig, ax = plt.subplots(figsize=(6.4, 6.4), dpi=200)
+    aoi.boundary.plot(ax=ax, color=INK, lw=1)
+    style = {"MPS nogabali": dict(color="#cde2fb", lw=0), "LVM zeme": dict(color="#86b6ef", lw=0),
+             "MVR nogabali": dict(color="#f6c9b0", lw=0), "LVM bojājumi": dict(color=S2, lw=0)}
+    handles = []
+    for name, g in layers.items():
+        if name in style and len(g):
+            g.plot(ax=ax, **style[name])
+            handles.append(plt.Rectangle((0, 0), 1, 1, color=style[name]["color"], label=f"{name}"))
+    for lab, col in (("s2forest cirtes 2025+2026", INK2), ("s2forest stress 2025+2026", "#d03b3b")):
+        g = layers.get(lab)
+        if g is not None and len(g):
+            g.boundary.plot(ax=ax, color=col, lw=0.6)
+            handles.append(plt.Line2D([], [], color=col, label=lab))
+    b = aoi.total_bounds
+    ax.set_xlim(b[0], b[2]); ax.set_ylim(b[1], b[3])
+    ax.set_axis_off()
+    ax.legend(handles=handles, loc="lower left", fontsize=7, frameon=True, framealpha=0.9)
+    ax.set_title("Kalsnavas AOI: kuru datu kopa aptver mežu", loc="left")
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path

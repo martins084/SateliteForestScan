@@ -368,3 +368,21 @@ kur tie atšķiras; iepriekšējais teksts paliek nemainīts kā vēsture.
 - **CSP MEB011** (reģioni, 2021–2025): agregēta validācija. Vai modeļa vidējais risks reģionā korelē ar oficiālajiem
   bojājumiem? Tikai aprakstoši, jo n ir mazs.
 - **L6 (pārdēvēšana par vējgāžu modeli) vairs nav aktuāls.**
+
+## 2.16 LVM atvērtie bojājumu dati kā etiķetes (lietotājs, 2026-10-23)
+
+Galvenais etiķešu avots valsts mežiem ir **LVM_BOJAJUMI** (CC0). Pašreizējā publikācijas vieta nav atrasta, tāpēc
+izmanto Internet Archive kopiju no 2025-05-03; proveniences dati un sha256 ir `DATU_AVOTI.md`. Faili paliek `cache/`.
+Apraksts un pārbaudes: `docs/RM_5a_LVM_BOJAJUMI.md`.
+
+- **Pozitīvie:** stumbra kaitēkļi (`DAMAGESUBT = 620`) pēc reģistrācijas gada (`DISTRBYEAR`).
+- **Negatīvie = „nav reģistrēts”** (positive-unlabeled). Tāpēc modeli vērtē kā rangu (PR-AUC, lift top 5/10 %), nevis
+  kā absolūtu varbūtību. Kalibrāciju (L5) interpretē tikai relatīvi.
+- **Reģistrācijas gads ≠ uzbrukuma gads.** Laika saikne pārbaudīta empīriski RM_5a 2. sadaļā: EFDA cirte šajos
+  poligonos visbiežāk ir gadā r+1 un r+2. Gada noteikums paliek parametrs.
+- **Tikai valsts meži.** Analīzes kopa = **LVM zemes vienības** (`LVM_ZEMES_VIENIBAS`, Wayback 2025-04-21,
+  1,61 milj. ha) ∩ EFDA meža maska. 99,1 % LVM bojājumu poligonu reprezentatīvo punktu ir LVM zemes vienībās [P].
+- **MVR `P_CIRP = 31` ar `BV` 621/625** ir papildu etiķete privātajiem mežiem.
+  - Ierobežojumi: tikai pēdējā cirte nogabalā (momentuzņēmums); pēc cirtes iemesls nav redzams.
+  - **[P] MVR satur arī LVM zemi**, tāpēc privāto mežu etiķetēm MVR nogabalus ņem **ārpus** LVM zemes vienībām.
+  - Kalsnavas MPS mežu MVR praktiski nav (RM_5a 3. sadaļa).
