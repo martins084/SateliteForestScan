@@ -386,3 +386,16 @@ Apraksts un pārbaudes: `docs/RM_5a_LVM_BOJAJUMI.md`.
   - Ierobežojumi: tikai pēdējā cirte nogabalā (momentuzņēmums); pēc cirtes iemesls nav redzams.
   - **[P] MVR satur arī LVM zemi**, tāpēc privāto mežu etiķetēm MVR nogabalus ņem **ārpus** LVM zemes vienībām.
   - Kalsnavas MPS mežu MVR praktiski nav (RM_5a 3. sadaļa).
+
+## 2.17 Kalsnava un 5b posms — s2forest aklā validācija uz LVM zemes (lietotājs, 2026-10-23)
+
+- **Kalsnava = LBTU Meža pētīšanas stacijas (MPS) mežs** (RM_5a 3. sadaļa). Kalsnavas validācijai vajag MPS sanitāro
+  ciršu datus (datums, iemesls); tos pieprasīs lietotājs. Līdz tam Kalsnava ir **demonstrācijas AOI**.
+- **5b posms (pirms 4. posma):** s2forest iesaldētā v0.2 konfigurācija uz jauna 5 × 5 km AOI LVM zemē, monitoringa gadi
+  2023 un 2024; mainās tikai AOI un gadi. Validācija pret LVM 620 un citiem bojājumu veidiem: detekcija pēc objekta
+  (r−1, r, r+1), „neapstiprināti” poligoni, laika nobīde, placebo (100 permutācijas), ar un bez `stress_only`
+  (informatīvi). Rezultāts: `docs/RM_5b_S2_VALIDACIJA_LVM.md`.
+  - AOI kritēriji: ≥ 80 % LVM zeme; HRL skujkoki ≥ 50 %; ≥ 30 LVM 620 poligoni ≥ 0,5 ha (2023–2024); pēc iespējas
+    Vidzemē, tuvu Kalsnavai. AOI izvēlas lietotājs no 3 kandidātiem.
+- **Nosaukums:** L7 „5b (sausuma salīdzinājums)” turpmāk ir **„sausuma salīdzinājums”** pēc 4. posma; „5b” ir šis
+  validācijas posms. Secība: 5a → 5b → 4 → sausuma salīdzinājums → 6 → 7 → 8.

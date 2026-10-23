@@ -71,6 +71,17 @@ class S2Run(BaseModel):
     path: Path
 
 
+class AoiCriteria(BaseModel):
+    """Stage 5b: criteria for a 5 x 5 km s2forest validation AOI on LVM land (user, 2026-10-23)."""
+    min_lvm_share: float = 0.8       # LVM land units / cell area
+    min_conifer_share: float = 0.5   # HRL DLT 2018 conifer / tree cover (as ConiferConfig.min_share)
+    min_targets: int = 30            # stem-pest polygons >= LvmConfig.min_target_ha, registered in `years`
+    years: tuple[int, int] = (2023, 2024)
+    prefer_region: str = "Vidzeme"   # NUTS 2024 region name (NAME_LATN)
+    top_cells: int = 10              # choose among the densest target cells
+    n_candidates: int = 3
+
+
 class LvmConfig(BaseModel):
     """Stage 5a: LVM open damage polygons (CC0, state forest) as labels; Internet Archive copies
     while the LVM PublicData server is down (provenance in docs/DATU_AVOTI.md)."""
@@ -89,6 +100,7 @@ class LvmConfig(BaseModel):
     mvr_kalsnava: Path | None = None   # MVR shapefile (extracted district) covering the Kalsnava AOI
     mps: Path | None = None            # "Meža pētīšanas stacija" compartments zip (owner check)
     mps_member: str = "MEZA_PETISANAS_STACIJA_NOGABALI_Shape.shp"
+    aoi: AoiCriteria = Field(default_factory=AoiCriteria)
 
 
 class RiskConfig(BaseModel):

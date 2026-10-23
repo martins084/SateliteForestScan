@@ -151,6 +151,49 @@ def harvest_check(config: Path = ConfigArg):
     _metadata(cfg, "harvest_check", {"mez012_types": str(cfg.stats.mez012_types)})
 
 
+@app.command("lvm-aoi")
+def lvm_aoi(config: Path = ConfigArg):
+    """Stage 5b a): AOI candidates for the s2forest blind validation on LVM land (only proposed;
+    the user chooses, nothing is run)."""
+    import geopandas as gpd
+
+    from . import lvm
+    from . import viz
+    from .efda import country_regions
+
+    cfg = load_config(config)
+    c = cfg.lvm
+    if c is None:
+        raise typer.BadParameter("config has no `lvm` section")
+    a = c.aoi
+    tdir, fdir, adir = cfg.run_dir / "tables", cfg.run_dir / "figures", cfg.run_dir / "aoi"
+    for d in (tdir, fdir, adir):
+        d.mkdir(parents=True, exist_ok=True)
+    g, land = lvm.load_damage(c), lvm.load_land(c)
+    regions = country_regions(cfg.boundaries)
+    kal = gpd.read_file(cfg.kalsnava.aoi).to_crs(3059)
+    cells = lvm.target_cells(g, c, regions, kal.union_all().centroid, years=a.years, top=a.top_cells)
+    dlt = cfg.cache_dir / "rm" / f"hrl_dlt2018_{cfg.boundaries.country}_{int(cfg.conifer.dlt_res_m)}m.tif"
+    t = lvm.aoi_check(cells, g, land, dlt, c)
+    t.to_csv(tdir / "lvm_5b_aoi_candidates.csv", index=False)
+    typer.echo(t.to_string(index=False))
+    cand = {}
+    for r in t.head(a.n_candidates).itertuples():
+        lvm.aoi_geojson(r.x0, r.y0, g.crs, adir / f"aoi_kandidats_{r.rank}.geojson",
+                        f"5b AOI candidate {r.rank} (LKS-92 cell {r.x0},{r.y0})")
+        cell = gpd.read_file(adir / f"aoi_kandidats_{r.rank}.geojson").to_crs(g.crs)
+        area = cell.union_all()
+        yrs = g[~g["empty"] & g["year"].between(*a.years) & g.intersects(area)]
+        cand[r.rank] = {"cell": cell, "land": land[land.intersects(area)].clip(area),
+                        "pest": yrs[yrs["subtype"] == c.stem_pest].clip(area),
+                        "other": yrs[yrs["subtype"] != c.stem_pest].clip(area)}
+    p = viz.lvm_aoi_candidates(regions.to_crs(g.crs), t, cand, kal, fdir / "rm5b_aoi_kandidati.png")
+    typer.echo(f"figure: {p}")
+    _metadata(cfg, "lvm_aoi", {"lvm": {"damage": str(c.damage), "snapshot": str(c.damage_snapshot),
+                                       "land_units": str(c.land_units)},
+                               "dlt": str(dlt), "criteria": a.model_dump()})
+
+
 @app.command("lvm-describe")
 def lvm_describe(config: Path = ConfigArg):
     """Stage 5a: LVM open damage polygons - inventory, official statistics, EFDA timing,

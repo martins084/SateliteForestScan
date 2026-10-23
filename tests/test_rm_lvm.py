@@ -9,7 +9,7 @@ import pytest
 from shapely.geometry import Polygon, box
 
 from mezasargs_risk.config import LvmConfig
-from mezasargs_risk.lvm import annual, inventory, meb011_compare, target_cells
+from mezasargs_risk.lvm import aoi_check, annual, inventory, meb011_compare, target_cells
 
 X0, Y0 = 500_000.0, 300_000.0   # LKS-92 TM
 
@@ -69,3 +69,30 @@ def test_meb011_compare_maps_regions():
     out = meb011_compare(reg, m).set_index(["region", "year"])
     assert out.loc[("Kurzeme", 2024), "lvm_ha"] == 20.0
     assert out.loc[("Kurzeme", 2023), "csp_state_dead_stands_ha"] == 1.0   # old boundaries ignored
+
+
+def test_aoi_check_criteria(tmp_path):
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    g = _damage()
+    cells = target_cells(g, _cfg(), years=(2023, 2024))
+    cells["region"], cells["km_from_ref"] = ["Vidzeme", "Rīga"], [50.0, 10.0]
+    land = gpd.GeoDataFrame(geometry=[box(X0, Y0, X0 + 5000, Y0 + 4500)], crs=3059)   # 90 % of the first cell
+    b = gpd.GeoSeries([box(X0 - 1000, Y0 - 1000, X0 + 12000, Y0 + 6000)], crs=3059).to_crs(3035).total_bounds
+    w, h = int((b[2] - b[0]) // 100) + 1, int((b[3] - b[1]) // 100) + 1
+    dlt = np.full((h, w), 2, dtype="uint8")
+    dlt[:, ::4] = 1                                                     # 25 % broadleaf -> 75 % conifer
+    path = tmp_path / "dlt.tif"
+    with rasterio.open(path, "w", driver="GTiff", width=w, height=h, count=1, dtype="uint8", crs=3035,
+                       transform=from_origin(b[0], b[3], 100, 100), nodata=255) as f:
+        f.write(dlt, 1)
+    c = _cfg()
+    c.aoi.min_targets = 1
+    t = aoi_check(cells, g, land, path, c).set_index("x0")
+    assert t.loc[500_000, "lvm_land_share"] == pytest.approx(0.9)
+    assert t.loc[500_000, "conifer_share"] == pytest.approx(0.75, abs=0.02)
+    assert t.loc[500_000, "targets"] == 1 and t.loc[500_000, "n620_all_sizes"] == 2
+    assert t.loc[500_000, "all_ok"] and not t.loc[505_000, "ok_lvm_land"]
+    assert t.loc[500_000, "rank"] == 1                                  # criteria met before distance

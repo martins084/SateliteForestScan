@@ -129,6 +129,9 @@ gadā r−1, r, r+1 un r+2 (r = reģistrācijas gads). Bāze ir visa EFDA meža 
   - 2024. gada cirtes (4) nav 2025. gada izvadē. To varēja gaidīt, jo tās notika pirms monitoringa sezonas [N].
 - **Ko tas nozīmē [N]:** neatkarīgai s2forest validācijai Kalsnavā vajag MPS datus (sanitārās cirtes ar datumu un
   iemeslu). Cits ceļš ir jauns AOI uz LVM zemes (sk. d).
+- **Lēmums (lietotājs, 2026-10-23):** Kalsnava = LBTU Meža pētīšanas stacijas mežs. Kalsnavas validācijai
+  nepieciešami **MPS sanitāro ciršu dati (datums, iemesls)**; tos pieprasīs lietotājs. Līdz tam Kalsnava paliek
+  **demonstrācijas AOI**. Neatkarīgā s2forest validācija notiek uz LVM zemes (5b posms, `docs/RM_5b_S2_VALIDACIJA_LVM.md`).
 
 ![Kalsnava](rm_figures/rm5a_lvm_kalsnava.png)
 

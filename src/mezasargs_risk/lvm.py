@@ -267,3 +267,59 @@ def target_cells(g: gpd.GeoDataFrame, c: LvmConfig, regions: gpd.GeoDataFrame | 
     if ref_point is not None:
         t["km_from_ref"] = (cen.distance(ref_point) / 1000).round(0).values
     return t
+
+
+def aoi_check(cells: pd.DataFrame, g: gpd.GeoDataFrame, land: gpd.GeoDataFrame, dlt_path, c: LvmConfig,
+              cell_m: float = 5000.0) -> pd.DataFrame:
+    """Stage 5b AOI criteria for the densest target cells (`target_cells` output): LVM land share,
+    HRL DLT 2018 conifer share of tree cover, stem-pest target counts. Ranked: all criteria met,
+    preferred region, distance to the reference point."""
+    from rasterio.mask import mask
+    from shapely.geometry import box
+
+    a = c.aoi
+    x = g[~g["empty"]]
+    pts = x.representative_point()
+    rows = []
+    with rasterio.open(dlt_path) as src:
+        for r in cells.head(a.top_cells).itertuples():
+            cell = box(r.x0, r.y0, r.x0 + cell_m, r.y0 + cell_m)
+            lvm_ha = land[land.intersects(cell)].intersection(cell).union_all().area / 1e4
+            geom = gpd.GeoSeries([cell], crs=g.crs).to_crs(src.crs).iloc[0]
+            d, _ = mask(src, [geom], crop=True, filled=False)
+            v = d[0].compressed()
+            n0, n1, n2 = (int((v == k).sum()) for k in (0, 1, 2))
+            inside = x[pts.within(cell)]
+            y = inside[inside["year"].between(*a.years)]
+            sp = y[y["subtype"] == c.stem_pest]
+            row = {"x0": r.x0, "y0": r.y0, "lon": r.lon, "lat": r.lat, "region": getattr(r, "region", None),
+                   "km_from_kalsnava": getattr(r, "km_from_ref", None),
+                   "lvm_land_share": round(lvm_ha / (cell_m ** 2 / 1e4), 3),
+                   "tree_cover_share": round((n1 + n2) / max(n0 + n1 + n2, 1), 3),
+                   "conifer_share": round(n2 / max(n1 + n2, 1), 3)}
+            for yr in range(a.years[0], a.years[1] + 1):
+                row[f"n{c.stem_pest}_{yr}_ge{c.min_target_ha}ha"] = int(((sp["year"] == yr) & (sp["ha"] >= c.min_target_ha)).sum())
+            row["targets"] = int((sp["ha"] >= c.min_target_ha).sum())
+            row["targets_ge1ha"] = int((sp["ha"] >= 1.0).sum())
+            row["targets_ha"] = round(sp.loc[sp["ha"] >= c.min_target_ha, "ha"].sum(), 1)
+            row[f"n{c.stem_pest}_all_sizes"] = len(sp)
+            row["n_wind_100"] = int((y["subtype"] == 100).sum())
+            row["n_other_damage"] = int((~y["subtype"].isin([c.stem_pest, 100])).sum())
+            rows.append(row)
+    t = pd.DataFrame(rows)
+    t["ok_lvm_land"] = t["lvm_land_share"] >= a.min_lvm_share
+    t["ok_conifer"] = t["conifer_share"] >= a.min_conifer_share
+    t["ok_targets"] = t["targets"] >= a.min_targets
+    t["all_ok"] = t["ok_lvm_land"] & t["ok_conifer"] & t["ok_targets"]
+    t["preferred_region"] = t["region"] == a.prefer_region
+    t = t.sort_values(["all_ok", "preferred_region", "km_from_kalsnava"], ascending=[False, False, True])
+    t["rank"] = range(1, len(t) + 1)
+    return t.reset_index(drop=True)
+
+
+def aoi_geojson(x0: float, y0: float, crs, path, name: str, cell_m: float = 5000.0) -> None:
+    """Write a 5 x 5 km LKS-92 cell as a CRS84 GeoJSON AOI (same format as the Kalsnava AOI)."""
+    from shapely.geometry import box
+
+    gpd.GeoDataFrame({"name": [name]}, geometry=[box(x0, y0, x0 + cell_m, y0 + cell_m)], crs=crs) \
+        .to_crs(4326).to_file(path, driver="GeoJSON")

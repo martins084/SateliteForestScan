@@ -397,3 +397,42 @@ def lvm_kalsnava(aoi, layers: dict, path: Path) -> Path:
     fig.savefig(path)
     plt.close(fig)
     return path
+
+
+def lvm_aoi_candidates(regions, cells: pd.DataFrame, cand: dict, kalsnava, path: Path, cell_m: float = 5000.0) -> Path:
+    """Stage 5b: the densest stem-pest cells on a Latvia map + one panel per AOI candidate
+    (LVM land, 2023-2024 stem-pest polygons, other damage)."""
+    from shapely.geometry import box
+
+    n = len(cand)
+    fig, axs = plt.subplots(1, n + 1, figsize=(3.6 * (n + 1), 4.0), dpi=200)
+    ax = axs[0]
+    regions.plot(ax=ax, color="#eeede8", edgecolor=AXIS, lw=0.5)
+    sq = gpd.GeoDataFrame(cells, geometry=[box(x, y, x + cell_m, y + cell_m) for x, y in zip(cells["x0"], cells["y0"])],
+                          crs=regions.crs)
+    sq.plot(ax=ax, color=AXIS, edgecolor=INK2, lw=0.4)
+    sq[sq["rank"] <= n].plot(ax=ax, color=S2, edgecolor=INK, lw=0.6)
+    for r in sq[sq["rank"] <= n].itertuples():
+        ax.annotate(str(r.rank), (r.x0 + cell_m, r.y0 + cell_m), fontsize=8, fontweight="bold")
+    kalsnava.boundary.plot(ax=ax, color=S1, lw=1.2)
+    ax.set_axis_off()
+    ax.set_title("10 blīvākās šūnas; kandidāti", loc="left")
+    for ax, (rank, lay) in zip(axs[1:], cand.items()):
+        b = lay["cell"].total_bounds
+        lay["cell"].boundary.plot(ax=ax, color=INK, lw=1)
+        if len(lay["land"]):
+            lay["land"].plot(ax=ax, color="#cde2fb", lw=0)
+        if len(lay["other"]):
+            lay["other"].plot(ax=ax, color=INK2, lw=0)
+        if len(lay["pest"]):
+            lay["pest"].plot(ax=ax, color=S2, lw=0)
+        ax.set_xlim(b[0], b[2]); ax.set_ylim(b[1], b[3])
+        ax.set_axis_off()
+        ax.set_title(f"Kandidāts {rank}", loc="left")
+    axs[-1].legend(handles=[plt.Rectangle((0, 0), 1, 1, color=c, label=l) for c, l in
+                            (("#cde2fb", "LVM zeme"), (S2, "LVM 620, 2023–2024"), (INK2, "citi bojājumi, 2023–2024"))],
+                   loc="lower left", fontsize=7, frameon=True, framealpha=0.9)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path
