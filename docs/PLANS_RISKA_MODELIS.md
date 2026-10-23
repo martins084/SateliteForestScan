@@ -399,3 +399,6 @@ Apraksts un pārbaudes: `docs/RM_5a_LVM_BOJAJUMI.md`.
     Vidzemē, tuvu Kalsnavai. AOI izvēlas lietotājs no 3 kandidātiem.
 - **Nosaukums:** L7 „5b (sausuma salīdzinājums)” turpmāk ir **„sausuma salīdzinājums”** pēc 4. posma; „5b” ir šis
   validācijas posms. Secība: 5a → 5b → 4 → sausuma salīdzinājums → 6 → 7 → 8.
+- **5b lēmumi (lietotājs, 2026-10-23):** AOI = 1. kandidāts (Vidzeme, `data/aoi_lvm5b_vidzeme.geojson`);
+  monitoringa gadi 2022–2025; 2025. gada detekcijas bez reģistrācijas = „neapstiprinātas (reģistrs beidzas 2025-04)”;
+  `reference` / `stands` noņemti; vējgāzes un citi bojājumi atsevišķi. Rezultāts: `docs/RM_5b_S2_VALIDACIJA_LVM.md`.

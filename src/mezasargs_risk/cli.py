@@ -194,6 +194,59 @@ def lvm_aoi(config: Path = ConfigArg):
                                "dlt": str(dlt), "criteria": a.model_dump()})
 
 
+@app.command("lvm-validate")
+def lvm_validate(config: Path = ConfigArg):
+    """Stage 5b b)-c): s2forest (frozen v0.2, runs listed in lvm.s2forest) vs LVM damage polygons
+    on the validation AOI: detection per object, precision, lag, mask cover, placebo."""
+    from . import s2val
+    from . import viz
+
+    cfg = load_config(config)
+    c = cfg.lvm
+    if c is None or c.validation is None:
+        raise typer.BadParameter("config has no `lvm.validation` section")
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fdir.mkdir(parents=True, exist_ok=True)
+    aoi, d, runs = s2val.load(c)
+    d.drop(columns="geometry").to_csv(tdir / "val_lvm_polygons.csv", index=False)
+    (d.groupby(["group", "subtype", "name", "year"]).agg(n=("ha", "size"), ha=("ha", "sum")).round(2)
+       .reset_index().to_csv(tdir / "val_lvm_subtypes_by_year.csv", index=False))
+    masks = {r.year: r.path.parent.parent / "rasters" / "forest_mask.tif" for r in c.s2forest if r.variant == "all"}
+    cover, analysed = s2val.mask_cover(d, masks, c)
+    cover.to_csv(tdir / "val_lvm_mask_cover.csv", index=False)
+    typer.echo(cover.to_string(index=False))
+    for v in sorted({r.variant for r in c.s2forest}):
+        det = s2val.detection(d, runs, v, c)
+        det.to_csv(tdir / f"val_detection_{v}.csv", index=False)
+        summ = s2val.detection_summary(det, analysed)
+        summ.to_csv(tdir / f"val_detection_summary_{v}.csv", index=False)
+        prec = s2val.precision(d, runs, v, c)
+        prec.to_csv(tdir / f"val_precision_{v}.csv", index=False)
+        s2val.lag(det).to_csv(tdir / f"val_lag_{v}.csv", index=False)
+        s2val.lag(det, "found_overlap25").to_csv(tdir / f"val_lag_overlap25_{v}.csv", index=False)
+        typer.echo(f"--- {v}")
+        typer.echo(summ[summ["size"] == ">= 0,5 ha"].to_string(index=False))
+        typer.echo(prec.to_string(index=False))
+    plac = s2val.placebo(d, runs, aoi, masks[c.validation.reg_years[0]], c)
+    plac.to_csv(tdir / "val_placebo_all.csv", index=False)
+    summ = pd.read_csv(tdir / "val_detection_summary_all.csv", dtype={"offset": str})
+    s = summ[(summ["group"] == "620") & (summ["size"] == ">= 0,5 ha")]
+    obs = {f"{m}_{o}": v for m in ("found_share", "found_overlap25_share") for o, v in zip(s["offset"], s[m])}
+    obs |= s2val.precision_shares(pd.read_csv(tdir / "val_precision_all.csv"))
+    cmp = s2val.placebo_compare(obs, plac)
+    cmp.to_csv(tdir / "val_placebo_compare_all.csv", index=False)
+    typer.echo(cmp.to_string(index=False))
+    out = {"maps": viz.val5b_maps(aoi, d, runs, fdir / "rm5b_kartes.png"),
+           "detection": viz.val5b_detection(summ, plac, fdir / "rm5b_detekcija.png")}
+    for n, p in out.items():
+        typer.echo(f"{n}: {p}")
+    _metadata(cfg, "lvm_validate", {"lvm": {"damage": str(c.damage), "snapshot": str(c.damage_snapshot)},
+                                    "validation": c.validation.model_dump(),
+                                    "runs": [r.model_dump() for r in c.s2forest],
+                                    "match_buffer_m": c.match_buffer_m})
+
+
 @app.command("lvm-describe")
 def lvm_describe(config: Path = ConfigArg):
     """Stage 5a: LVM open damage polygons - inventory, official statistics, EFDA timing,

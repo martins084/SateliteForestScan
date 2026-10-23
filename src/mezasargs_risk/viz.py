@@ -436,3 +436,75 @@ def lvm_aoi_candidates(regions, cells: pd.DataFrame, cand: dict, kalsnava, path:
     fig.savefig(path)
     plt.close(fig)
     return path
+
+
+def val5b_maps(aoi, d, runs: dict, path: Path) -> Path:
+    """Stage 5b: one panel per monitoring year - LVM damage polygons registered in the monitored
+    years (by group / registration year) and s2forest cut / stress polygons of that year's run."""
+    years = sorted(y for v, y in runs if v == "all")
+    d = d[d["year"].between(min(years), max(years))]          # registrations in the monitored years only
+    fig, axs = plt.subplots(1, len(years), figsize=(3.6 * len(years), 4.2), dpi=200)
+    style = [("620, reģ. 2023", (d["group"] == "620") & (d["year"] == 2023), "#f6b48f"),
+             ("620, reģ. 2024", (d["group"] == "620") & (d["year"] == 2024), S2),
+             ("620, reģ. 2022 / 2025", (d["group"] == "620") & ~d["year"].isin([2023, 2024]), "#f3dccd"),
+             ("vējgāzes (100)", d["group"] == "100", "#86b6ef"),
+             ("citi bojājumi", d["group"] == "other", AXIS)]
+    for ax, y in zip(np.atleast_1d(axs), years):
+        aoi.boundary.plot(ax=ax, color=INK, lw=1)
+        for _, m, col in style:
+            if m.any():
+                d[m].plot(ax=ax, color=col, lw=0)
+        s = runs[("all", y)]
+        for t, col in (("cut", INK), ("stress", "#d03b3b")):
+            if (s["type"] == t).any():
+                s[s["type"] == t].boundary.plot(ax=ax, color=col, lw=0.6)
+        b = aoi.total_bounds
+        ax.set_xlim(b[0], b[2]); ax.set_ylim(b[1], b[3])
+        ax.set_axis_off()
+        ax.set_title(f"s2forest {y}" + (" (reģistrs beidzas 2025-04)" if y >= 2025 else ""), loc="left", fontsize=9)
+    handles = [plt.Rectangle((0, 0), 1, 1, color=col, label=lab) for lab, _, col in style]
+    handles += [plt.Line2D([], [], color=INK, label="s2forest cut"), plt.Line2D([], [], color="#d03b3b", label="s2forest stress")]
+    fig.legend(handles=handles, loc="lower center", ncol=7, fontsize=7)
+    fig.tight_layout(rect=(0, 0.07, 1, 0.97))
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def val5b_detection(summary: pd.DataFrame, plac: pd.DataFrame, path: Path) -> Path:
+    """Stage 5b: (left) share of LVM 620 polygons >= 0,5 ha found per offset, observed vs placebo
+    (mean and 2,5-97,5 %); (right) how s2forest marks each damage group (cut / stress, any offset)."""
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.6, 3.8), dpi=200)
+    s = summary[(summary["group"] == "620") & (summary["size"] == ">= 0,5 ha")]
+    labs = [str(o) for o in s["offset"]]
+    x = np.arange(len(labs))
+    bars = [("found_share", -0.3, S2, "≤ 20 m, novērots"), ("found_share", -0.1, AXIS, "≤ 20 m, placebo"),
+            ("found_overlap25_share", 0.1, INK2, "pārklāj ≥ 25 %, novērots"),
+            ("found_overlap25_share", 0.3, "#e1e0d9", "pārklāj ≥ 25 %, placebo")]
+    for col, dx, colr, lab in bars:
+        if "novērots" in lab:
+            a1.bar(x + dx, s[col], 0.2, color=colr, label=lab)
+        else:
+            q = [plac[f"{col}_{o}"] for o in labs]
+            m = np.array([v.mean() for v in q])
+            a1.bar(x + dx, m, 0.2, color=colr, edgecolor=AXIS, label=lab)
+            a1.errorbar(x + dx, m, yerr=[m - [v.quantile(0.025) for v in q], [v.quantile(0.975) for v in q] - m],
+                        fmt="none", ecolor=INK2, lw=1)
+    a1.set_xticks(x, [{"-1": "r−1", "0": "r", "1": "r+1"}.get(l, "r−1..r+1") for l in labs])
+    a1.set_ylabel("atrasto poligonu daļa")
+    a1.set_title("LVM 620 ≥ 0,5 ha: atrasti pret placebo (95 %)", loc="left")
+    a1.legend(fontsize=6.5)
+    g = summary[(summary["size"] == ">= 0,5 ha") & (summary["offset"] == "r-1..r+1")].set_index("group")
+    names = {"620": "620", "100": "vējgāzes", "other": "citi"}
+    gi = [k for k in names if k in g.index]
+    xi = np.arange(len(gi))
+    a2.bar(xi - 0.2, [g.loc[k, "by_cut_n"] / g.loc[k, "n"] for k in gi], 0.4, color=INK2, label="atzīmēts kā cut")
+    a2.bar(xi + 0.2, [g.loc[k, "by_stress_n"] / g.loc[k, "n"] for k in gi], 0.4, color="#d03b3b", label="atzīmēts kā stress")
+    a2.set_xticks(xi, [f"{names[k]} (n={int(g.loc[k, 'n'])})" for k in gi])
+    a2.set_ylabel("poligonu daļa (r−1..r+1)")
+    a2.set_title("Ko s2forest atzīmē: cut vai stress", loc="left")
+    a2.legend(fontsize=7)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path

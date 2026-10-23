@@ -66,11 +66,15 @@ lvm:
   timing_offsets: [-1, 0, 1, 2]
   match_buffer_m: 20
   min_target_ha: 0.5
-  s2forest:                          # frozen v0.2 runs (read only) + stage 3 stress_only variant
-    - {label: all_2025, year: 2025, variant: all, path: ../output/test_kalsnava_2025/vectors/suspects.gpkg}
-    - {label: all_2026, year: 2026, variant: all, path: ../output/test_kalsnava/vectors/suspects.gpkg}
-    - {label: stress_only_2025, year: 2025, variant: stress_only, path: ../output/kalsnava_stress_only_2025/vectors/suspects.gpkg}
-    - {label: stress_only_2026, year: 2026, variant: stress_only, path: ../output/kalsnava_stress_only_2026/vectors/suspects.gpkg}
+  s2forest:                          # stage 5b runs (frozen v0.2 config, configs/lvm5b_vidzeme_<year>[_stress_only].yaml)
+    - {label: lvm5b_vidzeme_2022, year: 2022, variant: all, path: ../output/lvm5b_vidzeme_2022/vectors/suspects.gpkg}
+    - {label: lvm5b_vidzeme_2023, year: 2023, variant: all, path: ../output/lvm5b_vidzeme_2023/vectors/suspects.gpkg}
+    - {label: lvm5b_vidzeme_2024, year: 2024, variant: all, path: ../output/lvm5b_vidzeme_2024/vectors/suspects.gpkg}
+    - {label: lvm5b_vidzeme_2025, year: 2025, variant: all, path: ../output/lvm5b_vidzeme_2025/vectors/suspects.gpkg}
+    - {label: lvm5b_vidzeme_2022_stress_only, year: 2022, variant: stress_only, path: ../output/lvm5b_vidzeme_2022_stress_only/vectors/suspects.gpkg}
+    - {label: lvm5b_vidzeme_2023_stress_only, year: 2023, variant: stress_only, path: ../output/lvm5b_vidzeme_2023_stress_only/vectors/suspects.gpkg}
+    - {label: lvm5b_vidzeme_2024_stress_only, year: 2024, variant: stress_only, path: ../output/lvm5b_vidzeme_2024_stress_only/vectors/suspects.gpkg}
+    - {label: lvm5b_vidzeme_2025_stress_only, year: 2025, variant: stress_only, path: ../output/lvm5b_vidzeme_2025_stress_only/vectors/suspects.gpkg}
   s1_targets: ../docs/s1_earlysignal/targets.csv
   # VMD Forest State Register, district 2253 (Madona), extracted from vidzemes.7z with tar.exe
   mvr_kalsnava: ../cache/vmd_mvr/extract/vidzemes/nodala2253.shp
@@ -83,3 +87,9 @@ lvm:
     prefer_region: Vidzeme
     top_cells: 10
     n_candidates: 3
+  validation:                        # 5b b)-d) (user, 2026-10-23): AOI = candidate 1 (Vidzeme)
+    aoi: ../data/aoi_lvm5b_vidzeme.geojson
+    reg_years: [2023, 2024]
+    offsets: [-1, 0, 1]
+    placebo_n: 100
+    seed: 42

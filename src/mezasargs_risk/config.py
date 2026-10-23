@@ -82,6 +82,15 @@ class AoiCriteria(BaseModel):
     n_candidates: int = 3
 
 
+class ValidationConfig(BaseModel):
+    """Stage 5b: s2forest blind validation on LVM land (runs listed in LvmConfig.s2forest)."""
+    aoi: Path
+    reg_years: list[int] = Field(default_factory=lambda: [2023, 2024])
+    offsets: list[int] = Field(default_factory=lambda: [-1, 0, 1])
+    placebo_n: int = 100
+    seed: int = 42
+
+
 class LvmConfig(BaseModel):
     """Stage 5a: LVM open damage polygons (CC0, state forest) as labels; Internet Archive copies
     while the LVM PublicData server is down (provenance in docs/DATU_AVOTI.md)."""
@@ -101,6 +110,7 @@ class LvmConfig(BaseModel):
     mps: Path | None = None            # "Meža pētīšanas stacija" compartments zip (owner check)
     mps_member: str = "MEZA_PETISANAS_STACIJA_NOGABALI_Shape.shp"
     aoi: AoiCriteria = Field(default_factory=AoiCriteria)
+    validation: ValidationConfig | None = None
 
 
 class RiskConfig(BaseModel):

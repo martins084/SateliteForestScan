@@ -93,6 +93,15 @@ Internet Archive kopijas. Faili glabājas `cache/lvm_open/` un **netiek commitot
 4. Ģeometrija nolasīta tikai Kalsnavas nodaļai 2253 (`tar -xf` → `cache/vmd_mvr/extract/`, ar geopandas bbox).
    `.prj` ir LKS-2020 TM (EPSG:10306); AOI koordinātas LKS-92 TM un LKS-2020 TM sistēmā sakrīt (pyproj) [P].
 
+## 5b posms — s2forest validācija uz LVM zemes (2026-10-23)
+
+Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
+
+- **Sentinel-2 L2A** (Earth Search `sentinel-2-c1-l2a`, Planetary Computer `sentinel-2-l2a`) jaunajam AOI
+  `data/aoi_lvm5b_vidzeme.geojson` (5 × 5 km LKS-92 šūna 650000 / 310000), 2019–2025. Kešs: `cache/35e44980c075_09b9ac/`.
+- **HRL DLT 2018** un **OSM ceļi** — s2forest meža maska, kā v0.2.
+- **LVM_BOJAJUMI** un **LVM_ZEMES_VIENIBAS** — Wayback kopijas no 5a sadaļas.
+
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 
 | Pakotne | Versija (PyPI) | Licence [P] |
