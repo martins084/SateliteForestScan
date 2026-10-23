@@ -122,6 +122,18 @@ derīgi, CRS EPSG:3059, vērtību saraksts, labojums → `desk-import`); interak
 
 Lauka pārbaudes instrukcija: [`docs/LAUKA_PARBAUDE.md`](docs/LAUKA_PARBAUDE.md).
 
+### MežaSargs riska modelis (`mezasargs-risk`, izstrādē)
+
+Atsevišķa pakotne `src/mezasargs_risk/` (plāns: `docs/PLANS_RISKA_MODELIS.md`). 5. posms — EFDA ievade ar robežu
+pārbaudi, v3.0 / v2.1.1 krustpārbaude un aprakstošā analīze Latvijai ([`docs/RM_5_EFDA_ANALIZE.md`](docs/RM_5_EFDA_ANALIZE.md)):
+
+```bash
+python scripts/rm_efda_extract.py      # EFDA slāņi ar HTTP range -> cache/efda/
+python scripts/rm_fetch_sources.py     # GISCO NUTS 2024, CSP MEB012 / MEZ012 -> cache/
+python -m uv run mezasargs-risk labels   configs/rm_latvia.yaml
+python -m uv run mezasargs-risk describe configs/rm_latvia.yaml
+```
+
 ### Nogabalu dati (4. posms, informatīvi)
 
 `stands.path` — Meža valsts reģistra nogabali (VMD atvērtie dati, data.gov.lv, CC0;

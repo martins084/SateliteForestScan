@@ -42,6 +42,21 @@ Kalsnavas tests [P] (`cache/rm_test/hrl_waw2018_kalsnava.tif`, 296 kB, nav git):
 Nepārtrauktais mitruma indekss (WWPI) atrasts tikai kā 2015. g. serviss bez metadatiem → netiek izmantots.
 Ieteikums 4. posmam: slīpums + TPI no LĢIA DTM; WAW mitro klašu (3, 4) īpatsvars šūnā — tikai kā papildu pazīme.
 
+## Izmantoti 5. posmā (2026-10-23)
+
+| Avots | Licence | Versija / DOI / tabula | Atsauce |
+|---|---|---|---|
+| **EFDA v3.0.0** — no `Lithuania.zip` (satur LV datus) izvilkti `annual_disturbance`, `disturbance_agent`, `number_disturbances` (+ 1. posmā `aggregated`, `latest`, `forestlanduse_mask`) | CC BY 4.0 [P] | doi:10.5281/zenodo.21722408; HTTP range, 81 MB pārsūtīti; sha256 — `cache/efda/download_log.json` | kā augstāk |
+| **EFDA v2.1.1** — no `latvia.zip` izvilkti `disturbance_agent_1985_2023`, `disturbance_agent_aggregated`, `forest_mask` | CC BY 4.0 [P] | doi:10.5281/zenodo.13333034; HTTP range, 76 MB pārsūtīti | Viana-Soto & Senf (2025) ESSD |
+| **GISCO NUTS 2024**, 1:1M, EPSG:3035, 0. un 3. līmenis | „© EuroGeographics for the administrative boundaries“; tikai nekomerciāla izmantošana, norāde kartē obligāta [P, Eurostat GISCO administratīvo vienību lapa] | `NUTS_RG_01M_2024_3035_LEVL_3.geojson` (gisco-services.ec.europa.eu/distribution/v2/nuts) | © EuroGeographics for the administrative boundaries |
+| **CSP MEB012** „Meža bojājumi un augtspēju zaudējušās mežaudzes 2013–2024“ (dati: VMD); arhīva **MEB010** (2013–2020) | [N: CSP licences teksts nav atrasts; API lapā licence nav minēta] | PxWeb API `OSP_PUB/START/NOZ/ME/MEB/MEB012`, atjaunināta 2026-01-26 [P] | Centrālā statistikas pārvalde, tabula MEB012 (VMD dati) |
+| **CSP MEZ012** „Inventarizētā meža izcirstās platības un krājas 2014–2025“ | [N, kā augstāk] | `OSP_PUB/START/NOZ/ME/MEZ/MEZ012`, atjaunināta 2026-07-21 [P] | Centrālā statistikas pārvalde, tabula MEZ012 |
+| **HRL Dominant Leaf Type 2018**, nolasīts ar 100 m soli (servera tuvākais pikselis) | kā augstāk [N] | `cache/rm/hrl_dlt2018_LV_100m.tif` | Copernicus Land Monitoring Service |
+| **FORWIND** (vējgāžu datubāze 2000–2018) | raksts CC BY 4.0 [P]; dati figshare doi:10.6084/m9.figshare.9555008 | **Latvijas nav** — 13 valstis, no Baltijas tikai Lietuva [P, Forzieri u. c. 2020 ESSD 12:257 teksts] | Forzieri u. c. (2020) |
+| **DEFID2** (kukaiņu un slimību bojājumi 1963–2021) | CC BY 4.0 [P, `copyright.txt` JRC FTP] | VER1-0 (2023), `defid2.gpkg` 569 MB — nav lejupielādēts | Forzieri u. c. (2023) GCB, doi:10.1111/gcb.16912; **vai ir Latvija — nav apstiprināts** (sk. RM_5) |
+| Vētra 2005-01-08/09 | ziņu raksts | „Kā nosargāt vēja pļauto mežu“, Latvijas Vēstnesis Nr. 10, 19.01.2005 — VMD provizoriski 7,3 milj. m³ [P] | https://www.vestnesis.lv/ta/id/99761 |
+| Vētra 2024-07-01 | ziņu raksts | LSM 03.07.2024 — VMD: ≥ 70 ha, ~6000 m³ [P] | https://www.lsm.lv/raksts/zinas/latvija/03.07.2024-1-julija-vetra-visvairak-cietusi-cesu-puses-mezi.a560162/ |
+
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 
 | Pakotne | Versija (PyPI) | Licence [P] |
