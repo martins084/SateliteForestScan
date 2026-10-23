@@ -69,6 +69,6 @@ def edge_summary(gdf: gpd.GeoDataFrame, dist: np.ndarray, analysed: np.ndarray,
         for t, g in gdf.groupby("type"):
             rows.append({"group": f"{t} polygons", "n": len(g),
                          "median_dist_m": float(g["edge_dist_m"].median()),
-             "n_no_edge_within_margin": int(g["edge_dist_m"].isna().sum()),
+                         "n_no_edge_within_margin": int(g["edge_dist_m"].isna().sum()),
                          f"share_within_{near_m:g}m": float((g["edge_dist_m"] <= near_m).mean())})
     return pd.DataFrame(rows)

@@ -1,0 +1,60 @@
+# MežaSargs risk model, stage 5: EFDA input + descriptive analysis for Latvia.
+# Data: see docs/DATU_AVOTI.md. EFDA members are extracted with HTTP range requests
+# (scripts/rm_efda_extract.py) into cache/efda/<version>/<archive>/.
+run_name: rm5_efda_latvia
+output_dir: ../output
+cache_dir: ../cache
+
+efda:
+  main:
+    version: v3.0.0
+    doi: 10.5281/zenodo.21722408
+    archive: Lithuania.zip        # v3.0 swap: the Latvian rasters are in Lithuania.zip (checked by extent)
+    dir: ../cache/efda/v3.0/Lithuania.zip
+    first_year: 1985
+    agent: disturbance_agent_lithuania_v30.tif
+    agent_aggregated: disturbance_agent_aggregated_lithuania_v30.tif
+    forest: forestlanduse_mask_lithuania_v30.tif
+  crosscheck:
+    version: v2.1.1
+    doi: 10.5281/zenodo.13333034
+    archive: latvia.zip
+    dir: ../cache/efda/v2.1.1/latvia.zip
+    first_year: 1985
+    agent: disturbance_agent_1985_2023_latvia.tif
+    agent_aggregated: disturbance_agent_aggregated_latvia.tif
+    forest: forest_mask_latvia.tif
+
+boundaries:
+  path: ../cache/boundaries/NUTS_RG_01M_2024_3035_LEVL_3.geojson   # GISCO NUTS 2024, (c) EuroGeographics
+  country: LV
+  min_cover: 0.95
+  border_buffer_m: 1000
+  control_lonlat: [25.85, 56.69]
+
+grid_km: 10
+
+conifer:
+  dlt_res_m: 100
+  min_share: 0.5
+  sensitivity: [0.4, 0.6]
+
+stats:
+  meb012: ../cache/rm5_sources/csp_MEB012.csv
+  mez012: ../cache/rm5_sources/csp_MEZ012.csv
+
+# Storm events only from opened sources (one link each). Other years are NOT marked as storm years.
+storms:
+  - date: 2005-01-09
+    name: "Janvāra vētra 2005 (8.-9. janvāris)"
+    note: "VMD provizoriski: vējgāzēs un vējlauzēs 7,3 milj. m3 (Latvijas Vēstnesis, 19.01.2005)"
+    url: https://www.vestnesis.lv/ta/id/99761
+  - date: 2024-07-01
+    name: "Vētra 2024-07-01"
+    note: "VMD: vismaz 70 ha, ~6000 m3, visvairāk Cēsu pusē (LSM, 03.07.2024)"
+    url: https://www.lsm.lv/raksts/zinas/latvija/03.07.2024-1-julija-vetra-visvairak-cietusi-cesu-puses-mezi.a560162/
+
+kalsnava:
+  aoi: ../data/test_aoi_kalsnava.geojson
+  suspects: ../output/test_kalsnava_2025/vectors/suspects.gpkg
+  year: 2025
