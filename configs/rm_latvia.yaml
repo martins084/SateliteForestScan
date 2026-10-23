@@ -42,6 +42,7 @@ conifer:
 stats:
   meb012: ../cache/rm5_sources/csp_MEB012.csv
   mez012: ../cache/rm5_sources/csp_MEZ012.csv
+  mez012_types: ../cache/rm5_sources/csp_MEZ012_types.csv
 
 # Storm events only from opened sources (one link each). Other years are NOT marked as storm years.
 storms:

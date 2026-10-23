@@ -146,3 +146,40 @@ def crosscheck(main: EfdaVersion, other: EfdaVersion, country_main: np.ndarray) 
         df[f"{k}_diff_px"] = df[f"{k}_main_px"] - df[f"{k}_other_px"]
         df[f"{k}_diff_pct"] = 100 * df[f"{k}_diff_px"] / df[f"{k}_other_px"].replace(0, np.nan)
     return df
+
+
+def followup(main: EfdaVersion, other: EfdaVersion, country_main: np.ndarray) -> pd.DataFrame:
+    """Per year y of `other`: of its disturbed pixels (class 1, class 3, any), the share that `main`
+    marks as disturbed (any agent) in the same year, within y-1..y+1, and not at all in y-1..y+1.
+    A drop of the confirmed share in the last year of `other` points to an end-of-series artefact."""
+    rows = []
+    with rasterio.open(layer(main, "agent")) as a, rasterio.open(layer(other, "agent")) as b:
+        ro, co, _ = grid_offset(a, b)
+        win = ((ro, ro + a.height), (co, co + a.width))
+        a_last = main.first_year + a.count - 1
+        years = range(max(main.first_year, other.first_year), min(a_last, other.first_year + b.count - 1) + 1)
+        dist = {}
+
+        def main_any(y):
+            if y not in dist and main.first_year <= y <= a_last:
+                dist[y] = np.isin(a.read(y - main.first_year + 1), (1, 2, 3))
+            return dist.get(y)
+
+        for y in years:
+            for old in [k for k in dist if k < y - 1]:
+                del dist[old]
+            ob = b.read(y - other.first_year + 1, window=win)
+            same = main_any(y)
+            near = same.copy()
+            for o in (main_any(y - 1), main_any(y + 1)):
+                if o is not None:
+                    near |= o
+            for agent, m in (("wind_bark_beetle", ob == 1), ("harvest", ob == 3),
+                             ("any", np.isin(ob, (1, 2, 3)))):
+                m &= country_main
+                n = int(m.sum())
+                rows.append({"year": y, "agent_other": agent, "other_px": n,
+                             "main_same_year": float((m & same).sum() / n) if n else np.nan,
+                             "main_pm1": float((m & near).sum() / n) if n else np.nan,
+                             "main_next_year_available": main_any(y + 1) is not None})
+    return pd.DataFrame(rows)

@@ -127,3 +127,25 @@ def describe(config: Path = ConfigArg):
         typer.echo(f"{k}: {v}")
     _metadata(cfg, "describe", {"dlt_cache": conifer.attrs.get("path"),
                                 "stats": {k: str(v) for k, v in cfg.stats if v}})
+
+
+@app.command("harvest-check")
+def harvest_check(config: Path = ConfigArg):
+    """EFDA class 3 vs official cut area (CSP MEZ012) and v2.1.1 pixels confirmed by v3.0 per year
+    (is the v2.1.1 2023 jump an end-of-series artefact?)."""
+    from . import describe as d
+    from . import viz
+    from .efda import followup
+
+    cfg = load_config(config)
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    fdir.mkdir(parents=True, exist_ok=True)
+    versions = [cfg.efda.main.version, cfg.efda.crosscheck.version]
+    counts = pd.read_csv(tdir / "efda_annual_counts.csv")
+    df = d.harvest_official(d.read_csp(cfg.stats.mez012_types, 3), counts, versions)
+    df.to_csv(tdir / "efda_c3_vs_csp_mez012.csv")
+    _, reg = _country(cfg, cfg.efda.main)
+    follow = followup(cfg.efda.main, cfg.efda.crosscheck, reg > 0)
+    follow.to_csv(tdir / "efda_v211_confirmed_by_v30.csv", index=False)
+    typer.echo(viz.harvest_official_fig(df, follow, versions, fdir / "rm5_cirtes_pret_csp.png"))
+    _metadata(cfg, "harvest_check", {"mez012_types": str(cfg.stats.mez012_types)})

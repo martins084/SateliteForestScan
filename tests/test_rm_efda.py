@@ -94,3 +94,23 @@ def test_read_csp_long(tmp_path):
     d = read_csp(f, 2)
     assert list(d["year"]) == [2013, 2014] and list(d["value"]) == [592.9, 439.6]
     assert d["indicator"].iloc[0] == "Apjoms, tūkst. m³"
+
+
+def test_followup_end_of_series(tmp_path):
+    from mezasargs_risk.efda import followup
+
+    main = np.full((3, 50, 50), 255, "uint8")
+    main[1, 0:10, 0:10] = 3                # main confirms 100 px of the other's year-2 harvest
+    other = np.zeros((2, 50, 50), "uint8")
+    other[1, 0:10, 0:20] = 3               # other: 200 px harvest in its last year (1986)
+    other[0, 20:25, 20:25] = 1             # 25 px class 1 in 1985, main sees nothing
+    ma = _write(tmp_path / "m.tif", main)
+    mb = _write(tmp_path / "o.tif", other)
+    ver = lambda p: EfdaVersion(version=p.stem, doi="-", archive="-", dir=p.parent, agent=p.name,
+                                agent_aggregated=p.name, forest=p.name)
+    f = followup(ver(ma), ver(mb), np.ones((50, 50), bool)).set_index(["year", "agent_other"])
+    assert f.loc[(1986, "harvest"), "other_px"] == 200
+    assert f.loc[(1986, "harvest"), "main_same_year"] == 0.5 and f.loc[(1986, "harvest"), "main_pm1"] == 0.5
+    assert f.loc[(1985, "wind_bark_beetle"), "main_pm1"] == 0.0
+    assert f.loc[(1985, "any"), "main_pm1"] == 0.0      # 1986 harvest is outside the 1985 patch
+    assert f.loc[(1986, "harvest"), "main_next_year_available"]

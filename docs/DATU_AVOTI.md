@@ -53,9 +53,18 @@ Ieteikums 4. posmam: slīpums + TPI no LĢIA DTM; WAW mitro klašu (3, 4) īpats
 | **CSP MEZ012** „Inventarizētā meža izcirstās platības un krājas 2014–2025“ | [N, kā augstāk] | `OSP_PUB/START/NOZ/ME/MEZ/MEZ012`, atjaunināta 2026-07-21 [P] | Centrālā statistikas pārvalde, tabula MEZ012 |
 | **HRL Dominant Leaf Type 2018**, nolasīts ar 100 m soli (servera tuvākais pikselis) | kā augstāk [N] | `cache/rm/hrl_dlt2018_LV_100m.tif` | Copernicus Land Monitoring Service |
 | **FORWIND** (vējgāžu datubāze 2000–2018) | raksts CC BY 4.0 [P]; dati figshare doi:10.6084/m9.figshare.9555008 | **Latvijas nav** — 13 valstis, no Baltijas tikai Lietuva [P, Forzieri u. c. 2020 ESSD 12:257 teksts] | Forzieri u. c. (2020) |
-| **DEFID2** (kukaiņu un slimību bojājumi 1963–2021) | CC BY 4.0 [P, `copyright.txt` JRC FTP] | VER1-0 (2023), `defid2.gpkg` 569 MB — nav lejupielādēts | Forzieri u. c. (2023) GCB, doi:10.1111/gcb.16912; **vai ir Latvija — nav apstiprināts** (sk. RM_5) |
+| **DEFID2** (kukaiņu un slimību bojājumi 1963–2021) | CC BY 4.0 [P, `copyright.txt` JRC FTP] | VER1-0 (2023), `defid2.gpkg` 597 MB, lejupielādēts 2026-10-23 (`cache/defid2/`, sha256 2ee9a12b…98874) | Forzieri u. c. (2023) GCB, doi:10.1111/gcb.16912; **Latvijas nav** — 8 valstis (CZ, IT, RO, SE, ES, SK, FI, CH) [P, RM_5 7.3] |
 | Vētra 2005-01-08/09 | ziņu raksts | „Kā nosargāt vēja pļauto mežu“, Latvijas Vēstnesis Nr. 10, 19.01.2005 — VMD provizoriski 7,3 milj. m³ [P] | https://www.vestnesis.lv/ta/id/99761 |
 | Vētra 2024-07-01 | ziņu raksts | LSM 03.07.2024 — VMD: ≥ 70 ha, ~6000 m³ [P] | https://www.lsm.lv/raksts/zinas/latvija/03.07.2024-1-julija-vetra-visvairak-cietusi-cesu-puses-mezi.a560162/ |
+
+## Pārbaudīti pēc 5. posma — etiķešu meklēšana (2026-10-23)
+
+| Avots | Licence | Versija / piekļuve | Atsauce / piezīmes |
+|---|---|---|---|
+| **CSP MEZ012**, visi cirtes veidi × īpašnieks (kopā / valsts / pārējie), suga „Pavisam“ | [N, kā MEB012] | `cache/rm5_sources/csp_MEZ012_types.csv` (`scripts/rm_fetch_sources.py`) | Centrālā statistikas pārvalde, tabula MEZ012 (VMD dati) |
+| **VMD Meža valsts reģistra meža dati** (data.gov.lv `meza-valsts-registra-meza-dati`) | **CC0 1.0** [P, data.gov.lv API] | 5 × 7z (107–167 MB), atjaunināti 2026-10-09/14; pārbaudei lejupielādēts tikai `centra.7z` (107 MB, `cache/vmd_mvr/`) | Valsts meža dienests. Lauki: MK noteikumi Nr. 384, 9. pielikums ([likumi.lv/ta/id/283091](https://likumi.lv/ta/id/283091)) [P] |
+| **VMD klasifikatori** (`gis.vmd.gov.lv/Public/GetClasificators`, XLSX) | [N: licence nav norādīta] | serveris 2026-10-23 nesasniedzams; **Internet Archive kopija 2025-04-20** (`web.archive.org/web/20250420010502id_/…`), `cache/vmd_mvr/classifiers/` | Valsts meža dienests |
+| **LVM meža bojājumu teritorijas** (`LVM_BOJAJUMI`, data.gov.lv „AS „Latvijas valsts meži” mežkopības ģeotelpiskie dati“) | **CC0 1.0** [P, data.gov.lv] | oriģinālā saite 2026-10-23 → HTTP 404; **Internet Archive kopija 2025-05-03** (28 MB, faili 2025-04-27), `cache/lvm_open/` — **netiek commitota** | AS „Latvijas valsts meži“; lauku apraksts `lvm_bojajumi_shp.docx` (data.gov.lv) [P] |
 
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 

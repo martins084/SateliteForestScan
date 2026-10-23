@@ -4,7 +4,7 @@
   (non-commercial use, "(c) EuroGeographics for the administrative boundaries")
 * CSP tables (data: VMD) via the PxWeb API -> cache/rm5_sources/
   MEB012 forest damage by type 2013-2024, MEB010 (archive) 2013-2020,
-  MEZ012 cut areas by cut type and species 2014-2025.
+  MEZ012 cut areas by cut type and species 2014-2025 (+ all cut types x owner, species total).
 
     python scripts/rm_fetch_sources.py
 """
@@ -25,6 +25,9 @@ TABLES = {
     "csp_MEZ012.csv": ("MEZ/MEZ012", [OWNER_TOTAL,
                                       {"code": "FOREST_THIN", "selection": {"filter": "item", "values": ["TOTAL", "F_FL_CL", "SL_THIN", "SEL_THIN", "SW_FL"]}},
                                       {"code": "TREE_SPECIES", "selection": {"filter": "item", "values": ["TOTAL", "SPRUCE", "PINE"]}}]),
+    "csp_MEZ012_types.csv": ("MEZ/MEZ012", [{"code": "FOREST_OWNER", "selection": {"filter": "item", "values": ["TOTAL", "ST_F", "OTH_F"]}},
+                                            {"code": "FOREST_THIN", "selection": {"filter": "all", "values": ["*"]}},
+                                            {"code": "TREE_SPECIES", "selection": {"filter": "item", "values": ["TOTAL"]}}]),
 }
 
 

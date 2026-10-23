@@ -353,3 +353,18 @@ Plāns apstiprināts ar šiem labojumiem; tie ir **prioritāri** pār iepriekš�
 11. Reģionu rezerves variants pieņemams.
 12. LVM gada noteikums — parametrs; noklusējums: cirte I–IV mēnesī → bojājuma gads t−1, V–XII → t. **Jāprecizē ar LVM**
     (ideāli bojājuma konstatēšanas datums, nevis cirtes datums).
+
+## 2.15 Etiķešu stratēģija pēc 5. posma (lietotājs, 2026-10-23)
+
+Lēmums pēc 5. posma rezultātiem (`docs/RM_5_EFDA_ANALIZE.md`). Tas ir **prioritārs** pār 2.5 un 2.14 tekstu,
+kur tie atšķiras; iepriekšējais teksts paliek nemainīts kā vēsture.
+
+- **EFDA klase 1 netiek izmantota kā etiķete** (ne v3.0, ne v2.1.1), jo tā nesakrīt ar oficiālajiem VMD datiem
+  (CSP MEB012, 2013–2024: v3.0 klase 1 pret vējgāzēm ρ = −0,43, pret kaitēkļu stumbru bojājumiem ρ = −0,01, n = 12).
+- **EFDA paliek pazīmju avots:** cirtes vēsture, meža malas, malas vecums, iepriekšējie traucējumi. Klases 3
+  kvalitāte pārbaudīta RM_5 7.2 sadaļā.
+- **Galvenās etiķetes:** LVM sanitārās cirtes (pēc apstiprināšanas).
+- **Papildu etiķešu kandidāti:** DEFID2 un VMD atvērtie dati (pārbaude RM_5 7. sadaļā).
+- **CSP MEB011** (reģioni, 2021–2025): agregēta validācija. Vai modeļa vidējais risks reģionā korelē ar oficiālajiem
+  bojājumiem? Tikai aprakstoši, jo n ir mazs.
+- **L6 (pārdēvēšana par vējgāžu modeli) vairs nav aktuāls.**

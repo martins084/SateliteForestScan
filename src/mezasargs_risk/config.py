@@ -52,6 +52,7 @@ class StatsConfig(BaseModel):
     """CSP tables (data: VMD), downloaded as CSV from data.stat.gov.lv."""
     meb012: Path | None = None   # forest damage by type 2013-2024
     mez012: Path | None = None   # cut areas by cut type and species 2014-2025
+    mez012_types: Path | None = None   # MEZ012, all cut types, owners total / state / other
 
 
 class KalsnavaConfig(BaseModel):

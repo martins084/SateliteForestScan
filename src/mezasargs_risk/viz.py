@@ -219,6 +219,33 @@ def kalsnava_fig(per_year: pd.DataFrame, path: Path) -> Path:
     return path
 
 
+def harvest_official_fig(df: pd.DataFrame, follow: pd.DataFrame, versions: list[str], path: Path) -> Path:
+    """Left: EFDA class 3 vs official stand-replacing cut area. Right: share of v2.1.1 disturbed
+    pixels that v3.0 also marks as disturbed within +-1 year (end-of-series check)."""
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.9), dpi=200)
+    ax = axes[0]
+    ax.plot(df.index, df["csp_stand_replacing_ha"], color=INK2, marker="s", ms=3,
+            label="CSP MEZ012: vienlaidus cirtes (VMD)")
+    for v, col in zip(versions, (S1, S2)):
+        s = df[f"efda_c3_ha_{v}"].dropna()
+        rho = df.loc[s.index, "csp_stand_replacing_ha"].corr(s, method="spearman")
+        ax.plot(s.index, s.values, color=col, marker="o", ms=3, label=f"EFDA {v} klase 3 (ρ={rho:.2f}, n={len(s)})")
+    ax.set_title("Cirtes platība, ha gadā", loc="left")
+    ax.set_ylim(0, None)
+    ax.legend(loc="lower left", fontsize=7)
+    ax = axes[1]
+    for agent, col, lab in (("harvest", S3, "v2.1.1 klase 3"), ("wind_bark_beetle", S2, "v2.1.1 klase 1")):
+        f = follow[follow.agent_other == agent].set_index("year")
+        ax.plot(f.index, 100 * f["main_pm1"], color=col, marker="o", ms=3, label=lab)
+    ax.set_title("v2.1.1 pikseļi, ko v3.0 arī rāda kā traucētus (±1 g.), %", loc="left")
+    ax.set_ylim(0, 100)
+    ax.legend(loc="lower left", fontsize=7)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
 def all_figures(cfg, fdir: Path, regions, counts, cross, p, grid, forest_cells, conifer, stats, kal) -> dict:
     out = {}
     v = cfg.efda.main.version
