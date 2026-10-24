@@ -127,3 +127,185 @@ def describe(config: Path = ConfigArg):
         typer.echo(f"{k}: {v}")
     _metadata(cfg, "describe", {"dlt_cache": conifer.attrs.get("path"),
                                 "stats": {k: str(v) for k, v in cfg.stats if v}})
+
+
+@app.command("harvest-check")
+def harvest_check(config: Path = ConfigArg):
+    """EFDA class 3 vs official cut area (CSP MEZ012) and v2.1.1 pixels confirmed by v3.0 per year
+    (is the v2.1.1 2023 jump an end-of-series artefact?)."""
+    from . import describe as d
+    from . import viz
+    from .efda import followup
+
+    cfg = load_config(config)
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    fdir.mkdir(parents=True, exist_ok=True)
+    versions = [cfg.efda.main.version, cfg.efda.crosscheck.version]
+    counts = pd.read_csv(tdir / "efda_annual_counts.csv")
+    df = d.harvest_official(d.read_csp(cfg.stats.mez012_types, 3), counts, versions)
+    df.to_csv(tdir / "efda_c3_vs_csp_mez012.csv")
+    _, reg = _country(cfg, cfg.efda.main)
+    follow = followup(cfg.efda.main, cfg.efda.crosscheck, reg > 0)
+    follow.to_csv(tdir / "efda_v211_confirmed_by_v30.csv", index=False)
+    typer.echo(viz.harvest_official_fig(df, follow, versions, fdir / "rm5_cirtes_pret_csp.png"))
+    _metadata(cfg, "harvest_check", {"mez012_types": str(cfg.stats.mez012_types)})
+
+
+@app.command("lvm-aoi")
+def lvm_aoi(config: Path = ConfigArg):
+    """Stage 5b a): AOI candidates for the s2forest blind validation on LVM land (only proposed;
+    the user chooses, nothing is run)."""
+    import geopandas as gpd
+
+    from . import lvm
+    from . import viz
+    from .efda import country_regions
+
+    cfg = load_config(config)
+    c = cfg.lvm
+    if c is None:
+        raise typer.BadParameter("config has no `lvm` section")
+    a = c.aoi
+    tdir, fdir, adir = cfg.run_dir / "tables", cfg.run_dir / "figures", cfg.run_dir / "aoi"
+    for d in (tdir, fdir, adir):
+        d.mkdir(parents=True, exist_ok=True)
+    g, land = lvm.load_damage(c), lvm.load_land(c)
+    regions = country_regions(cfg.boundaries)
+    kal = gpd.read_file(cfg.kalsnava.aoi).to_crs(3059)
+    cells = lvm.target_cells(g, c, regions, kal.union_all().centroid, years=a.years, top=a.top_cells)
+    dlt = cfg.cache_dir / "rm" / f"hrl_dlt2018_{cfg.boundaries.country}_{int(cfg.conifer.dlt_res_m)}m.tif"
+    t = lvm.aoi_check(cells, g, land, dlt, c)
+    t.to_csv(tdir / "lvm_5b_aoi_candidates.csv", index=False)
+    typer.echo(t.to_string(index=False))
+    cand = {}
+    for r in t.head(a.n_candidates).itertuples():
+        lvm.aoi_geojson(r.x0, r.y0, g.crs, adir / f"aoi_kandidats_{r.rank}.geojson",
+                        f"5b AOI candidate {r.rank} (LKS-92 cell {r.x0},{r.y0})")
+        cell = gpd.read_file(adir / f"aoi_kandidats_{r.rank}.geojson").to_crs(g.crs)
+        area = cell.union_all()
+        yrs = g[~g["empty"] & g["year"].between(*a.years) & g.intersects(area)]
+        cand[r.rank] = {"cell": cell, "land": land[land.intersects(area)].clip(area),
+                        "pest": yrs[yrs["subtype"] == c.stem_pest].clip(area),
+                        "other": yrs[yrs["subtype"] != c.stem_pest].clip(area)}
+    p = viz.lvm_aoi_candidates(regions.to_crs(g.crs), t, cand, kal, fdir / "rm5b_aoi_kandidati.png")
+    typer.echo(f"figure: {p}")
+    _metadata(cfg, "lvm_aoi", {"lvm": {"damage": str(c.damage), "snapshot": str(c.damage_snapshot),
+                                       "land_units": str(c.land_units)},
+                               "dlt": str(dlt), "criteria": a.model_dump()})
+
+
+@app.command("lvm-validate")
+def lvm_validate(config: Path = ConfigArg):
+    """Stage 5b b)-c): s2forest (frozen v0.2, runs listed in lvm.s2forest) vs LVM damage polygons
+    on the validation AOI: detection per object, precision, lag, mask cover, placebo."""
+    from . import s2val
+    from . import viz
+
+    cfg = load_config(config)
+    c = cfg.lvm
+    if c is None or c.validation is None:
+        raise typer.BadParameter("config has no `lvm.validation` section")
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fdir.mkdir(parents=True, exist_ok=True)
+    aoi, d, runs = s2val.load(c)
+    d.drop(columns="geometry").to_csv(tdir / "val_lvm_polygons.csv", index=False)
+    (d.groupby(["group", "subtype", "name", "year"]).agg(n=("ha", "size"), ha=("ha", "sum")).round(2)
+       .reset_index().to_csv(tdir / "val_lvm_subtypes_by_year.csv", index=False))
+    masks = {r.year: r.path.parent.parent / "rasters" / "forest_mask.tif" for r in c.s2forest if r.variant == "all"}
+    cover, analysed = s2val.mask_cover(d, masks, c)
+    cover.to_csv(tdir / "val_lvm_mask_cover.csv", index=False)
+    typer.echo(cover.to_string(index=False))
+    for v in sorted({r.variant for r in c.s2forest}):
+        det = s2val.detection(d, runs, v, c)
+        det.to_csv(tdir / f"val_detection_{v}.csv", index=False)
+        summ = s2val.detection_summary(det, analysed)
+        summ.to_csv(tdir / f"val_detection_summary_{v}.csv", index=False)
+        prec = s2val.precision(d, runs, v, c)
+        prec.to_csv(tdir / f"val_precision_{v}.csv", index=False)
+        s2val.lag(det).to_csv(tdir / f"val_lag_{v}.csv", index=False)
+        s2val.lag(det, "found_overlap25").to_csv(tdir / f"val_lag_overlap25_{v}.csv", index=False)
+        typer.echo(f"--- {v}")
+        typer.echo(summ[summ["size"] == ">= 0,5 ha"].to_string(index=False))
+        typer.echo(prec.to_string(index=False))
+    plac = s2val.placebo(d, runs, aoi, masks[c.validation.reg_years[0]], c)
+    plac.to_csv(tdir / "val_placebo_all.csv", index=False)
+    summ = pd.read_csv(tdir / "val_detection_summary_all.csv", dtype={"offset": str})
+    s = summ[(summ["group"] == "620") & (summ["size"] == ">= 0,5 ha")]
+    obs = {f"{m}_{o}": v for m in ("found_share", "found_overlap25_share") for o, v in zip(s["offset"], s[m])}
+    obs |= s2val.precision_shares(pd.read_csv(tdir / "val_precision_all.csv"))
+    cmp = s2val.placebo_compare(obs, plac)
+    cmp.to_csv(tdir / "val_placebo_compare_all.csv", index=False)
+    typer.echo(cmp.to_string(index=False))
+    out = {"maps": viz.val5b_maps(aoi, d, runs, fdir / "rm5b_kartes.png"),
+           "detection": viz.val5b_detection(summ, plac, fdir / "rm5b_detekcija.png")}
+    for n, p in out.items():
+        typer.echo(f"{n}: {p}")
+    _metadata(cfg, "lvm_validate", {"lvm": {"damage": str(c.damage), "snapshot": str(c.damage_snapshot)},
+                                    "validation": c.validation.model_dump(),
+                                    "runs": [r.model_dump() for r in c.s2forest],
+                                    "match_buffer_m": c.match_buffer_m})
+
+
+@app.command("lvm-describe")
+def lvm_describe(config: Path = ConfigArg):
+    """Stage 5a: LVM open damage polygons - inventory, official statistics, EFDA timing,
+    Kalsnava check of s2forest (frozen runs, read only)."""
+    import geopandas as gpd
+
+    from . import lvm
+    from . import viz
+    from .describe import read_csp
+    from .efda import country_regions
+
+    cfg = load_config(config)
+    c = cfg.lvm
+    if c is None:
+        raise typer.BadParameter("config has no `lvm` section")
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fdir.mkdir(parents=True, exist_ok=True)
+    g, land = lvm.load_damage(c), lvm.load_land(c)
+    inv = lvm.inventory(g, land, c)
+    inv.to_csv(tdir / "lvm_inventory.csv", index=False)
+    typer.echo(inv.to_string(index=False))
+    ann = lvm.annual(g, c)
+    ann.to_csv(tdir / "lvm_annual_by_subtype.csv", index=False)
+    lvm.sizes(g).to_csv(tdir / "lvm_polygon_sizes.csv", index=False)
+    regions = country_regions(cfg.boundaries)
+    reg = lvm.by_region(g, land, regions, c.stem_pest, c)
+    reg.to_csv(tdir / "lvm_620_by_region.csv")
+    cmp = lvm.csp_compare(ann, read_csp(cfg.stats.meb012_owner, 2), c.stem_pest)
+    cmp.to_csv(tdir / "lvm_620_vs_csp_meb012.csv")
+    m11 = lvm.meb011_compare(reg, read_csp(cfg.stats.meb011_owner, 3))
+    m11.to_csv(tdir / "lvm_620_vs_csp_meb011_regions.csv", index=False)
+    timing = lvm.efda_timing(g, land, cfg)
+    timing.to_csv(tdir / "lvm_620_efda_timing.csv", index=False)
+    kal = gpd.read_file(cfg.kalsnava.aoi).to_crs(3059).union_all().centroid
+    lvm.target_cells(g, c, regions, kal).to_csv(tdir / "lvm_620_target_cells_5km.csv", index=False)
+    k = lvm.kalsnava_check(cfg)
+    for name, t in k.items():
+        t.to_csv(tdir / f"kalsnava_{name}.csv", index=False)
+    typer.echo(k["summary"].to_string(index=False))
+    out = {"annual": viz.lvm_annual(cmp, ann, fdir / "rm5a_lvm_gadi.png"),
+           "sizes": viz.lvm_sizes(g, fdir / "rm5a_lvm_izmeri.png"),
+           "regions": viz.lvm_regions(regions.to_crs(3059), reg, m11, fdir / "rm5a_lvm_regioni.png"),
+           "timing": viz.lvm_timing(timing, fdir / "rm5a_lvm_efda_laiks.png")}
+    aoi = gpd.read_file(cfg.kalsnava.aoi).to_crs(3059)
+    bb = tuple(aoi.total_bounds)
+    layers = {"MPS nogabali": gpd.read_file(lvm._zip(c.mps, c.mps_member), bbox=bb) if c.mps else gpd.GeoDataFrame(),
+              "LVM zeme": lvm.load_land(c, bbox=bb),
+              "MVR nogabali": (gpd.read_file(c.mvr_kalsnava, bbox=bb, columns=["kadastrs"]).set_crs(3059, allow_override=True)
+                               if c.mvr_kalsnava else gpd.GeoDataFrame()),
+              "LVM bojājumi": lvm.load_damage(c, bbox=bb).pipe(lambda d: d[~d["empty"]])}
+    runs = pd.concat([lvm._suspects(r) for r in c.s2forest if r.variant == "all"]).to_crs(3059)
+    layers["s2forest cirtes 2025+2026"] = runs[runs["type"] == "cut"]
+    layers["s2forest stress 2025+2026"] = runs[runs["type"] == "stress"]
+    layers = {n: (l.clip(aoi) if len(l) else l) for n, l in layers.items()}
+    out["kalsnava"] = viz.lvm_kalsnava(aoi, layers, fdir / "rm5a_lvm_kalsnava.png")
+    for n, p in out.items():
+        typer.echo(f"{n}: {p}")
+    _metadata(cfg, "lvm_describe", {"lvm": {"damage": str(c.damage), "snapshot": str(c.damage_snapshot),
+                                            "land_units": str(c.land_units), "mps": str(c.mps),
+                                            "mvr_kalsnava": str(c.mvr_kalsnava)},
+                                    "s2forest_runs": [r.label for r in c.s2forest]})

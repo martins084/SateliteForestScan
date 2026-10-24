@@ -4,7 +4,8 @@
   (non-commercial use, "(c) EuroGeographics for the administrative boundaries")
 * CSP tables (data: VMD) via the PxWeb API -> cache/rm5_sources/
   MEB012 forest damage by type 2013-2024, MEB010 (archive) 2013-2020,
-  MEZ012 cut areas by cut type and species 2014-2025.
+  MEZ012 cut areas by cut type and species 2014-2025 (+ all cut types x owner, species total).
+  Stage 5a: MEB012 and MEB011 (regions 2021-2025) by owner (total / state forest / other).
 
     python scripts/rm_fetch_sources.py
 """
@@ -19,12 +20,19 @@ import requests
 GISCO = "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/{}"
 CSP = "https://data.stat.gov.lv/api/v1/lv/OSP_PUB/START/NOZ/ME/{}"
 OWNER_TOTAL = {"code": "FOREST_OWNER", "selection": {"filter": "item", "values": ["TOTAL"]}}
+OWNERS = {"code": "FOREST_OWNER", "selection": {"filter": "item", "values": ["TOTAL", "ST_F", "OTH_F"]}}
 TABLES = {
     "csp_MEB012.csv": ("MEB/MEB012", [OWNER_TOTAL, {"code": "FOREST_DAMAGE", "selection": {"filter": "all", "values": ["*"]}}]),
     "csp_MEB010.csv": ("A_ME/MEB010", [OWNER_TOTAL, {"code": "FOREST_DAMAGE", "selection": {"filter": "all", "values": ["*"]}}]),
     "csp_MEZ012.csv": ("MEZ/MEZ012", [OWNER_TOTAL,
                                       {"code": "FOREST_THIN", "selection": {"filter": "item", "values": ["TOTAL", "F_FL_CL", "SL_THIN", "SEL_THIN", "SW_FL"]}},
                                       {"code": "TREE_SPECIES", "selection": {"filter": "item", "values": ["TOTAL", "SPRUCE", "PINE"]}}]),
+    "csp_MEZ012_types.csv": ("MEZ/MEZ012", [OWNERS,
+                                            {"code": "FOREST_THIN", "selection": {"filter": "all", "values": ["*"]}},
+                                            {"code": "TREE_SPECIES", "selection": {"filter": "item", "values": ["TOTAL"]}}]),
+    "csp_MEB012_owner.csv": ("MEB/MEB012", [OWNERS, {"code": "FOREST_DAMAGE", "selection": {"filter": "all", "values": ["*"]}}]),
+    "csp_MEB011_owner.csv": ("MEB/MEB011", [OWNERS, {"code": "AREA", "selection": {"filter": "all", "values": ["*"]}},
+                                            {"code": "FOREST_DAMAGE", "selection": {"filter": "all", "values": ["*"]}}]),
 }
 
 

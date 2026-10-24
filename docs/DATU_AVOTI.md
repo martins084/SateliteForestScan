@@ -53,9 +53,54 @@ Ieteikums 4. posmam: slīpums + TPI no LĢIA DTM; WAW mitro klašu (3, 4) īpats
 | **CSP MEZ012** „Inventarizētā meža izcirstās platības un krājas 2014–2025“ | [N, kā augstāk] | `OSP_PUB/START/NOZ/ME/MEZ/MEZ012`, atjaunināta 2026-07-21 [P] | Centrālā statistikas pārvalde, tabula MEZ012 |
 | **HRL Dominant Leaf Type 2018**, nolasīts ar 100 m soli (servera tuvākais pikselis) | kā augstāk [N] | `cache/rm/hrl_dlt2018_LV_100m.tif` | Copernicus Land Monitoring Service |
 | **FORWIND** (vējgāžu datubāze 2000–2018) | raksts CC BY 4.0 [P]; dati figshare doi:10.6084/m9.figshare.9555008 | **Latvijas nav** — 13 valstis, no Baltijas tikai Lietuva [P, Forzieri u. c. 2020 ESSD 12:257 teksts] | Forzieri u. c. (2020) |
-| **DEFID2** (kukaiņu un slimību bojājumi 1963–2021) | CC BY 4.0 [P, `copyright.txt` JRC FTP] | VER1-0 (2023), `defid2.gpkg` 569 MB — nav lejupielādēts | Forzieri u. c. (2023) GCB, doi:10.1111/gcb.16912; **vai ir Latvija — nav apstiprināts** (sk. RM_5) |
+| **DEFID2** (kukaiņu un slimību bojājumi 1963–2021) | CC BY 4.0 [P, `copyright.txt` JRC FTP] | VER1-0 (2023), `defid2.gpkg` 597 MB, lejupielādēts 2026-10-23 (`cache/defid2/`, sha256 2ee9a12b…98874) | Forzieri u. c. (2023) GCB, doi:10.1111/gcb.16912; **Latvijas nav** — 8 valstis (CZ, IT, RO, SE, ES, SK, FI, CH) [P, RM_5 7.3] |
 | Vētra 2005-01-08/09 | ziņu raksts | „Kā nosargāt vēja pļauto mežu“, Latvijas Vēstnesis Nr. 10, 19.01.2005 — VMD provizoriski 7,3 milj. m³ [P] | https://www.vestnesis.lv/ta/id/99761 |
 | Vētra 2024-07-01 | ziņu raksts | LSM 03.07.2024 — VMD: ≥ 70 ha, ~6000 m³ [P] | https://www.lsm.lv/raksts/zinas/latvija/03.07.2024-1-julija-vetra-visvairak-cietusi-cesu-puses-mezi.a560162/ |
+
+## Pārbaudīti pēc 5. posma — etiķešu meklēšana (2026-10-23)
+
+| Avots | Licence | Versija / piekļuve | Atsauce / piezīmes |
+|---|---|---|---|
+| **CSP MEZ012**, visi cirtes veidi × īpašnieks (kopā / valsts / pārējie), suga „Pavisam“ | [N, kā MEB012] | `cache/rm5_sources/csp_MEZ012_types.csv` (`scripts/rm_fetch_sources.py`) | Centrālā statistikas pārvalde, tabula MEZ012 (VMD dati) |
+| **VMD Meža valsts reģistra meža dati** (data.gov.lv `meza-valsts-registra-meza-dati`) | **CC0 1.0** [P, data.gov.lv API] | 5 × 7z (107–167 MB), atjaunināti 2026-10-09/14; pārbaudei lejupielādēts tikai `centra.7z` (107 MB, `cache/vmd_mvr/`) | Valsts meža dienests. Lauki: MK noteikumi Nr. 384, 9. pielikums ([likumi.lv/ta/id/283091](https://likumi.lv/ta/id/283091)) [P] |
+| **VMD klasifikatori** (`gis.vmd.gov.lv/Public/GetClasificators`, XLSX) | [N: licence nav norādīta] | serveris 2026-10-23 nesasniedzams; **Internet Archive kopija 2025-04-20** (`web.archive.org/web/20250420010502id_/…`), `cache/vmd_mvr/classifiers/` | Valsts meža dienests |
+| **LVM meža bojājumu teritorijas** (`LVM_BOJAJUMI`, data.gov.lv „AS „Latvijas valsts meži” mežkopības ģeotelpiskie dati“) | **CC0 1.0** [P, data.gov.lv] | oriģinālā saite 2026-10-23 → HTTP 404; **Internet Archive kopija 2025-05-03** (28 MB, faili 2025-04-27), `cache/lvm_open/` — **netiek commitota** | AS „Latvijas valsts meži“; lauku apraksts `lvm_bojajumi_shp.docx` (data.gov.lv) [P] |
+
+## 5a posms — LVM atvērtie bojājumu dati un MVR (2026-10-23)
+
+**LVM serveris.** Visas data.gov.lv saites uz `https://lvmgeo.lvm.lv/PublicData/SHP/*.zip` 2026-10-23 atgriež
+**HTTP 404**, arī datu kopām, kas nav saistītas ar bojājumiem (stigas, nogabali). `lvmgeo.lvm.lv` ir tikai kartes
+lietotne; ArcGIS REST / WFS / GeoServer ceļi atgriež 404. www.lvmgeo.lv sadaļa „Open access WMS/WMTS services“
+ir „coming soon“. Pēc LV portāla ziņām, LVM sistēmām 2026. gada jūnijā bija kiberuzbrukums, un LVM GEO darbība
+atjaunota tikai daļēji [P: ziņa; saistība ar 404 — N]. **Aktuāla publikācijas vieta nav atrasta**, tāpēc izmantotas
+Internet Archive kopijas. Faili glabājas `cache/lvm_open/` un **netiek commitoti**.
+
+| Avots | Licence | Proveniences dati | Piezīmes |
+|---|---|---|---|
+| **LVM meža bojājumu teritorijas** `LVM_BOJAJUMI` (data.gov.lv „AS „Latvijas valsts meži” mežkopības ģeotelpiskie dati“) | **CC0 1.0** [P, data.gov.lv] | oriģināls `https://lvmgeo.lvm.lv/PublicData/SHP/LVM_BOJAJUMI.zip`; kopija `https://web.archive.org/web/20250503020025id_/…` (arhivēts **2025-05-03**, faili zip iekšā **2025-04-27**); 28 468 449 B; sha256 `87a25e4ddcb6c67064cb674fc3edb05957c8d2439eae24f089c202ba86344c74` | lauki `DISTRBYEAR`, `DAMAGESUBT`; apraksts `lvm_bojajumi_shp.docx` (data.gov.lv) |
+| **LVM zemes vienības** `LVM_ZEMES_VIENIBAS` (data.gov.lv „Meža zemju īpašnieku zemes vienību ģeotelpiskie dati“) | **CC0 1.0** [P, data.gov.lv] | kopija `https://web.archive.org/web/20250421163437id_/https://lvmgeo.lvm.lv/PublicData/SHP/LVM_ZEMES_VIENIBAS.zip` (arhivēts 2025-04-21, faili 2025-04-20); 8 173 354 B; sha256 `bc3584ba95817ce770bc2d6c604d9f2c3c2ca9f9027a815f5e10a3ea36a98daa` | 11 124 zemes vienības, 1,61 milj. ha — LVM teritorija (analīzes kopa) |
+| **Meža pētīšanas stacijas nogabali** `MEZA_PETISANAS_STACIJA_NOGABALI` (data.gov.lv „Meža zemju īpašnieku nogabalu ģeotelpiskie dati“) | **CC0 1.0** [P, data.gov.lv] | kopija `https://web.archive.org/web/20250414000357id_/…` (arhivēts 2025-04-14, faili 2025-04-13); sha256 `a92faf7220371ab9e60b5d801d9ea1babaa1803d8e0e3a50da6913fe4d893e51` | tikai īpašnieka pārbaudei Kalsnavā; bojājumu/cirtes lauku nav |
+| **VMD Meža valsts reģistrs**, visas 5 virsmežniecības (`austrumu`, `centra`, `dienvidu`, `kurzemes`, `vidzemes`.7z) | **CC0 1.0** [P] | data.gov.lv `meza-valsts-registra-meza-dati`, lejupielādēts 2026-10-23; sha256 `cache/vmd_mvr/sha256.txt` | 26 nodaļas, 3 063 409 nogabali, 3,48 milj. ha |
+| **CSP MEB012** pa īpašniekiem (kopā / valsts / pārējie) un **MEB011** (reģioni × īpašnieki, 2021–2025) | [N, kā MEB012] | `cache/rm5_sources/csp_MEB012_owner.csv`, `csp_MEB011_owner.csv` (`scripts/rm_fetch_sources.py`) | Centrālā statistikas pārvalde (VMD dati) |
+
+**MVR nolasīšanas metode** (`scripts/rm_mvr_scan.py`):
+1. 7z arhīvus atver ar Windows iebūvēto `C:\Windows\System32\tar.exe` (libarchive). 7-Zip un py7zr nav vajadzīgi.
+2. Katras nodaļas `.dbf` tiek straumēts (`tar -xOf`) un nolasīts ar Python `struct`: galvene, lauku apraksti un
+   fiksēta garuma ieraksti. Diskā tas netiek izpakots.
+3. **Pilnīguma pārbaude:** katrai nodaļai DBF galvenes ierakstu skaits = nolasīto ierakstu skaits = `.shx` ierakstu
+   skaits ((izmērs − 100) / 8). Rezultāts: **26/26 nodaļas OK**, 3 063 409 ieraksti
+   (`output/rm5_label_search/mvr_*_record_check.csv`).
+4. Ģeometrija nolasīta tikai Kalsnavas nodaļai 2253 (`tar -xf` → `cache/vmd_mvr/extract/`, ar geopandas bbox).
+   `.prj` ir LKS-2020 TM (EPSG:10306); AOI koordinātas LKS-92 TM un LKS-2020 TM sistēmā sakrīt (pyproj) [P].
+
+## 5b posms — s2forest validācija uz LVM zemes (2026-10-23)
+
+Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
+
+- **Sentinel-2 L2A** (Earth Search `sentinel-2-c1-l2a`, Planetary Computer `sentinel-2-l2a`) jaunajam AOI
+  `data/aoi_lvm5b_vidzeme.geojson` (5 × 5 km LKS-92 šūna 650000 / 310000), 2019–2025. Kešs: `cache/35e44980c075_09b9ac/`.
+- **HRL DLT 2018** un **OSM ceļi** — s2forest meža maska, kā v0.2.
+- **LVM_BOJAJUMI** un **LVM_ZEMES_VIENIBAS** — Wayback kopijas no 5a sadaļas.
 
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 

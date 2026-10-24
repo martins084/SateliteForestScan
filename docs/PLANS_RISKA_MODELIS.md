@@ -353,3 +353,52 @@ Plāns apstiprināts ar šiem labojumiem; tie ir **prioritāri** pār iepriekš�
 11. Reģionu rezerves variants pieņemams.
 12. LVM gada noteikums — parametrs; noklusējums: cirte I–IV mēnesī → bojājuma gads t−1, V–XII → t. **Jāprecizē ar LVM**
     (ideāli bojājuma konstatēšanas datums, nevis cirtes datums).
+
+## 2.15 Etiķešu stratēģija pēc 5. posma (lietotājs, 2026-10-23)
+
+Lēmums pēc 5. posma rezultātiem (`docs/RM_5_EFDA_ANALIZE.md`). Tas ir **prioritārs** pār 2.5 un 2.14 tekstu,
+kur tie atšķiras; iepriekšējais teksts paliek nemainīts kā vēsture.
+
+- **EFDA klase 1 netiek izmantota kā etiķete** (ne v3.0, ne v2.1.1), jo tā nesakrīt ar oficiālajiem VMD datiem
+  (CSP MEB012, 2013–2024: v3.0 klase 1 pret vējgāzēm ρ = −0,43, pret kaitēkļu stumbru bojājumiem ρ = −0,01, n = 12).
+- **EFDA paliek pazīmju avots:** cirtes vēsture, meža malas, malas vecums, iepriekšējie traucējumi. Klases 3
+  kvalitāte pārbaudīta RM_5 7.2 sadaļā.
+- **Galvenās etiķetes:** LVM sanitārās cirtes (pēc apstiprināšanas).
+- **Papildu etiķešu kandidāti:** DEFID2 un VMD atvērtie dati (pārbaude RM_5 7. sadaļā).
+- **CSP MEB011** (reģioni, 2021–2025): agregēta validācija. Vai modeļa vidējais risks reģionā korelē ar oficiālajiem
+  bojājumiem? Tikai aprakstoši, jo n ir mazs.
+- **L6 (pārdēvēšana par vējgāžu modeli) vairs nav aktuāls.**
+
+## 2.16 LVM atvērtie bojājumu dati kā etiķetes (lietotājs, 2026-10-23)
+
+Galvenais etiķešu avots valsts mežiem ir **LVM_BOJAJUMI** (CC0). Pašreizējā publikācijas vieta nav atrasta, tāpēc
+izmanto Internet Archive kopiju no 2025-05-03; proveniences dati un sha256 ir `DATU_AVOTI.md`. Faili paliek `cache/`.
+Apraksts un pārbaudes: `docs/RM_5a_LVM_BOJAJUMI.md`.
+
+- **Pozitīvie:** stumbra kaitēkļi (`DAMAGESUBT = 620`) pēc reģistrācijas gada (`DISTRBYEAR`).
+- **Negatīvie = „nav reģistrēts”** (positive-unlabeled). Tāpēc modeli vērtē kā rangu (PR-AUC, lift top 5/10 %), nevis
+  kā absolūtu varbūtību. Kalibrāciju (L5) interpretē tikai relatīvi.
+- **Reģistrācijas gads ≠ uzbrukuma gads.** Laika saikne pārbaudīta empīriski RM_5a 2. sadaļā: EFDA cirte šajos
+  poligonos visbiežāk ir gadā r+1 un r+2. Gada noteikums paliek parametrs.
+- **Tikai valsts meži.** Analīzes kopa = **LVM zemes vienības** (`LVM_ZEMES_VIENIBAS`, Wayback 2025-04-21,
+  1,61 milj. ha) ∩ EFDA meža maska. 99,1 % LVM bojājumu poligonu reprezentatīvo punktu ir LVM zemes vienībās [P].
+- **MVR `P_CIRP = 31` ar `BV` 621/625** ir papildu etiķete privātajiem mežiem.
+  - Ierobežojumi: tikai pēdējā cirte nogabalā (momentuzņēmums); pēc cirtes iemesls nav redzams.
+  - **[P] MVR satur arī LVM zemi**, tāpēc privāto mežu etiķetēm MVR nogabalus ņem **ārpus** LVM zemes vienībām.
+  - Kalsnavas MPS mežu MVR praktiski nav (RM_5a 3. sadaļa).
+
+## 2.17 Kalsnava un 5b posms — s2forest aklā validācija uz LVM zemes (lietotājs, 2026-10-23)
+
+- **Kalsnava = LBTU Meža pētīšanas stacijas (MPS) mežs** (RM_5a 3. sadaļa). Kalsnavas validācijai vajag MPS sanitāro
+  ciršu datus (datums, iemesls); tos pieprasīs lietotājs. Līdz tam Kalsnava ir **demonstrācijas AOI**.
+- **5b posms (pirms 4. posma):** s2forest iesaldētā v0.2 konfigurācija uz jauna 5 × 5 km AOI LVM zemē, monitoringa gadi
+  2023 un 2024; mainās tikai AOI un gadi. Validācija pret LVM 620 un citiem bojājumu veidiem: detekcija pēc objekta
+  (r−1, r, r+1), „neapstiprināti” poligoni, laika nobīde, placebo (100 permutācijas), ar un bez `stress_only`
+  (informatīvi). Rezultāts: `docs/RM_5b_S2_VALIDACIJA_LVM.md`.
+  - AOI kritēriji: ≥ 80 % LVM zeme; HRL skujkoki ≥ 50 %; ≥ 30 LVM 620 poligoni ≥ 0,5 ha (2023–2024); pēc iespējas
+    Vidzemē, tuvu Kalsnavai. AOI izvēlas lietotājs no 3 kandidātiem.
+- **Nosaukums:** L7 „5b (sausuma salīdzinājums)” turpmāk ir **„sausuma salīdzinājums”** pēc 4. posma; „5b” ir šis
+  validācijas posms. Secība: 5a → 5b → 4 → sausuma salīdzinājums → 6 → 7 → 8.
+- **5b lēmumi (lietotājs, 2026-10-23):** AOI = 1. kandidāts (Vidzeme, `data/aoi_lvm5b_vidzeme.geojson`);
+  monitoringa gadi 2022–2025; 2025. gada detekcijas bez reģistrācijas = „neapstiprinātas (reģistrs beidzas 2025-04)”;
+  `reference` / `stands` noņemti; vējgāzes un citi bojājumi atsevišķi. Rezultāts: `docs/RM_5b_S2_VALIDACIJA_LVM.md`.

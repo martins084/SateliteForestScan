@@ -52,12 +52,65 @@ class StatsConfig(BaseModel):
     """CSP tables (data: VMD), downloaded as CSV from data.stat.gov.lv."""
     meb012: Path | None = None   # forest damage by type 2013-2024
     mez012: Path | None = None   # cut areas by cut type and species 2014-2025
+    mez012_types: Path | None = None   # MEZ012, all cut types, owners total / state / other
+    meb012_owner: Path | None = None   # MEB012 by owner (total / state forest / other), 2013-2024
+    meb011_owner: Path | None = None   # MEB011 regions x owner, 2021-2025
 
 
 class KalsnavaConfig(BaseModel):
     aoi: Path
     suspects: Path               # s2forest run output (read only)
     year: int = 2025
+
+
+class S2Run(BaseModel):
+    """One s2forest run (read only): suspects GPKG with layer suspects_<year>."""
+    label: str
+    year: int
+    variant: str = "all"         # forest_mask.amplitude_scope
+    path: Path
+
+
+class AoiCriteria(BaseModel):
+    """Stage 5b: criteria for a 5 x 5 km s2forest validation AOI on LVM land (user, 2026-10-23)."""
+    min_lvm_share: float = 0.8       # LVM land units / cell area
+    min_conifer_share: float = 0.5   # HRL DLT 2018 conifer / tree cover (as ConiferConfig.min_share)
+    min_targets: int = 30            # stem-pest polygons >= LvmConfig.min_target_ha, registered in `years`
+    years: tuple[int, int] = (2023, 2024)
+    prefer_region: str = "Vidzeme"   # NUTS 2024 region name (NAME_LATN)
+    top_cells: int = 10              # choose among the densest target cells
+    n_candidates: int = 3
+
+
+class ValidationConfig(BaseModel):
+    """Stage 5b: s2forest blind validation on LVM land (runs listed in LvmConfig.s2forest)."""
+    aoi: Path
+    reg_years: list[int] = Field(default_factory=lambda: [2023, 2024])
+    offsets: list[int] = Field(default_factory=lambda: [-1, 0, 1])
+    placebo_n: int = 100
+    seed: int = 42
+
+
+class LvmConfig(BaseModel):
+    """Stage 5a: LVM open damage polygons (CC0, state forest) as labels; Internet Archive copies
+    while the LVM PublicData server is down (provenance in docs/DATU_AVOTI.md)."""
+    damage: Path                 # LVM_BOJAJUMI zip
+    damage_member: str = "LVM_BOJAJUMI_Shape.shp"
+    damage_snapshot: date        # file date inside the archive (registrations after it are missing)
+    land_units: Path             # LVM_ZEMES_VIENIBAS zip (LVM land = analysis set)
+    land_units_member: str = "LVM_ZEMES_VIENIBAS_Shape.shp"
+    stem_pest: int = 620
+    years: tuple[int, int] = (2013, 2024)
+    timing_offsets: list[int] = Field(default_factory=lambda: [-1, 0, 1, 2])
+    match_buffer_m: float = 20.0
+    min_target_ha: float = 0.5   # S1 early-signal targets
+    s2forest: list[S2Run] = Field(default_factory=list)
+    s1_targets: Path | None = None
+    mvr_kalsnava: Path | None = None   # MVR shapefile (extracted district) covering the Kalsnava AOI
+    mps: Path | None = None            # "Meža pētīšanas stacija" compartments zip (owner check)
+    mps_member: str = "MEZA_PETISANAS_STACIJA_NOGABALI_Shape.shp"
+    aoi: AoiCriteria = Field(default_factory=AoiCriteria)
+    validation: ValidationConfig | None = None
 
 
 class RiskConfig(BaseModel):
@@ -71,6 +124,7 @@ class RiskConfig(BaseModel):
     stats: StatsConfig = Field(default_factory=StatsConfig)
     storms: list[Storm] = Field(default_factory=list)
     kalsnava: KalsnavaConfig | None = None
+    lvm: LvmConfig | None = None
 
     @property
     def run_dir(self) -> Path:

@@ -1,4 +1,4 @@
-Subject: EFDA v3.0.0 (Zenodo 10.5281/zenodo.21722408): Latvia.zip and Lithuania.zip appear to be swapped
+Subject: EFDA v3.0.0 (Zenodo 10.5281/zenodo.21722408): Latvia.zip and Lithuania.zip appear to be swapped (+ two observations for Latvia)
 
 Dear Dr. Viana-Soto, dear Dr. Senf,
 
@@ -35,6 +35,29 @@ How it was checked:
 
 The file names inside each archive (_latvia_v30 / _lithuania_v30) match the archive names, so the
 swap seems to have happened when the country rasters were named or packed.
+
+Two further observations for Latvia (for your information; we may have misread the layers):
+
+2. Agent class 1 (wind / bark beetle) vs. official damage statistics. Using the Latvian data
+   (v3.0 from Lithuania.zip, clipped to the Latvian NUTS boundary), the annual class-1 area does not
+   follow the official State Forest Service (VMD) damage statistics for 2013-2024 (Central
+   Statistical Bureau table MEB012, volume harvested because of damage):
+     - vs. wind / snow break: Spearman rho = -0.43 (n = 12)
+     - vs. stem pests (bark beetles): Spearman rho = -0.01 (n = 12)
+   The official stem-pest volume rose from 15-49 thousand m3/yr (2013-2018) to 1,355 (2023) and
+   1,713 (2024) thousand m3; v3.0 class 1 was ~6,100 ha in both 2023 and 2024. For v2.1.1 the
+   correlations are 0.06 and 0.22. The spatial agreement of class 1 between v2.1.1 and v3.0 is low:
+   same-year pixel Jaccard index median 0.13 (range 0.01-0.29, 1985-2023; grids aligned by the
+   integer offset, residual shift 8.5 m).
+
+3. Last year of v2.1.1. In 2023 (the last v2.1.1 year) v2.1.1 harvest rises from 52,746 to
+   97,754 ha (+85 %) and class 1 from 4,279 to 33,615 ha. Official stand-replacing cut area
+   (table MEZ012) rose by 18 % (45,904 -> 54,322 ha) and v3.0 harvest by 24 %. Of the pixels
+   v2.1.1 marks as disturbed, v3.0 also marks as disturbed within +-1 year a median of 58 %
+   (range 46-65 %) in 2009-2022, but only 33 % in 2023. In v3.0 the annual harvest area tracks the
+   official stand-replacing cut area well in 2014-2024 (Spearman rho = 0.78, ratio 0.76-1.02),
+   except for a decrease in 2024 (its last year) while the official area increased.
+   We therefore treat the last year of each version as less certain. Is this expected?
 
 Best regards,
 [name, affiliation]

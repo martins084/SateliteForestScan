@@ -160,6 +160,27 @@ def read_csp(path: Path, id_cols: int) -> pd.DataFrame:
     return long.drop(columns="col")
 
 
+# MEZ012 cut types that remove the whole stand ("vienlaidus"); selective / thinning types are not
+# included. "Sanitārā vējgāžu cirte" (only 2014-2015, <= 203 ha) is left out: windthrow, not harvest.
+STAND_REPLACING = ["Galvenā cirte (tikai kailcirte un kailcirte ar sēklas koku atstāšanu)",
+                   "Galvenā cirte (tikai kailcirte pēc caurmēra)", "Sanitārā vienlaidus cirte",
+                   "Rekonstruktīvā vienlaidus cirte", "Vienlaidus citas cirtes", "Vienlaidus ainavu cirte",
+                   "Atmežošanas cirte", "Nelikumīgā vienlaidus cirte"]
+
+
+def harvest_official(mez: pd.DataFrame, counts: pd.DataFrame, versions: list[str]) -> pd.DataFrame:
+    """Per year: official cut area (CSP MEZ012, all owners) - stand-replacing types, sanitary clear
+    cuts, all types - next to EFDA class 3 (harvest) area inside the country per version."""
+    m = mez[(mez["Meža īpašuma forma"] == "Pavisam") & (mez.indicator == "Platība (ha)")]
+    m = m.pivot(index="year", columns="Cirte (veidi)", values="value")
+    df = pd.DataFrame({"csp_stand_replacing_ha": m[STAND_REPLACING].sum(axis=1),
+                       "csp_sanitary_clear_ha": m["Sanitārā vienlaidus cirte"],
+                       "csp_all_types_ha": m["Pavisam"]})
+    c3 = counts[(counts.region > 0) & (counts.agent == "harvest")]
+    c3 = (c3.groupby(["year", "version"]).px.sum() * 0.09).unstack("version")
+    return df.join(c3[versions].add_prefix("efda_c3_ha_"), how="left")
+
+
 def kalsnava(cfg: RiskConfig) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """EFDA classes 1 / 3 in the Kalsnava AOI per year, and the EFDA history of the s2forest
     cut polygons of `kalsnava.year` (context only: EFDA ends 2024)."""
