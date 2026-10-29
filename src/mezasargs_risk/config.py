@@ -89,6 +89,8 @@ class ValidationConfig(BaseModel):
     offsets: list[int] = Field(default_factory=lambda: [-1, 0, 1])
     placebo_n: int = 100
     seed: int = 42
+    # damage groups (s2val.GROUPS) with placebo detection shares; "620" keys keep their plain names
+    placebo_groups: list[str] = Field(default_factory=lambda: ["620"])
 
 
 class LvmConfig(BaseModel):

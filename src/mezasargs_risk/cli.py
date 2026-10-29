@@ -231,8 +231,9 @@ def lvm_validate(config: Path = ConfigArg):
     plac = s2val.placebo(d, runs, aoi, masks[c.validation.reg_years[0]], c)
     plac.to_csv(tdir / "val_placebo_all.csv", index=False)
     summ = pd.read_csv(tdir / "val_detection_summary_all.csv", dtype={"offset": str})
-    s = summ[(summ["group"] == "620") & (summ["size"] == ">= 0,5 ha")]
-    obs = {f"{m}_{o}": v for m in ("found_share", "found_overlap25_share") for o, v in zip(s["offset"], s[m])}
+    obs = {}
+    for g in c.validation.placebo_groups:
+        obs |= s2val.group_shares(summ, g)
     obs |= s2val.precision_shares(pd.read_csv(tdir / "val_precision_all.csv"))
     cmp = s2val.placebo_compare(obs, plac)
     cmp.to_csv(tdir / "val_placebo_compare_all.csv", index=False)

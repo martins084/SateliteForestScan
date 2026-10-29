@@ -101,6 +101,9 @@ Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
   `data/aoi_lvm5b_vidzeme.geojson` (5 × 5 km LKS-92 šūna 650000 / 310000), 2019–2025. Kešs: `cache/35e44980c075_09b9ac/`.
 - **HRL DLT 2018** un **OSM ceļi** — s2forest meža maska, kā v0.2.
 - **LVM_BOJAJUMI** un **LVM_ZEMES_VIENIBAS** — Wayback kopijas no 5a sadaļas.
+- **Replikācija AOI 3 (2026-10-29):** jaunu avotu nav. Sentinel-2 L2A (tie paši STAC avoti) AOI
+  `data/aoi_lvm5b_riga.geojson` (LKS-92 šūna 505000 / 285000), 2019–2025. Kešs: `cache/7da254194883_60874f/` (454 MB,
+  netiek commitots).
 
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 

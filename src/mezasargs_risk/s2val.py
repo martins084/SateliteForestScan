@@ -191,8 +191,9 @@ def relocate(d: gpd.GeoDataFrame, forest_xy: np.ndarray, area, rng: np.random.Ge
 
 def placebo(d: gpd.GeoDataFrame, runs: dict, aoi: gpd.GeoDataFrame, forest_mask: str, c: LvmConfig,
             variant: str = "all") -> pd.DataFrame:
-    """`placebo_n` random relocations of all LVM polygons; per permutation the 620 detection
-    shares (>= 0,5 ha, per offset and any) and the share of s2forest polygons inside relocated damage."""
+    """`placebo_n` random relocations of all LVM polygons; per permutation the detection shares
+    (>= 0,5 ha, per offset and any) of the groups in `placebo_groups` and the share of s2forest
+    polygons inside relocated damage."""
     v = c.validation
     with rasterio.open(forest_mask) as src:
         codes, tr = src.read(1), src.transform
@@ -204,14 +205,22 @@ def placebo(d: gpd.GeoDataFrame, runs: dict, aoi: gpd.GeoDataFrame, forest_mask:
     for i in range(v.placebo_n):
         p = relocate(d, xy, area, rng)
         det = detection(p, runs, variant, c)
-        s = detection_summary(det)
-        s = s[(s["group"] == "620") & (s["size"] == ">= 0,5 ha")]
-        offs = s["offset"].astype(str)
-        row = {"perm": i} | {f"found_share_{o}": f for o, f in zip(offs, s["found_share"])} \
-            | {f"found_overlap25_share_{o}": f for o, f in zip(offs, s["found_overlap25_share"])}
+        summ = detection_summary(det)
+        row = {"perm": i}
+        for g in v.placebo_groups:
+            row |= group_shares(summ, g)
         row |= precision_shares(precision(p, runs, variant, c))
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+def group_shares(summ: pd.DataFrame, g: str = "620") -> dict:
+    """Detection shares (>= 0,5 ha) per offset of one group; keys of groups other than 620 get
+    the prefix "<group>_"."""
+    s = summ[(summ["group"] == g) & (summ["size"] == ">= 0,5 ha")]
+    pre = "" if g == "620" else f"{g}_"
+    return {f"{pre}{m}_{o}": val for m in ("found_share", "found_overlap25_share")
+            for o, val in zip(s["offset"].astype(str), s[m])}
 
 
 PREC_COLS = ["in_lvm_damage_any_year", "in_lvm_damage_reg_y-1..y+1", "in_lvm_620_reg_y-1..y+1"]
