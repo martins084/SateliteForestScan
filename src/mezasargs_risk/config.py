@@ -138,9 +138,25 @@ class OpenMeteoConfig(BaseModel):
     max_per_day: float = 9000
 
 
+class CdsConfig(BaseModel):
+    """Copernicus CDS ERA5-Land (plan 2.21). All days are UTC days (user decision 2026-10-29)."""
+    area: list[float] = Field(default_factory=lambda: [58.2, 20.8, 55.5, 28.4])   # N, W, S, E (Latvia + 0.1 deg)
+    time_zone: str = "utc+00:00"
+    frequency: str = "1_hourly"
+    daily_mean_vars: list[str] = Field(default_factory=lambda: [
+        "2m_temperature", "2m_dewpoint_temperature", "10m_u_component_of_wind", "10m_v_component_of_wind",
+        "surface_pressure"])
+    accum_vars: list[str] = Field(default_factory=lambda: [
+        "total_precipitation", "surface_solar_radiation_downwards", "potential_evaporation"])
+    pilot_year: int = 2023
+    pilot_month: int = 4
+    wind_box: list[float] = Field(default_factory=lambda: [56.8, 25.8, 56.6, 26.0])  # Kalsnava, hourly u/v
+
+
 class ClimateConfig(BaseModel):
     """Stage 4: weather (ERA5 via Open-Meteo), RITY-2 phenology, climatic water balance."""
     openmeteo: OpenMeteoConfig = Field(default_factory=OpenMeteoConfig)
+    cds: CdsConfig = Field(default_factory=CdsConfig)
     points: list[Point] = Field(default_factory=list)      # e.g. Kalsnava (nearest ERA5 node is used)
     grid_buffer_cells: int = 1       # ERA5 nodes whose 0.25 deg cell touches Latvia + this many rings
     years: tuple[int, int] = (2018, 2026)                  # RITY-2 and annual outputs

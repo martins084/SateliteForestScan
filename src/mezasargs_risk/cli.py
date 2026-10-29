@@ -471,3 +471,109 @@ def climate_cmd(config: Path = ConfigArg, scope: str = typer.Option("points", he
     _metadata(cfg, f"climate_{scope}", {"openmeteo": c.openmeteo.model_dump(), "nodes_used": len(meta),
                                         "nodes_missing": missing, "years": c.years, "baseline": c.baseline,
                                         "wb_months": c.wb_months, "scenarios": c.scenarios})
+
+
+def _cds_key_present() -> bool:
+    """Only checks that the CDS key file (or the cdsapi environment variables) exists; never reads it."""
+    import os
+
+    return (Path.home() / ".cdsapirc").exists() or bool(os.environ.get("CDSAPI_URL") and os.environ.get("CDSAPI_KEY"))
+
+
+@app.command("cds-pilot")
+def cds_pilot(config: Path = ConfigArg):
+    """Stage 4 pilot (user approval 2026-10-29): ERA5-Land for one month over Latvia (daily max / min /
+    mean, 00 UTC accumulations) + hourly u/v for Kalsnava. Measures time and size, checks the format,
+    the daily-mean-wind bias, and compares Kalsnava with the Open-Meteo prototype."""
+    import calendar
+
+    from . import cds, et0, weather
+
+    cfg = load_config(config)
+    c = cfg.climate
+    k = c.cds
+    if not _cds_key_present():
+        typer.echo("CDS key file ~/.cdsapirc not found - stopping (nothing requested).")
+        raise typer.Exit(2)
+    cache = cfg.cache_dir / "rm" / "cds"
+    log = cache / "requests.jsonl"
+    y, m = k.pilot_year, k.pilot_month
+    days = list(range(1, calendar.monthrange(y, m)[1] + 1))
+    tag = f"{y}{m:02d}"
+    jobs = {
+        "tmax": (cds.DAILY, cds.daily_request(y, m, days, "daily_maximum", ["2m_temperature"], k.area, k.time_zone, k.frequency)),
+        "tmin": (cds.DAILY, cds.daily_request(y, m, days, "daily_minimum", ["2m_temperature"], k.area, k.time_zone, k.frequency)),
+        "mean": (cds.DAILY, cds.daily_request(y, m, days, "daily_mean", k.daily_mean_vars, k.area, k.time_zone, k.frequency)),
+        "accum": (cds.HOURLY, cds.hourly_request(y, m, days, ["00:00"], k.accum_vars, k.area)),
+        "wind_hourly": (cds.HOURLY, cds.hourly_request(y, m, days, [f"{h:02d}:00" for h in range(24)],
+                                                       ["10m_u_component_of_wind", "10m_v_component_of_wind"], k.wind_box)),
+    }
+    recs, ds = [], {}
+    for name, (dataset, req) in jobs.items():
+        target = cds.target_path(cache, dataset, f"{name}_{tag}" + ("_kalsnava" if name == "wind_hourly" else "_lv"))
+        typer.echo(f"{name}: {dataset} ...")
+        r = cds.retrieve(dataset, req, target, log)
+        r |= {"name": name, "kind": cds.file_kind(target), "n_vars": len(req["variable"]), "n_days": len(days)}
+        recs.append({kk: v for kk, v in r.items() if kk != "request"})
+        ds[name] = cds.open_any(target)
+        typer.echo(f"  {r.get('seconds', 'cached')} s, {r['bytes'] / 1e6:.2f} MB, {r['kind']}")
+    tdir = cfg.run_dir / "tables"
+    tdir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(recs).to_csv(tdir / "cds_pilot_requests.csv", index=False)
+    fmt = {n: cds.describe(d) for n, d in ds.items()}
+    (tdir / "cds_pilot_format.json").write_text(json.dumps(fmt, indent=1, ensure_ascii=False), encoding="utf-8")
+    typer.echo(json.dumps(fmt, indent=1, ensure_ascii=False))
+
+    # Kalsnava point: nearest ERA5-Land cell to the configured point
+    p = c.points[0]
+    s = {n: cds.point_series(ds[n], p.lon, p.lat) for n in ("tmax", "tmin", "mean", "accum", "wind_hourly")}
+    lat_used = float(ds["mean"].latitude.sel(latitude=p.lat, method="nearest"))
+    lon_used = float(ds["mean"].longitude.sel(longitude=p.lon, method="nearest"))
+    day = pd.DataFrame({"tmax": s["tmax"]["t2m"] - 273.15, "tmin": s["tmin"]["t2m"] - 273.15,
+                        "tmean": s["mean"]["t2m"] - 273.15, "tdew": s["mean"]["d2m"] - 273.15,
+                        "u10": s["mean"]["u10"], "v10": s["mean"]["v10"], "sp_kpa": s["mean"]["sp"] / 1000})
+    day.index = day.index.normalize()
+    acc = cds.accum_to_days(s["accum"])
+    day = day.join(pd.DataFrame({"precip": acc["tp"] * 1000, "rs_mj": acc["ssrd"] / 1e6, "pev_mm": acc["pev"] * 1000}))
+    wh = s["wind_hourly"]
+    wh["speed"] = cds.wind_speed(wh["u10"], wh["v10"])
+    hd = wh.groupby(wh.index.normalize()).agg(u_mean=("u10", "mean"), v_mean=("v10", "mean"), speed_hourly=("speed", "mean"),
+                                              n_hours=("speed", "size"))
+    day = day.join(hd)
+    day["speed_from_daily_uv"] = cds.wind_speed(day["u10"], day["v10"])
+    ea = et0.sat_vp(day["tdew"])                                                     # FAO-56 Eq. 14
+    args = dict(tmax=day["tmax"], tmin=day["tmin"], ea=ea, rs=day["rs_mj"], lat_deg=lat_used,
+                doy=day.index.dayofyear, p_kpa=day["sp_kpa"])
+    day["et0_daily_uv"] = et0.et0_daily(u2=et0.wind_2m(day["speed_from_daily_uv"]), **args)
+    day["et0_hourly_speed"] = et0.et0_daily(u2=et0.wind_2m(day["speed_hourly"]), **args)
+    day["daylight_h_fao34"] = et0.daylight_hours(lat_used, day.index.dayofyear)
+    # Open-Meteo prototype (cached, days in UTC+2 as returned by the API)
+    om, meta = weather.load_node(*weather.nearest_node(p.lon, p.lat), c, cfg.cache_dir / "rm" / "openmeteo", budget=None)
+    cmp = day.join(om.add_prefix("om_"), how="inner").dropna(subset=["precip", "om_tmax"])
+    cmp.to_csv(tdir / "cds_pilot_kalsnava_daily.csv")
+    rows = []
+    for a, b, lab in (("tmax", "om_tmax", "Tmax °C"), ("tmin", "om_tmin", "Tmin °C"), ("tmean", "om_tmean", "Tmean °C"),
+                      ("precip", "om_precip", "P mm/d"), ("et0_daily_uv", "om_et0", "ET0 mm/d"),
+                      ("daylight_h_fao34", "om_daylight_s", "dienas garums h")):
+        x, yv = cmp[a], cmp[b] / 3600 if b == "om_daylight_s" else cmp[b]
+        rows.append({"measure": lab, "n_days": len(x), "era5land_mean": round(x.mean(), 3), "openmeteo_mean": round(yv.mean(), 3),
+                     "bias": round((x - yv).mean(), 3), "rmse": round(float(np.sqrt(((x - yv) ** 2).mean())), 3),
+                     "r": round(float(np.corrcoef(x, yv)[0, 1]), 3), "sum_era5land": round(x.sum(), 2), "sum_openmeteo": round(yv.sum(), 2)})
+    comp = pd.DataFrame(rows)
+    comp.to_csv(tdir / "cds_pilot_kalsnava_vs_openmeteo.csv", index=False)
+    w = day.dropna(subset=["speed_hourly"])
+    wind = {"days": len(w), "n_hours_per_day": sorted(set(w["n_hours"].astype(int))),
+            "u_daily_minus_hourly_mean": round(float((w["u10"] - w["u_mean"]).abs().max()), 4),
+            "v_daily_minus_hourly_mean": round(float((w["v10"] - w["v_mean"]).abs().max()), 4),
+            "speed_daily_uv_mean": round(float(w["speed_from_daily_uv"].mean()), 3),
+            "speed_hourly_mean": round(float(w["speed_hourly"].mean()), 3),
+            "ratio_mean": round(float((w["speed_from_daily_uv"] / w["speed_hourly"]).mean()), 3),
+            "ratio_min": round(float((w["speed_from_daily_uv"] / w["speed_hourly"]).min()), 3),
+            "et0_daily_uv_sum": round(float(w["et0_daily_uv"].sum()), 2),
+            "et0_hourly_speed_sum": round(float(w["et0_hourly_speed"].sum()), 2),
+            "pev_sum_mm": round(float(w["pev_mm"].sum()), 2), "point_lon": lon_used, "point_lat": lat_used,
+            "openmeteo_node": meta["node"]}
+    (tdir / "cds_pilot_wind.json").write_text(json.dumps(wind, indent=1), encoding="utf-8")
+    typer.echo(comp.to_string(index=False))
+    typer.echo(json.dumps(wind, indent=1))
+    _metadata(cfg, "cds_pilot", {"cds": k.model_dump(), "requests": recs, "point": [lon_used, lat_used]})
