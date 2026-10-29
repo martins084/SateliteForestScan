@@ -121,6 +121,20 @@ Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
 - **Testa fails:** `tests/data/openmeteo_era5_daily_sample.json` — Open-Meteo `era5` atbilde, mezgls 56,75 / 25,75,
   2023-04-18..21 (4 dienas, 909 B), CC BY 4.0, atsauce kā augstāk; bez izmaiņām, izņemot noņemtu `generationtime_ms`.
 
+## CDS ERA5-Land — pārbaudīts plānam, NAV lejupielādēts (2026-10-29)
+
+| Avots | Licence | Versija / piekļuve | Atsauce |
+|---|---|---|---|
+| **ERA5-Land post-processed daily statistics** (`derived-era5-land-daily-statistics`) | CC-BY-4.0 [P, CDS katalogs] | 0,1°; 1950-01-01 – 2026-10-23 (katalogs 2026-10-29); bez akumulētajiem mainīgajiem | doi:10.24381/cds.e9c9c792 |
+| **ERA5-Land hourly** (`reanalysis-era5-land`) | CC-BY-4.0 [P, CDS katalogs] | 0,1°; 1950 – 2026-10-23; netCDF vai GRIB | doi:10.24381/cds.e2161bac |
+| **ERA5 post-processed daily statistics on single levels** (`derived-era5-single-levels-daily-statistics`) | [N: licence nav atvērta] | 0,25°; `daily_sum` akumulētajiem | rezerves variants |
+| ERA5-Land dokumentācija (ECMWF Confluence) | — | https://confluence.ecmwf.int/display/CKB/ERA5-Land%3A+data+documentation | izšķirtspēja, aizture, akumulācija, `pev` definīcija, zināmās problēmas |
+| CDS API apraksti | — | `https://cds.climate.copernicus.eu/api/retrieve/v1/processes/<datu kopa>` | mainīgo nosaukumi, parametri |
+| ECMWF forums par pieprasījumu limitiem | — | https://forum.ecmwf.int/t/request-too-large-item-limit-for-era5-land-data/1488 | 1 000 → 12 000 lauku [datums nav zināms] |
+| **FAO-56** (Allen, Pereira, Raes, Smith 1998, FAO Irrigation and Drainage Paper 56) | FAO publikācija [N: licence nav izlasīta] | https://www.fao.org/4/x0490e/x0490e06.htm (2. nod.), …07.htm (3. nod.), …08.htm (4. nod., Example 18) | ET0 metode un testa piemērs |
+
+- Atslēga `~/.cdsapirc` — lietotāja; 2026-10-29 fails nav atrasts.
+
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 
 | Pakotne | Versija (PyPI) | Licence [P] |

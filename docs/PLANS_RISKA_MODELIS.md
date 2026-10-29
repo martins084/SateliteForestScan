@@ -402,3 +402,185 @@ Apraksts un pārbaudes: `docs/RM_5a_LVM_BOJAJUMI.md`.
 - **5b lēmumi (lietotājs, 2026-10-23):** AOI = 1. kandidāts (Vidzeme, `data/aoi_lvm5b_vidzeme.geojson`);
   monitoringa gadi 2022–2025; 2025. gada detekcijas bez reģistrācijas = „neapstiprinātas (reģistrs beidzas 2025-04)”;
   `reference` / `stands` noņemti; vējgāzes un citi bojājumi atsevišķi. Rezultāts: `docs/RM_5b_S2_VALIDACIJA_LVM.md`.
+
+## 2.18 Secinājums pēc s2forest validācijas (lietotājs, 2026-10-29)
+
+Avots: `docs/RM_5b_S2_VALIDACIJA_LVM.md` (AOI 1 Vidzeme un AOI 3 Rīgas reģions; iesaldētā v0.2 konfigurācija,
+2022–2025, placebo 100 permutācijas, p = 0,010 ir mazākā iespējamā).
+
+- **s2forest ir apstiprināts kā bojājumu seku (ciršu) detektors** [P]:
+
+  | LVM 620 ≥ 0,5 ha, jebkurā gadā r−1..r+1 | AOI 1 (n = 81) | AOI 3 (n = 101) |
+  |---|---|---|
+  | ≤ 20 m (placebo) | 69,1 % (36,2 %), p 0,010 | 87,1 % (61,5 %), p 0,010 |
+  | s2forest pārklāj ≥ 25 % (placebo) | 32,1 % (8,2 %), p 0,010 | 61,4 % (19,8 %), p 0,010 |
+  | atrasti kā cut (≤ 20 m) | 55 no 56 | 85 no 88 |
+
+  Atrastie bojājumi ir galvenokārt cirtes gadā r un r+1, lielākoties ziemas cirtes pēc reģistrācijas.
+- **S2 stress nav agrīnais brīdinājums gadu iepriekš** [P]: gadā r−1 stingrais rādītājs abos AOI ir placebo līmenī
+  (AOI 1: 2,5 % pret 2,6 %, p 0,61; AOI 3: 10,9 % pret 6,6 %, p 0,11, un visas 11 sakritības ir cirtes).
+- **Daļējs, vienā AOI novērots rezultāts (nav vispārinājums)** [P]: AOI 3 stresa poligoni reģistrācijas logā sakrīt ar
+  LVM bojājumiem biežāk nekā nejauši (62,2 % pret 39,1 %, p 0,020; ar 620: 40,0 % pret 23,8 %, p 0,030), lielākoties
+  **tajā pašā gadā** kā reģistrācija (17 no 25), un 12 no 25 nākamajā gadā pārklāj cirte. Tātad S2 stress **var**
+  signalizēt par jau notiekošu bojājumu tās pašas sezonas laikā. AOI 1 tas neatkārtojas (p 0,14 un 0,48), un
+  LVM poligoniem ir tikai gads, tāpēc secība gada iekšienē nav zināma [N].
+- **S2 stress nav etiķete.** S2 laika rindu pazīmes (piem., z, statuss, stresa poligona tuvums) ir tikai
+  **kandidātpazīmes**; to vērtību nosaka modeļa validācija (7. posms), nevis šis secinājums.
+- **Lomas:**
+  - **riska modelis** = agrīnā brīdināšana (prognoze pirms sezonas no t−1 pazīmēm);
+  - **S2 (s2forest)** = notikušo bojājumu un sanitāro ciršu monitorings; tās pašas sezonas stresa signāls — pārbaudāma
+    hipotēze ar LVM datiem (datums + iemesls);
+  - **S1** = papildinājums mākoņainā laikā (S1 darbs iesaldēts līdz LVM datiem, `docs/S1_KOPSAVILKUMS.md`).
+
+## 2.19 LVM datu integrācija (plāns; dati vēl nav saņemti)
+
+- **Gaidāmie dati (pieprasījums LVM):**
+  1. sanitārās cirtes 2018–2026 ar **datumu** un **iemeslu** (mizgrauži / vējgāzes / cits), poligoni;
+  2. aktuālais bojājumu reģistrs 2025–2026 (Wayback kopija beidzas 2025-04-27);
+  3. taksācija: nogabali ar sugu sastāvu, vecumu, augstumu, krāju;
+  4. 2026. gada vējgāžu poligoni (tie arī atsāk iesaldēto S1 darbu).
+- **Ko tie aizstās:**
+  - **galvenā etiķete** = sanitārā cirte ar iemeslu „mizgrauži” (datums + iemesls), nevis Wayback `LVM_BOJAJUMI`
+    620 reģistrācijas gads (2.16). Wayback dati paliek salīdzinājumam un gadiem, kurus jaunie dati nesedz;
+  - **egles aizstājēji E1 / E2** (HRL skujkoki + Picea varbūtība; CHMv2 augstums, 2.6) → taksācijas egles daļa,
+    vecums, augstums, krāja LVM zemei. E1 / E2 paliek privātajiem mežiem;
+  - **5b validācija** atkārtojama ar cirtes datumu: vai S2 stress ir pirms cirtes tās pašas sezonas laikā (2.18).
+- **Etiķešu gada noteikums:** parametrs; noklusējums — cirte I–IV mēnesī → bojājuma gads t−1, V–XII → t (2.14,
+  12. punkts). **Jāprecizē ar LVM**; ideāli — bojājuma konstatēšanas datums, nevis cirtes datums.
+- **Datu drošība:**
+  - LVM faili tikai `data/lvm/` (`.gitignore`); nekādas LVM datu kopijas `output/` failos, ko commito, vai `docs/`;
+  - dokumentācijā un attēlos tikai agregāti (skaits, ha, daļas, kartes bez nogabalu atribūtiem);
+  - pirms katra push: pārbaude, ka commitos nav `data/local`, `data/lvm`, `cache`, `output` (kā līdz šim).
+- **Ielādes un pārbaudes posms** (kā 5a, pirms modeļa): lauki un kodi, gadi un datumi (diapazons, trūkstošie),
+  ģeometrijas (derīgums, dublikāti, pārklāšanās, platības sadalījums), salīdzinājums ar Wayback `LVM_BOJAJUMI` (cik
+  620 poligonu ir sanitārās cirtes; laika nobīde reģistrācija → cirte) un ar CSP (MEB011 / MEB012 pa gadiem un
+  reģioniem). Atskaite `docs/RM_LVM_DATI.md`, apstāšanās.
+
+## 2.20 Laika plāns pēc apstiprināšanas inkubatorā
+
+- **Mērķis:** 2027. gada riska karte gatava **pirms mizgraužu izlidošanas**, lai to var pārbaudīt ar dronu un dabā
+  maijā–jūnijā. RITY-2 (ERA5, Kalsnava) izlidošana 2018–2026 bija 2.–28. aprīlī (2024 un 2025: 2.–3. aprīlis) [P,
+  `RM_4`]; Silava 2023: 20. aprīlis [P]. Orientējošais termiņš — aprīļa beigas; **ieteikums — 1. aprīlis**, jo siltos
+  gados izlidošana var būt aprīļa sākumā [N].
+- **Kāpēc tas ir iespējams:** karte balstās uz t−1 = 2026 pazīmēm. 2026. gada laikapstākļi IV–X ir pieejami
+  novembrī (ERA5-Land ~5 dienu aizture, galīgie dati ~2 mēn. vēlāk [P ECMWF]).
+- **Pazīmju aktualitātes risks [P/N]:** EFDA v3.0 beidzas ar 2024. gadu, tāpēc traucējumu vēsture 2025–2026 no EFDA
+  nav. Varianti: LVM sanitārās cirtes (2.19; valsts meži), s2forest ciršu detekcija (tikai AOI), EFDA atjauninājums
+  [N: nav zināms]. Bez tā t−1 = 2026 malu / traucējumu pazīmes ir novecojušas.
+
+| Laiks [N] | Darbs | Atkarība |
+|---|---|---|
+| 2026. g. novembris | CDS ERA5-Land lejupielāde (pēc apstiprinājuma, 2.21), Kalsnavas salīdzinājums, Latvijas RITY-2 / ūdens bilance; sausuma salīdzinājums | CDS atslēga; LVM pieprasījums nosūtīts |
+| 2026. g. decembris–2027. g. janvāris | 6. posms: pazīmju slāņi (CHMv2, DTM, malas, traucējumi, klimats), apmācības tabula, noplūdes testi | LVM dati, ja saņemti (citādi Wayback etiķetes) |
+| 2027. g. janvāris–februāris | 7. posms: bāzlīnijas, HGB, telpiskā + laika validācija | 6. posms |
+| 2027. g. marts | 8. posms: 2027. gada karte (t−1 = 2026), atskaite; drona misiju saraksts | 7. posms |
+| 2027. g. aprīlis | RITY-2 izlidošanas sekošana pēc ERA5-Land-T (tagadne, ne prognoze [N]) | CDS |
+| 2027. g. maijs–jūnijs | drona un lauka pārbaude | karte |
+
+- **Dators [P, 2026-10-29]:** RAM 15,7 GB (brīvi novēroti 1,8–6,7 GB), CPU i5-13450HX (10 kodoli, 16 pavedieni),
+  GPU RTX 5060 Laptop (Windows rāda 4 GB VRAM; lauks ir ierobežots līdz 4 GB, īstā vērtība nav pārbaudīta [N]),
+  disks brīvi 544 GB.
+- **Kas iespējams uz šī datora [N, aprēķins]:**
+  - **6. posms LVM zemei:** jā, blokos. Analīzes kopa ~1,61 M ha ≈ 18 M 30 m šūnu (pirms skujkoku filtra); CHMv2
+    ~30 GB pagaidu lejupielāde un agregācija (tīkla ierobežota, stundas); DTM 20 m.
+  - **7. posms LVM zemei:** jā. Tabula ≤ 10 M rindu × 30 pazīmes ≈ 1,2 GB float32; HGB ar telpisko + laika
+    krosvalidāciju (k = 5) — stundas.
+- **Kam vajag RTU HPC [N]:**
+  - visu īpašnieku Latvijas tabula (~43 M meža šūnu × 25 gadi) un prognoze ar daudzām pazīmēm;
+  - plaša hiperparametru meklēšana, atkārtota krosvalidācija, permutāciju nozīmīgums lielā apjomā;
+  - **S2 laika rindu pazīmes visai Latvijai:** 5b AOI 3 palaišana (25 km², 1 gads) aizņēma 13–34 min [P, `output/rm5b_lvm_aoi3/run_all.out`];
+    ~38 800 km² meža (EFDA, 2.3) ≈ 1 550 šādu AOI ≈ 340–880 h vienam gadam [N] — tikai HPC (vai tikai AOI).
+
+## 2.21 Laikapstākļu avots (lietotājs, 2026-10-29)
+
+- **Galvenais: Copernicus CDS ERA5-Land** (0,1°). **Open-Meteo** (`era5`, 0,25°) — tikai **Kalsnavas prototips**
+  (`docs/RM_4_KLIMATS_FENOLOGIJA.md`), Latvijas mērogam netiek lietots.
+- **Pamatojums:**
+  - **licence / lietošana:** Open-Meteo bezmaksas līmenis ir nekomerciālai lietošanai, projekts inkubatorā ir vērsts uz
+    produktu; ERA5-Land CDS licence CC-BY-4.0 [P, CDS katalogs];
+  - **apjoms:** Open-Meteo svērtie izsaukumi Latvijai = 161 091 (~18 dienas pie bezmaksas limita) [P, `RM_4`];
+  - **izšķirtspēja:** ERA5-Land 0,1° (~9 km) pret ERA5 0,25° (~25 km) [P].
+- **Atkarības (apstiprinātas):** `cdsapi` 0.7.7 (Apache-2.0; velk līdzi `ecmwf-datastores-client` Apache-2.0,
+  `multiurl` Apache-2.0, `tqdm` MPL-2.0/MIT) un `h5netcdf` 1.8.2 (BSD) ar `h5py` 3.16 (BSD-3, 3,2 MB) — vieglākais
+  netCDF4 lasītājs (`netCDF4` 1.7.5: 22 MB + `cftime`) [P, PyPI]. Ja CDS atdod netCDF3, pietiek ar esošo `scipy` [N:
+  formāts tiks pārbaudīts pilotā]. **Vēl nav instalētas.**
+- **API atslēga:** `~/.cdsapirc` ieraksta lietotājs; kods to nemeklē un nelasa (izņemot `cdsapi` pašu).
+  2026-10-29 fails **nav atrasts** (`test -f`).
+
+### CDS datu kopas [P, CDS katalogs un API apraksti, 2026-10-29]
+
+| Datu kopa | Izšķirtspēja | Periods | Ko dod | Piezīmes |
+|---|---|---|---|---|
+| `derived-era5-land-daily-statistics` | 0,1° | 1950-01-01 – 2026-10-23 | dienas vid. / maks. / min. no 1 / 3 / 6 h ievades; `time_zone` maiņa | **nav akumulēto mainīgo** („accumulated variables (such as total precipitation and runoff) are omitted”); statistika aprēķināta pieprasījuma laikā; 1 gads + 1 mēnesis vienā pieprasījumā |
+| `reanalysis-era5-land` (stundu) | 0,1° | 1950 – 2026-10-23 | `total_precipitation`, `surface_solar_radiation_downwards`, `potential_evaporation` u. c. akumulētie | akumulācija no 00 UTC; vērtība 00 UTC = iepriekšējās dienas summa [P ECMWF]; m, J m⁻²; 1 mēnesis vienā pieprasījumā |
+| `derived-era5-single-levels-daily-statistics` | 0,25° (ERA5) | — | ietver `daily_sum` akumulētajiem | rupjāka izšķirtspēja → tikai rezerves variants |
+
+- **Aizture:** ERA5-Land-T ~5 dienas, galīgie dati ~2 mēnešus pēc mēneša beigām [P ECMWF dokumentācija].
+- **Zināmās problēmas [P ECMWF]:** mēneša vidējie akumulētie lauki 2022-09 – 2024-02 ir kļūdaini (mēs tos neizmantojam,
+  ņemam stundu datus); kopš 2020-01-01 iespējams neliels pārrāvums piekrastē (MIR interpolācija) — jāpārbauda
+  bāzes un 2020+ salīdzināmība piekrastes mezglos.
+- **Limiti:** aktuālie ierobežojumi ir uz datu kopu un mainās; ECMWF iesaka pieprasīt pa mēnesim; ERA5-Land
+  ierobežojums tika paaugstināts no 1 000 uz 12 000 laukiem [P forums, datums nav zināms]. Mūsu lielākais pieprasījums:
+  5 mainīgie × 31 diena × 24 h = 3 720 stundu lauki (< 12 000); precīzi pārbaudīs pilots.
+
+### ET0 izvēle
+
+- **Izvēle: FAO-56 Penman–Monteith (Eq. 6) dienas solī no ERA5-Land mainīgajiem**, nevis ERA5-Land
+  `potential_evaporation`.
+  - ERA5-Land `pev` „is computed as an open water evaporation (Pan evaporation)” un atšķiras no ERA5 definīcijas
+    [P ECMWF ERA5-Land dokumentācija]; FAO-56 ET0 ir hipotētiska zāles references virsma (0,12 m, 70 s m⁻¹, albedo
+    0,23) [P FAO-56 2. nod.]. Tās nav viena un tā pati lieluma definīcija.
+  - Open-Meteo `et0_fao_evapotranspiration` ir „ET₀ Reference Evapotranspiration of a well watered grass field” [P],
+    tātad FAO-56 aprēķins dod salīdzināmu lielumu ar Kalsnavas prototipu.
+  - `pev` lejupielādēsim tikai salīdzinājumam (tas pats pieprasījums, papildu mainīgais).
+- **Ievade (FAO-56 3. nod. vienādojumi):** T_max, T_min (dienas maks. / min. no 1 h, `utc+02:00`); e_a no dienas vidējā
+  rasas punkta (Eq. 14); u₂ no 10 m vēja (Eq. 47); R_s = `ssrd` dienas summa; R_so (Eq. 37 ar R_a Eq. 21); R_ns =
+  0,77·R_s (Eq. 38); R_nl (Eq. 39); R_n = R_ns − R_nl (Eq. 40); G = 0 (Eq. 42); P no `surface_pressure` dienas
+  vidējā (vai Eq. 7). Pārbaude: FAO-56 **Example 18** (Uccle, 6. jūlijs, ET0 = 3,9 mm/dienā ar visām starpvērtībām) kā
+  vienības tests.
+- **Zināmas novirzes [N]:** (a) dienas vējš no dienas vidējiem u un v komponentiem ir mazāks par vidējo ātrumu
+  (vektoru vidējošana) — pilotā novērtēšu ar stundu u/v Kalsnavai vienam mēnesim; (b) `tp` / `ssrd` ir UTC dienas,
+  temperatūra `utc+02:00` (2 h nobīde); (c) dienas garums RITY-2 sliekšņiem: FAO-56 Eq. 34 (astronomiskais N) pret
+  Open-Meteo `daylight_duration` (aprēķins nav aprakstīts) — atšķirība ietekmē 14,5 h slieksni, jāsalīdzina Kalsnavā.
+
+### Pieprasījumi un apjoms Latvijai (+ 0,1° buferis) [N, aprēķins]
+
+- **Apgabals:** N 58,2, W 20,8, S 55,5, E 28,4 → 77 × 28 = 2 156 režģa punkti (jūras punkti ERA5-Land ir tukši).
+- **Mēneši:** ūdens bilancei IV–IX 1991–2026 (216 mēneši); RITY-2 / PHENIPS-Clim papildus I–III un X 2018–2026
+  (36 mēneši; 2026. gada oktobris daļējs) → 252 mēneši.
+- **Pieprasījumi:**
+  - dienas statistika: 3 uz mēnesi (`daily_maximum` t2m, `daily_minimum` t2m, `daily_mean` t2m + d2m + u10 + v10 + sp;
+    ārpus IV–IX tikai t2m) → 756;
+  - stundu akumulētie (`tp`, `ssrd`, `pev`; tikai 00 UTC): 6 mēneši + 1. oktobris gadā → 252;
+  - **kopā ~1 010 pieprasījumi.**
+- **Apjoms:** ~0,6 GB neiepakotu float32 vērtību (dienas statistika ~0,43 GB, akumulētie ~0,17 GB), `cache/rm/cds/`.
+- **Laiks:** CDS rindas laiks nav zināms; dienas statistika tiek aprēķināta pieprasījuma laikā. Novērtējums
+  0,5–2 dienas [N] — **pilotā izmērīšu**.
+- **Kalsnavas atsevišķa lejupielāde nav vajadzīga:** pieprasījumu skaits ir atkarīgs no mēnešiem, nevis no apgabala,
+  tāpēc Kalsnavu ņem no Latvijas datiem.
+
+### Kalsnavas salīdzinājums ar Open-Meteo prototipu (pēc lejupielādes)
+
+- Punkti: tuvākais ERA5-Land punkts Kalsnavas AOI centroīdam un vidējais ERA5-Land 0,25° šūnā 56,75 / 25,75.
+- Dienas T_max / T_min / T_mean, P, ET0 (mūsu FAO-56 pret Open-Meteo ET0; `pev` informatīvi): vidējā novirze, RMSE,
+  korelācija; P − ET0 IV–IX un z pa gadiem.
+- RITY-2 pa gadiem 2018–2026: izlidošanas DOY, invāzijas DOY, Tsum_F1 / Tsum_F2, paaudzes (tiešā ERA5-Land un INCA);
+  Silava 2023 pārbaude atkārtoti.
+- Rezultāts: tabula un attēls `RM_4` papildinājumā; skaitļi tikai no palaišanas.
+
+### Secība (katrs solis ar apstāšanos)
+
+1. Lietotājs ieraksta `~/.cdsapirc` un pieņem datu kopu licences CDS vietnē.
+2. Atkarību instalēšana (`cdsapi`, `h5netcdf`, `h5py`).
+3. **Pilots:** 2023. gada aprīlis Latvijai (3 dienas statistikas + 1 stundu pieprasījums; + stundu u/v Kalsnavai šim
+   mēnesim): formāts, laiks, izmērs, vēja novirze, salīdzinājums ar Open-Meteo šim mēnesim. **Apstāšanās.**
+4. Pilnā lejupielāde (~1 010 pieprasījumi, atsākama, kešs) → Kalsnavas salīdzinājums → Latvijas kartes.
+
+## 2.22 Fenoloģijas pazīmes riska modelim (lietotājs, 2026-10-29)
+
+- **Galvenā pazīme: relatīvā termālā summa** (nepārtraukta; RITY-2 Tsum_F1 un Tsum_F2 31. oktobrī, AVG scenārijs),
+  nevis veselu paaudžu skaits.
+- **Iemesls:** Slovēnijas kalibrācija Kalsnavā dod 2 paaudzes katru gadu (AVG), kas Latvijā, visticamāk, ir par daudz;
+  ar INCA korekcijām — 1 paaudze (2024: 2) [P, `RM_4`].
+- **Sekundāra pazīme:** paaudžu skaits ar **abiem** variantiem (tiešā ERA5 / ERA5-Land un INCA (1)–(3)).
+- Izlidošanas DOY paliek kā pazīme (t−1) un pavasara sekošanai.

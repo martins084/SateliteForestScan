@@ -1,5 +1,10 @@
 # 4. posms: laikapstākļi (ERA5), RITY-2 fenoloģija un ūdens bilance
 
+> **PROTOTIPS (lietotāja lēmums 2026-10-29):** šis Kalsnavas rezultāts ir aprēķināts ar Open-Meteo `era5` un paliek tikai
+> kā prototips. Latvijas mērogam Open-Meteo bezmaksas līmeni neizmanto (svērtie izsaukumi, nekomerciālas lietošanas
+> noteikumi). Galvenais laikapstākļu avots būs Copernicus CDS ERA5-Land (plāns 2.21); riska modeļa fenoloģijas
+> galvenā pazīme — relatīvā termālā summa (plāns 2.22).
+
 Statuss (2026-10-29): **Kalsnava pabeigta; Latvijas režģis NAV lejupielādēts.** Open-Meteo bezmaksas limitu dēļ visa
 Latvija aizņemtu ~18 dienas (sk. „Latvija”), tāpēc apjoms jāizlemj lietotājam. **[P]** = aprēķināts no datiem vai
 nolasīts avotā, **[N]** = pieņēmums vai interpretācija.
