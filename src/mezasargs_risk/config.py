@@ -115,6 +115,45 @@ class LvmConfig(BaseModel):
     validation: ValidationConfig | None = None
 
 
+class Point(BaseModel):
+    name: str
+    lon: float
+    lat: float
+
+
+class OpenMeteoConfig(BaseModel):
+    """Open-Meteo historical API (CC BY 4.0), ERA5 0.25 deg (user decision: `era5`, not best_match /
+    era5_land). Free tier limits (pricing page, 2026-10-29): 600 / min, 5000 / h, 10000 / day; a
+    request longer than 14 days or with more than 10 variables counts as several calls."""
+    url: str = "https://archive-api.open-meteo.com/v1/archive"
+    model: str = "era5"
+    timezone: str = "Europe/Riga"
+    daily: list[str] = Field(default_factory=lambda: [
+        "temperature_2m_max", "temperature_2m_min", "temperature_2m_mean", "precipitation_sum",
+        "et0_fao_evapotranspiration", "daylight_duration"])
+    delay_days: int = 6              # ERA5 on Open-Meteo: "daily with 5 days delay"
+    # own budget below the free limits (weighted calls)
+    max_per_minute: float = 500
+    max_per_hour: float = 4500
+    max_per_day: float = 9000
+
+
+class ClimateConfig(BaseModel):
+    """Stage 4: weather (ERA5 via Open-Meteo), RITY-2 phenology, climatic water balance."""
+    openmeteo: OpenMeteoConfig = Field(default_factory=OpenMeteoConfig)
+    points: list[Point] = Field(default_factory=list)      # e.g. Kalsnava (nearest ERA5 node is used)
+    grid_buffer_cells: int = 1       # ERA5 nodes whose 0.25 deg cell touches Latvia + this many rings
+    years: tuple[int, int] = (2018, 2026)                  # RITY-2 and annual outputs
+    baseline: tuple[int, int] = (1991, 2020)               # water balance reference period
+    wb_months: tuple[int, int] = (4, 9)                    # P - ET0 summed over these months (incl.)
+    pheno_start: str = "01-01"       # weather window per year for phenology (PHENIPS-Clim sums from 1 Jan)
+    pheno_end: str = "10-31"
+    scenarios: list[str] = Field(default_factory=lambda: ["AVG", "MIN", "MAX"])   # RITY-2 BTeff scenarios
+    main_scenario: str = "AVG"
+    check_date: date | None = None   # sanity check: public flight onset date (Silava, 2023)
+    check_source: str = ""
+
+
 class RiskConfig(BaseModel):
     run_name: str
     output_dir: Path
@@ -127,6 +166,7 @@ class RiskConfig(BaseModel):
     storms: list[Storm] = Field(default_factory=list)
     kalsnava: KalsnavaConfig | None = None
     lvm: LvmConfig | None = None
+    climate: ClimateConfig | None = None
 
     @property
     def run_dir(self) -> Path:

@@ -508,3 +508,86 @@ def val5b_detection(summary: pd.DataFrame, plac: pd.DataFrame, path: Path) -> Pa
     fig.savefig(path)
     plt.close(fig)
     return path
+
+
+def climate_point(name: str, ph: pd.DataFrame, wb: pd.DataFrame, years: tuple[int, int], path: Path,
+                  check=None) -> Path:
+    """Stage 4, one location: RITY-2 swarming / infestation DOY, filial generations, water balance
+    anomaly. `ph`: one row per year (main + sensitivity columns), `wb`: seasonal table with cwb_z."""
+    fig, axes = plt.subplots(3, 1, figsize=(8, 8.4), dpi=200)
+    ax = axes[0]
+    ax.plot(ph["year"], ph["swarming_doy"], "o-", color=S1, label="RITY-2 izlidošana (10)")
+    ax.plot(ph["year"], ph["infestation_doy"], "s--", color=S1, alpha=0.6, ms=4, label="RITY-2 invāzija (11)")
+    ax.plot(ph["year"], ph["phenips_clim_swarming_doy"], "^", color=S2,
+            label="PHENIPS-Clim sliekšņi (apakšējā robeža)")
+    if check is not None:
+        ax.plot([check.year], [check.timetuple().tm_yday], "*", color=INK, ms=12,
+                label=f"Silava: aktīva izlidošana {check:%d.%m.%Y}")
+    ax.set_ylabel("gada diena (DOY)")
+    ax.set_title(f"{name}: pavasara izlidošana (ERA5, RITY-2)")
+    ax.legend(fontsize=7, loc="upper right")
+    ax = axes[1]
+    w = 0.25
+    for k, (col, lab, colr) in enumerate((("n_filial_MIN", "MIN", S3), ("n_filial", "AVG (galvenais)", S1),
+                                         ("n_filial_MAX", "MAX", S2))):
+        ax.bar(ph["year"] + (k - 1) * w, ph[col], width=w, color=colr, label=lab)
+    ax.plot(ph["year"], ph["n_filial_inca"], "k_", ms=12, mew=2, label="AVG ar INCA korekcijām (1)–(3)")
+    ax.set_ylabel("paaudzes (F1–F3, Tsum ≥ 0,6)")
+    ax.set_yticks([0, 1, 2, 3])
+    ax.set_ylim(0, 3.9)
+    ax.set_title("Pilnas paaudzes līdz 31. oktobrim")
+    ax.legend(fontsize=7, ncol=4, loc="upper left")
+    ax = axes[2]
+    z = wb.dropna(subset=["cwb_z"])
+    inside = (z["year"] >= years[0]) & (z["year"] <= years[1])
+    ax.bar(z["year"], z["cwb_z"], color=np.where(inside, S2, AXIS), width=0.8)
+    ax.axhline(0, color=INK2, lw=0.8)
+    ax.set_ylabel("z (pret 1991–2020)")
+    ax.set_title("Standartizēta klimatiskās ūdens bilances anomālija, P − ET0 IV–IX")
+    for a in axes[:2]:
+        a.set_xticks(ph["year"])
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title: str, path: Path,
+                 cmap="viridis", vmin=None, vmax=None, discrete: list | None = None) -> Path:
+    """Stage 4: one small map per year of a node value (0.25 deg cells, EPSG:4326)."""
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+    from matplotlib.patches import Rectangle
+
+    n = len(years)
+    ncol = 3
+    nrow = int(np.ceil(n / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(10, 2.7 * nrow + 0.6), dpi=200, squeeze=False)
+    if discrete is not None:
+        cm = ListedColormap([plt.get_cmap(cmap)(i / max(len(discrete) - 1, 1)) for i in range(len(discrete))])
+        norm = BoundaryNorm(np.arange(len(discrete) + 1) - 0.5 + discrete[0], cm.N)
+    else:
+        cm = plt.get_cmap(cmap)
+        norm = plt.Normalize(vmin if vmin is not None else cells[col].min(), vmax if vmax is not None else cells[col].max())
+    for ax, y in zip(axes.flat, years):
+        d = cells[cells["year"] == y]
+        for lo, la, v in zip(d["lon"], d["lat"], d[col]):
+            ax.add_patch(Rectangle((lo - 0.125, la - 0.125), 0.25, 0.25, lw=0,
+                                   color=cm(norm(v)) if np.isfinite(v) else "#ffffff"))
+        country.boundary.plot(ax=ax, color=INK, lw=0.5)
+        ax.set_xlim(20.6, 28.6)
+        ax.set_ylim(55.4, 58.3)
+        ax.set_aspect(1 / np.cos(np.radians(57)))
+        ax.set_title(str(y))
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.grid(False)
+    for ax in list(axes.flat)[n:]:
+        ax.axis("off")
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cm)
+    cb = fig.colorbar(sm, ax=axes, shrink=0.6, location="right")
+    if discrete is not None:
+        cb.set_ticks(discrete)
+    fig.suptitle(title, fontweight="bold")
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    return path

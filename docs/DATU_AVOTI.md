@@ -105,6 +105,22 @@ Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
   `data/aoi_lvm5b_riga.geojson` (LKS-92 šūna 505000 / 285000), 2019–2025. Kešs: `cache/7da254194883_60874f/` (454 MB,
   netiek commitots).
 
+## 4. posms — laikapstākļi, RITY-2, ūdens bilance (2026-10-29)
+
+| Avots | Licence | Versija / piekļuve | Atsauce |
+|---|---|---|---|
+| **Open-Meteo vēsturiskais API, `models=era5`** | CC BY 4.0 [P, cenu lapa] | `https://archive-api.open-meteo.com/v1/archive`; ERA5 0,25°, 1940–, „Daily with 5 days delay” [P docs]; vaicāts 2026-10-29 | Hersbach u. c. (2023) ERA5 hourly data on single levels from 1940 to present, doi:10.24381/cds.adbb2d47; Zippenfenig (2023) Open-Meteo.com Weather API, doi:10.5281/ZENODO.7970649; „Generated using Copernicus Climate Change Service information” [P, Open-Meteo lapa] |
+| **VMD paziņojums (LVMI „Silava” monitorings)** | ziņu teksts, tikai datums citēts | LV portāls, 02.06.2023 | https://lvportals.lv/dienaskartiba/352281-valsts-meza-dienests-rosina-turpinat-eglu-astonzobu-mizgrauza-izplatibas-ierobezojosos-pasakumus-2023 |
+
+- RITY-2 un PHENIPS-Clim — avoti augstāk (1. posma tabula); RITY-2 teksts no Europe PMC kešā `cache/rm_test/`.
+- **Open-Meteo limiti** [P, https://open-meteo.com/en/pricing, 2026-10-29]: 600 / min, 5 000 / h, 10 000 / dienā,
+  300 000 / mēn.; garāks par 2 nedēļām vai > 10 mainīgie = vairāki izsaukumi. Bezmaksas līmenis ir nekomerciālai
+  lietošanai.
+- **Kešs:** `cache/rm/openmeteo/era5/<mezgls>/<sākums>_<beigas>.json` (+ `_request` ar vaicājuma datumu),
+  `cache/rm/openmeteo/ledger.csv` (svērto izsaukumu žurnāls). Netiek commitots.
+- **Testa fails:** `tests/data/openmeteo_era5_daily_sample.json` — Open-Meteo `era5` atbilde, mezgls 56,75 / 25,75,
+  2023-04-18..21 (4 dienas, 909 B), CC BY 4.0, atsauce kā augstāk; bez izmaiņām, izņemot noņemtu `generationtime_ms`.
+
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 
 | Pakotne | Versija (PyPI) | Licence [P] |
