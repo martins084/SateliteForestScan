@@ -36,7 +36,8 @@ def main(later_config: str, earlier_config: str) -> None:
     g = gpd.read_file(later.run_dir / "vectors" / "suspects.gpkg", layer=f"suspects_{year}")
     cuts = g[(g["type"] == "cut") & g["onset_before_season"].astype(bool)].copy()
 
-    acq = pd.read_csv(later.run_dir / "diagnostics" / "acquisitions.csv", parse_dates=["datetime"])
+    acq = pd.read_csv(later.run_dir / "diagnostics" / "acquisitions.csv")
+    acq["datetime"] = pd.to_datetime(acq["datetime"], utc=True, format="ISO8601")
     acc = acq[acq["status"] == "accepted"]["datetime"].dt.tz_localize(None)
     last_prev = acc[acc.dt.year == prev].max()
     first_next = acc[acc.dt.year == year].min()

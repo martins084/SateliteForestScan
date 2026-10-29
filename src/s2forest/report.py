@@ -171,7 +171,7 @@ def build_report(cfg: Config, n_series: int = 5) -> Path:
             figs["validation"].write_bytes(src.read_bytes())
 
     # --- numbers ------------------------------------------------------------------
-    acq["dt"] = pd.to_datetime(acq["datetime"], utc=True)
+    acq["dt"] = pd.to_datetime(acq["datetime"], utc=True, format="ISO8601")
     in_years = acq["dt"].dt.year.isin(cfg.time.years)
     usable = meta.get("fetch", {}).get("usable_per_year", {})
     det = meta.get("detect", {})

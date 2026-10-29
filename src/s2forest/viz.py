@@ -415,7 +415,7 @@ def monthly_availability(table: pd.DataFrame, usable_times=None) -> pd.DataFrame
     SCL and haze filters). If None, the SCL-based `accepted` status is used.
     """
     t = table[table["status"].isin(["accepted", "rejected", "failed"])].copy()
-    t["datetime"] = pd.to_datetime(t["datetime"], utc=True)
+    t["datetime"] = pd.to_datetime(t["datetime"], utc=True, format="ISO8601")
     t["year"] = t["datetime"].dt.year
     t["month"] = t["datetime"].dt.month
     g = t.groupby(["year", "month"]).agg(total=("status", "size"),
