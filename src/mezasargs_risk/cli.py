@@ -603,7 +603,10 @@ def _cds_jobs(cfg: RiskConfig, last_day) -> list[dict]:
 @app.command("cds-download")
 def cds_download(config: Path = ConfigArg,
                  only: str = typer.Option(None, help="YYYY-MM: only this month's request"),
-                 dry_run: bool = typer.Option(False, "--dry-run", help="list the requests, submit nothing")):
+                 dry_run: bool = typer.Option(False, "--dry-run", help="list the requests, submit nothing"),
+                 skip_done_in_state: bool = typer.Option(False, "--skip-done-in-state",
+                                                         help="skip jobs marked done in the state file even without a local "
+                                                              "file (continuing on another machine)")):
     """Stage 4 full download (user decision 2026-10-30): hourly ERA5-Land, one request per month (24 h, all
     variables) + 00 UTC accumulations of the following month's 1st day where that month is not downloaded.
     Sequential and resumable: job ids in cache/rm/cds/hourly_state.json are never submitted twice."""
@@ -617,7 +620,10 @@ def cds_download(config: Path = ConfigArg,
     cache = cfg.cache_dir / "rm" / "cds"
     folder = cache / cds.HOURLY / "hourly"
     n_month = sum(j["name"].startswith("h_") for j in jobs)
-    todo = [j for j in jobs if not cds.find_target(folder, j["name"])]
+    state_path = cache / "hourly_state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    todo = [j for j in jobs if not cds.find_target(folder, j["name"])
+            and not (skip_done_in_state and state.get(j["name"], {}).get("status") == "done")]
     typer.echo(f"dataset end {end} -> last full UTC day {last_day}; {len(jobs)} requests "
                f"({n_month} months + {len(jobs) - n_month} next-month 00 UTC accumulations), {len(todo)} not cached")
     if dry_run:
@@ -629,7 +635,8 @@ def cds_download(config: Path = ConfigArg,
         typer.echo("CDS key file ~/.cdsapirc not found - stopping (nothing requested).")
         raise typer.Exit(2)
     try:
-        res = cds.run_jobs(jobs, folder, cache / "hourly_state.json", cache / "requests.jsonl", echo=typer.echo)
+        res = cds.run_jobs(jobs, folder, state_path, cache / "requests.jsonl", echo=typer.echo,
+                           skip_state_done=skip_done_in_state)
     except cds.StopDownload as e:
         typer.echo(f"STOP: {e}")
         raise typer.Exit(3)

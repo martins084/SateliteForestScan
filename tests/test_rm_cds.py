@@ -107,6 +107,9 @@ def test_run_jobs_resumes_by_id_and_never_resubmits(tmp_path):
     assert cds.find_target(tmp_path / "f", "a").suffix == ".nc"
     cds.run_jobs(jobs[:2], tmp_path / "f", state, tmp_path / "log.jsonl", client=cl, echo=lambda *_: None)
     assert cl.submitted == ["id0", "id1"]                                 # cached files: nothing new
+    cds.run_jobs(jobs[:2], tmp_path / "g", state, tmp_path / "log.jsonl", client=cl, echo=lambda *_: None,
+                 skip_state_done=True)                               # other machine: done in state
+    assert cl.submitted == ["id0", "id1"] and list((tmp_path / "g").iterdir()) == []
 
 
 def test_daily_from_hourly_utc_days_and_accumulations():

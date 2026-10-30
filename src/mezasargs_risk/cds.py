@@ -185,10 +185,12 @@ class StopDownload(RuntimeError):
 
 
 def run_jobs(jobs: list[dict], folder: Path, state_path: Path, log: Path, client=None, poll_s: float = 30,
-             tries: int = 20, echo=print, sleep=time.sleep) -> dict:
+             tries: int = 20, echo=print, sleep=time.sleep, skip_state_done: bool = False) -> dict:
     """Sequential, resumable download (one CDS job at a time). The job id is written to `state_path` right after
     submission; a job with a stored id is never submitted again (only polled / downloaded). Status-poll and download
-    errors are retried on the same job; a failed / rejected job or a lost id stops the run (no new requests)."""
+    errors are retried on the same job; a failed / rejected job or a lost id stops the run (no new requests).
+    `skip_state_done`: jobs marked done in the state are skipped even without a local file (download continued on
+    another machine; the files are merged afterwards)."""
     if client is None:
         import cdsapi
 
@@ -198,9 +200,9 @@ def run_jobs(jobs: list[dict], folder: Path, state_path: Path, log: Path, client
     done = 0
     for i, job in enumerate(jobs, 1):
         name = job["name"]
-        if find_target(folder, name):
-            continue
         st = state.get(name, {})
+        if find_target(folder, name) or (skip_state_done and st.get("status") == "done"):
+            continue
         if st.get("job_id"):
             try:
                 remote = client.get_remote(st["job_id"])
