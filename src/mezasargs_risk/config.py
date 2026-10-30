@@ -151,6 +151,10 @@ class CdsConfig(BaseModel):
     pilot_year: int = 2023
     pilot_month: int = 4
     wind_box: list[float] = Field(default_factory=lambda: [56.8, 25.8, 56.6, 26.0])  # Kalsnava, hourly u/v
+    # full download (user decision 2026-10-30): hourly `reanalysis-era5-land` only, one request per month
+    hourly_vars: list[str] = Field(default_factory=lambda: [
+        "2m_temperature", "2m_dewpoint_temperature", "10m_u_component_of_wind", "10m_v_component_of_wind",
+        "surface_pressure", "total_precipitation", "surface_solar_radiation_downwards", "potential_evaporation"])
 
 
 class ClimateConfig(BaseModel):

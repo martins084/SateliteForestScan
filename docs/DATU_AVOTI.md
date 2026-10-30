@@ -121,7 +121,7 @@ Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
 - **Testa fails:** `tests/data/openmeteo_era5_daily_sample.json` — Open-Meteo `era5` atbilde, mezgls 56,75 / 25,75,
   2023-04-18..21 (4 dienas, 909 B), CC BY 4.0, atsauce kā augstāk; bez izmaiņām, izņemot noņemtu `generationtime_ms`.
 
-## CDS ERA5-Land — pārbaudīts plānam, NAV lejupielādēts (2026-10-29)
+## CDS ERA5-Land — pilots 2026-10-29, pilnā lejupielāde no 2026-10-30
 
 | Avots | Licence | Versija / piekļuve | Atsauce |
 |---|---|---|---|
@@ -133,7 +133,15 @@ Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
 | ECMWF forums par pieprasījumu limitiem | — | https://forum.ecmwf.int/t/request-too-large-item-limit-for-era5-land-data/1488 | 1 000 → 12 000 lauku [datums nav zināms] |
 | **FAO-56** (Allen, Pereira, Raes, Smith 1998, FAO Irrigation and Drainage Paper 56) | FAO publikācija [N: licence nav izlasīta] | https://www.fao.org/4/x0490e/x0490e06.htm (2. nod.), …07.htm (3. nod.), …08.htm (4. nod., Example 18) | ET0 metode un testa piemērs |
 
-- Atslēga `~/.cdsapirc` — lietotāja; 2026-10-29 fails nav atrasts.
+- Atslēga `~/.cdsapirc` — lietotāja (saturs netiek lasīts); autentifikācija pārbaudīta 2026-10-29.
+- **Izmantots:** pilots — dienas statistika (T_max, T_min, vidējie) un stundu 00 UTC akumulācijas 2023-04, stundu u / v
+  Kalsnavai; **pilnā lejupielāde — tikai `reanalysis-era5-land` stundu dati** (lietotāja lēmums 2026-10-30): 252 mēneši
+  + 35 `acc00` pieprasījumi, `cache/rm/cds/reanalysis-era5-land/hourly/` (nav git), ~4,8 GB [N novērtējums].
+  Kataloga beigas 2026-10-24 00:00 (vaicāts 2026-10-30).
+- ERA5-Land mainīgo saraksts (CDS forma, 2026-10-30): 2 m maks. / min. temperatūras mainīgā nav [P].
+- **Open-Meteo stundu dati (ET0 skaidrojumam):** 1 pieprasījums, mezgls 56,75 / 25,75, 2023-04-01 – 2023-05-01,
+  `temperature_2m, dew_point_2m, wind_speed_10m, shortwave_radiation, surface_pressure, et0_fao_evapotranspiration,
+  precipitation`, `models=era5`, `timezone=GMT`, `wind_speed_unit=ms` (Kalsnavas prototipa apjomā; 2026-10-30).
 
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 

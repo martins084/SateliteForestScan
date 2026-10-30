@@ -577,3 +577,127 @@ def cds_pilot(config: Path = ConfigArg):
     typer.echo(comp.to_string(index=False))
     typer.echo(json.dumps(wind, indent=1))
     _metadata(cfg, "cds_pilot", {"cds": k.model_dump(), "requests": recs, "point": [lon_used, lat_used]})
+
+
+def _cds_last_day():
+    """Last UTC day with all 24 hours in `reanalysis-era5-land` (collection extent; no data request)."""
+    from datetime import timedelta
+
+    import cdsapi
+
+    from . import cds
+
+    end = cdsapi.Client(quiet=True).client.get_collection(cds.HOURLY).end_datetime
+    return (end - timedelta(hours=23)).date(), str(end)
+
+
+def _cds_jobs(cfg: RiskConfig, last_day) -> list[dict]:
+    from . import cds
+
+    c = cfg.climate
+    months = cds.plan_months((c.baseline[0], c.years[1]), c.wb_months, c.years,
+                             (int(c.pheno_start[:2]), int(c.pheno_end[:2])))
+    return cds.month_jobs(months, last_day, c.cds.hourly_vars, c.cds.accum_vars, c.cds.area)
+
+
+@app.command("cds-download")
+def cds_download(config: Path = ConfigArg,
+                 only: str = typer.Option(None, help="YYYY-MM: only this month's request"),
+                 dry_run: bool = typer.Option(False, "--dry-run", help="list the requests, submit nothing")):
+    """Stage 4 full download (user decision 2026-10-30): hourly ERA5-Land, one request per month (24 h, all
+    variables) + 00 UTC accumulations of the following month's 1st day where that month is not downloaded.
+    Sequential and resumable: job ids in cache/rm/cds/hourly_state.json are never submitted twice."""
+    from . import cds
+
+    cfg = load_config(config)
+    last_day, end = _cds_last_day()
+    jobs = _cds_jobs(cfg, last_day)
+    if only:
+        jobs = [j for j in jobs if j["name"] == f"h_{only.replace('-', '_')}"]
+    cache = cfg.cache_dir / "rm" / "cds"
+    folder = cache / cds.HOURLY / "hourly"
+    n_month = sum(j["name"].startswith("h_") for j in jobs)
+    todo = [j for j in jobs if not cds.find_target(folder, j["name"])]
+    typer.echo(f"dataset end {end} -> last full UTC day {last_day}; {len(jobs)} requests "
+               f"({n_month} months + {len(jobs) - n_month} next-month 00 UTC accumulations), {len(todo)} not cached")
+    if dry_run:
+        for j in jobs:
+            r = j["request"]
+            typer.echo(f"  {j['name']}: {len(r['variable'])} vars x {len(r['day'])} days x {len(r['time'])} h")
+        return
+    if not _cds_key_present():
+        typer.echo("CDS key file ~/.cdsapirc not found - stopping (nothing requested).")
+        raise typer.Exit(2)
+    try:
+        res = cds.run_jobs(jobs, folder, cache / "hourly_state.json", cache / "requests.jsonl", echo=typer.echo)
+    except cds.StopDownload as e:
+        typer.echo(f"STOP: {e}")
+        raise typer.Exit(3)
+    typer.echo(json.dumps(res))
+
+
+@app.command("cds-check-month")
+def cds_check_month(config: Path = ConfigArg):
+    """Pilot month from the hourly download vs. the pilot files (user 2026-10-30): Tmax / Tmin / Tmean and the
+    other daily means vs. `derived-era5-land-daily-statistics`, daily accumulations vs. the pilot 00 UTC file,
+    Kalsnava ET0 and precipitation vs. the pilot table."""
+    from . import cds, et0
+
+    cfg = load_config(config)
+    k = cfg.climate.cds
+    y, m = k.pilot_year, k.pilot_month
+    tag = f"{y}{m:02d}"
+    cache = cfg.cache_dir / "rm" / "cds"
+    f = cds.find_target(cache / cds.HOURLY / "hourly", f"h_{y}_{m:02d}")
+    ds = cds.open_any(f)
+    d = cds.daily_from_hourly(ds).rename(valid_time="day")
+
+    def grid(x):
+        x = x.drop_vars([c for c in ("number", "expver") if c in x.coords])
+        x = x.assign_coords(latitude=np.round(x.latitude.values, 1), longitude=np.round(x.longitude.values, 1))
+        return x.rename(valid_time="day") if "valid_time" in x.dims else x
+
+    d = grid(d)
+    pil = {n: grid(cds.open_any(cache / cds.DAILY / f"{n}_{tag}_lv.nc")) for n in ("tmax", "tmin", "mean")}
+    acc = grid(cds.open_any(cache / cds.HOURLY / f"accum_{tag}_lv.nc"))
+    acc = acc.assign_coords(day=acc.day.dt.floor("D") - np.timedelta64(1, "D"))
+    pairs = {"tmax": pil["tmax"]["t2m"] - 273.15, "tmin": pil["tmin"]["t2m"] - 273.15,
+             "tmean": pil["mean"]["t2m"] - 273.15, "tdew": pil["mean"]["d2m"] - 273.15,
+             "u10": pil["mean"]["u10"], "v10": pil["mean"]["v10"], "sp_kpa": pil["mean"]["sp"] / 1000,
+             "precip": acc["tp"] * 1000, "rs_mj": acc["ssrd"] / 1e6, "pev_mm": acc["pev"] * 1000}
+    rows = []
+    for v, ref in pairs.items():
+        a, b = xr_align(d[v], ref)
+        diff = (a - b).values.ravel()
+        diff = diff[np.isfinite(diff)]
+        rows.append({"var": v, "n": int(diff.size), "mean_diff": float(diff.mean()), "max_abs_diff": float(np.abs(diff).max()),
+                     "share_diff_gt_0.01": float((np.abs(diff) > 0.01).mean())})
+    tab = pd.DataFrame(rows)
+    # Kalsnava ET0 / precipitation vs. the pilot table (same FAO-56 code, hourly-speed wind)
+    p = cfg.climate.points[0]
+    s = d.sel(longitude=p.lon, latitude=p.lat, method="nearest").to_dataframe()
+    s.index = pd.DatetimeIndex(s.index)
+    lat_used = float(d.latitude.sel(latitude=p.lat, method="nearest"))
+    s["et0"] = et0.et0_daily(tmax=s["tmax"], tmin=s["tmin"], ea=et0.sat_vp(s["tdew"]), u2=et0.wind_2m(s["wind_speed"]),
+                             rs=s["rs_mj"], lat_deg=lat_used, doy=s.index.dayofyear, p_kpa=s["sp_kpa"])
+    pt = pd.read_csv(cfg.run_dir / "tables" / "cds_pilot_kalsnava_daily.csv", index_col=0, parse_dates=True)
+    j = s.join(pt[["et0_hourly_speed", "precip"]].add_prefix("pilot_"), how="inner").dropna(subset=["et0", "pilot_et0_hourly_speed"])
+    kal = {"days": len(j), "et0_sum": round(float(j["et0"].sum()), 3), "pilot_et0_hourly_speed_sum": round(float(j["pilot_et0_hourly_speed"].sum()), 3),
+           "et0_max_abs_diff": float((j["et0"] - j["pilot_et0_hourly_speed"]).abs().max()),
+           "precip_sum": round(float(j["precip"].sum()), 3), "pilot_precip_sum": round(float(j["pilot_precip"].sum()), 3),
+           "precip_max_abs_diff": float((j["precip"] - j["pilot_precip"]).abs().max())}
+    st = json.loads((cache / "hourly_state.json").read_text(encoding="utf-8")).get(f"h_{y}_{m:02d}", {})
+    out = {"file": f.name, "kind": cds.file_kind(f), "bytes": f.stat().st_size, "seconds": st.get("seconds"),
+           "queue_seconds": st.get("queue_seconds"), "format": cds.describe(ds), "kalsnava": kal,
+           "compare": tab.to_dict(orient="records")}
+    tdir = cfg.run_dir / "tables"
+    tab.to_csv(tdir / f"cds_check_{tag}_vs_pilot.csv", index=False)
+    (tdir / f"cds_check_{tag}.json").write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
+    typer.echo(tab.to_string(index=False))
+    typer.echo(json.dumps({kk: v for kk, v in out.items() if kk not in ("format", "compare")}, indent=1))
+
+
+def xr_align(a, b):
+    import xarray as xr
+
+    return xr.align(a, b, join="inner")

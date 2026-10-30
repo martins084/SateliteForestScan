@@ -173,3 +173,108 @@ CWB = Σ(P − ET0) IV–IX; **standartizēta klimatiskās ūdens bilances anom�
 - PHENIPS oriģinālie sliekšņi (60,5 / 140,3 dd no 1. aprīļa, 16,5 °C; sekundāri Ogris 2020) nav izmantoti — uzdevumā
   jutīgumam paredzēti tikai PHENIPS-Clim parametri.
 - Nav vēja brāzmu (`wind_gusts_10m_max`) un nav nobīdīto (t−1, t−2) pazīmju tabulas — tas ir 6. posms.
+
+## CDS ERA5-Land: pilots, pārbaudes mēnesis un pilnā lejupielāde (2026-10-29 / 30)
+
+Plāns: `PLANS_RISKA_MODELIS.md` 2.21. Visas dienas ir **UTC dienas** (lietotāja lēmums 2026-10-29).
+Kods: `src/mezasargs_risk/cds.py`, CLI `cds-pilot`, `cds-download`, `cds-check-month`; ET0 skaidrojums
+`scripts/rm4_et0_decomposition.py`. Tabulas `output/rm4_klimats/tables/` (nav git).
+
+### Pilots: 2023. gada aprīlis [P, mērīts]
+
+| Pieprasījums | Datu kopa | Laiks kopā (rindā) | Izmērs | Formāts |
+|---|---|---|---|---|
+| T_max (Latvija) | `derived-era5-land-daily-statistics` | 262 s | 0,12 MB | netCDF4 |
+| T_min | dienas statistika | 5 532 s (5 341 s) | 0,13 MB | netCDF4 |
+| vidējie t2m, d2m, u10, v10, sp | dienas statistika | 11 178 s (10 680 s) | 0,78 MB | **zip** (viens .nc katram mainīgajam) |
+| tp, ssrd, pev 00 UTC | `reanalysis-era5-land` | 54 s | 0,46 MB | netCDF4 |
+| u10 / v10 stundas (Kalsnava) | `reanalysis-era5-land` | 175 s | 0,11 MB | netCDF4 |
+
+- **Formāts:** laika ass `valid_time` (dienas statistikai 00:00 katrai dienai); papildu koordinātas `number`, `expver`;
+  mainīgie `t2m`, `d2m` (K), `u10`, `v10` (m s⁻¹), `sp` (Pa), `tp` (m), `ssrd` (J m⁻²), `pev` (m, negatīvs =
+  iztvaikošana); režģis 28 × 77 = 2 156 punkti (1 761 sauszemes punkts ar datiem). Koordinātās peldošā punkta troksnis
+  (25.900000000000073) — salīdzinot noapaļo līdz 0,1°.
+- **Rindas ierobežojums:** paralēli iesniegts otrs `reanalysis-era5-land` darbs tika noraidīts: „Maximum number queued
+  requests for this dataset has been reached. Please configure your scripts to request data sequentially” [P]. Tāpēc
+  lejupielāde ir stingri secīga.
+- **Vējš:** dienas statistikas vidējie u / v = 24 stundu vidējais (maks. starpība 0,0000) → UTC dienas apstiprinātas.
+  Ātrums no vidējiem u / v 2,44 m/s pret stundu ātrumu vidējo 2,59 m/s (attiecība 0,93; min. 0,69); ET0 mēneša summa
+  63,62 pret 64,17 mm (−0,9 %).
+- **FAO-56 Example 18:** 3,88 mm/d pret grāmatas 3,9 — tests iziet.
+- **Kalsnava pret Open-Meteo (1.–29. aprīlis):** T_max / T_min / T_mean nobīde +0,14 / +0,12 / +0,06 °C (r 0,96–0,99);
+  P 32,1 pret 29,2 mm; ET0 63,6 pret 72,7 mm (−12,5 %); dienas garums FAO-56 Eq. 34 par 0,27 h īsāks nekā Open-Meteo
+  `daylight_duration`; `pev` summa −145,9 mm (2,3 × ET0 — `pev` kā ET0 neder, kā plānā).
+
+### Lēmums: tikai stundu dati (lietotājs 2026-10-30)
+
+- Dienas statistikas rinda bija 4 min – 3 h vienam pieprasījumam (756 pieprasījumi), stundu datu kopa — minūtes. Tāpēc
+  **viens `reanalysis-era5-land` pieprasījums mēnesī**: 24 h, 8 mainīgie (t2m, d2m, u10, v10, sp, tp, ssrd, pev) =
+  5 952 lauki (< 12 000).
+- **T_max / T_min / T_mean** = 24 stundu vērtību maks. / min. / vidējais UTC dienā (`cds.daily_from_hourly`); diena
+  tiek izmantota tikai ar visām 24 stundām. ERA5-Land nav 2 m maks. / min. temperatūras mainīgā [P, CDS forma:
+  12 temperatūras mainīgie, starp tiem nav max / min]; stundu ekstrēmi var nedaudz **nenovērtēt** īstos (nepārtrauktos)
+  ekstrēmus [N]. Pret dienas statistiku starpība ir 0,000 (sk. zemāk), jo arī dienas statistika ir aprēķināta no
+  stundām (`frequency = 1_hourly`) — tātad ar ERA5-Land šo nenovērtējumu **izmērīt nevar** [P / N].
+- **Akumulētie (tp, ssrd, pev):** uzkrāti no 00 UTC; dienas d summa = d+1 00 UTC vērtība, **nevis** stundu summa
+  [P ECMWF]. Mēneša pēdējai dienai vajag nākamā mēneša 1. dienas 00 UTC: ja nākamais mēnesis netiek lejupielādēts,
+  pievieno mazu pieprasījumu (`acc00_YYYY_MM`, 3 mainīgie × 1 diena × 00:00).
+- **Vējš:** ET0 lieto stundu ātrumu vidējo (vektoru vidējošanas nobīde vairs nav).
+- **Atsākšana:** `cache/rm/cds/hourly_state.json` — darba ID tiek ierakstīts uzreiz pēc iesniegšanas; darbs ar ID
+  **nekad netiek iesniegts atkārtoti** (tikai statuss / lejupielāde); 5xx un savienojuma kļūdas → tikai lejupielādes
+  vai statusa atkārtojums; `failed` / `rejected` / pazudis ID → apstājas (bez jauniem pieprasījumiem). Testi ar viltotu
+  klientu (`tests/test_rm_cds.py`).
+
+### Pārbaudes mēnesis 2023-04 (stundu dati) pret pilotu [P]
+
+- 1 pieprasījums: 457 s serverī (rindā 12 s) + ~66 s lejupielāde; **19,0 MB** netCDF4 (viens fails, ne zip).
+- Visās 1 761 sauszemes šūnās × 30 dienās (52 830 vērtības) starpība pret pilota failiem ir **0,0** visiem mainīgajiem:
+  T_max, T_min, T_mean, T_dew, u10, v10, sp pret dienas statistiku; tp, ssrd, pev dienas summas pret pilota 00 UTC
+  failu.
+- Kalsnava: ET0 64,174 = pilota 64,174 mm (maks. dienas starpība 1·10⁻⁷); P 32,067 = 32,067 mm.
+
+### Pilnā lejupielāde (sākta 2026-10-30, fonā)
+
+- Datu kopas beigas (katalogs) 2026-10-24 00:00 → pēdējā pilnā UTC diena 2026-10-23.
+- **287 pieprasījumi:** 252 mēneši (IV–IX 1991–2026; I–III un X 2018–2026; 2026-10 līdz 23.10) + 35 `acc00`
+  (1.10 1991–2017, 1.11 2018–2025). 2026-10-23 akumulētās summas trūks (24.10 00 UTC nav pieprasīts).
+- **Ekstrapolācija [N]:** ~19 MB × 252 ≈ **4,8 GB**; ~8–9 min vienam mēnesim → ~36–40 h, ja rinda paliek īsa.
+  Katrs fails < 200 MB.
+
+### ET0 −12,5 % pret Open-Meteo: sadalījums pa ievaddatiem (Kalsnava, 1.–29.04.2023) [P aprēķins, N interpretācija]
+
+Pilota starpība 72,74 − 63,62 = 9,12 mm (29 dienas):
+
+| Daļa | mm | Kā izmērīts |
+|---|---|---|
+| vēja vektoru vidējošana (pilota dienas u / v) | 0,55 | 64,17 − 63,62 (stundu datos novērsts) |
+| dienas robeža UTC+2 pret UTC | −0,23 | Open-Meteo dienas ET0 pret tās stundu ET0 summu UTC dienās |
+| **stundu FAO-56 (Open-Meteo) pret dienas FAO-56 (mūsu)** | **3,90** | Open-Meteo stundu ET0 summa pret mūsu `et0_daily` ar Open-Meteo ievaddatiem |
+| **ievaddati ERA5 0,25° pret ERA5-Land 0,1°** | **4,90** | mūsu `et0_daily` ar Open-Meteo pret ERA5-Land ievaddatiem |
+
+Ievaddatu daļa, aizstājot pa vienai grupai (vidējais no abiem virzieniem; summa 4,92 ≈ 4,90):
+
+| Ievade | Δ ET0, mm | ERA5-Land vid. | Open-Meteo vid. |
+|---|---|---|---|
+| **vējš (10 m, m/s)** | **3,29** | 2,56 | 3,21 |
+| **mitrums (e_a, kPa)** | **2,01** | 0,688 | 0,649 |
+| temperatūra (T_max, T_min) | −0,47 | 7,78 °C | 7,64 °C |
+| spiediens | 0,06 | 100,5 kPa | 99,8 kPa |
+| radiācija (R_s, MJ m⁻² d⁻¹) | 0,03 | 14,71 | 14,74 |
+
+- **Lielākā daļa:** aprēķina solis (stundu pret dienas Penman–Monteith, ~3,9 mm) un vējš (ERA5 mezglā par 25 % stiprāks,
+  ~3,3 mm), tad mitrums (ERA5-Land mitrāks, ~2,0 mm). Radiācija un spiediens praktiski neietekmē.
+- Nekas nav labots; FAO-56 dienas solis paliek (plāns 2.21). Iemesls vēja atšķirībai (režģa izšķirtspēja, virsmas
+  raupjums, mezgla novietojums) nav pārbaudīts [N].
+- Open-Meteo stundu dati: 1 pieprasījums (Kalsnavas mezgls, 2023-04, 7 mainīgie, `timezone=GMT`), kešs
+  `cache/rm/openmeteo/`; radiācija / ET0 / nokrišņi ir iepriekšējās stundas vērtības [P Open-Meteo docs] → nobīdīti
+  par −1 h pirms UTC dienas summām.
+
+### Dienas garums 14,5 h slieksnim (lietotāja lēmums 2026-10-30)
+
+- Ogris (2020) (13)–(15) un 2. attēlā ir tikai „daylength ≥ 14.5 h” / „day length = 14.5 h”; kā dienas garums
+  aprēķināts, **raksts nenosaka** [P, pilns teksts PMC7076557]. Rakstā minēts RITY-2 pirmkods (atsauces 20, 21,
+  zdravgozd.si zip) — nav atvērts.
+- Tāpēc **[N]: FAO-56 Eq. 34 (astronomiskais N)**; jutīgums ±16 min (Open-Meteo starpība pilotā 0,27 h).
+- Ietekme: N ≥ 14,5 h Latvijā no ~21.–24.04 līdz ~18.–21.08 (55,7–57,9° Z); ±16 min nobīda abas robežas par ±3–4
+  dienām [P aprēķins]. Augusta robeža nosaka, vai pēc tās vēl var sākties F2 / F3 / māsu perējums.
+- Ieviešana Latvijas fenoloģijas aprēķinā (pēc lejupielādes, ar apstāšanos pirms tā).
