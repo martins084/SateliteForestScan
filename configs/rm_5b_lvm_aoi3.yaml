@@ -1,0 +1,91 @@
+# MežaSargs risk model, stage 5b replication (user, 2026-10-29): s2forest blind validation on
+# AOI candidate 3 (Riga region, LKS-92 cell 505000/285000). Same validation as AOI 1
+# (rm_5b_lvm.yaml); only variant `all`; placebo also for LVM windthrow (group 100).
+# Runs: frozen v0.2 config, configs/lvm5b_riga_<year>.yaml. Data: see docs/DATU_AVOTI.md.
+run_name: rm5b_lvm_aoi3
+output_dir: ../output
+cache_dir: ../cache
+
+efda:
+  main:
+    version: v3.0.0
+    doi: 10.5281/zenodo.21722408
+    archive: Lithuania.zip        # v3.0 swap: the Latvian rasters are in Lithuania.zip (checked by extent)
+    dir: ../cache/efda/v3.0/Lithuania.zip
+    first_year: 1985
+    agent: disturbance_agent_lithuania_v30.tif
+    agent_aggregated: disturbance_agent_aggregated_lithuania_v30.tif
+    forest: forestlanduse_mask_lithuania_v30.tif
+  crosscheck:
+    version: v2.1.1
+    doi: 10.5281/zenodo.13333034
+    archive: latvia.zip
+    dir: ../cache/efda/v2.1.1/latvia.zip
+    first_year: 1985
+    agent: disturbance_agent_1985_2023_latvia.tif
+    agent_aggregated: disturbance_agent_aggregated_latvia.tif
+    forest: forest_mask_latvia.tif
+
+boundaries:
+  path: ../cache/boundaries/NUTS_RG_01M_2024_3035_LEVL_3.geojson   # GISCO NUTS 2024, (c) EuroGeographics
+  country: LV
+  min_cover: 0.95
+  border_buffer_m: 1000
+  control_lonlat: [25.85, 56.69]
+
+grid_km: 10
+
+conifer:
+  dlt_res_m: 100
+  min_share: 0.5
+  sensitivity: [0.4, 0.6]
+
+stats:
+  meb012: ../cache/rm5_sources/csp_MEB012.csv
+  mez012: ../cache/rm5_sources/csp_MEZ012.csv
+  mez012_types: ../cache/rm5_sources/csp_MEZ012_types.csv
+  meb012_owner: ../cache/rm5_sources/csp_MEB012_owner.csv
+  meb011_owner: ../cache/rm5_sources/csp_MEB011_owner.csv
+
+# Storm events only from opened sources (one link each). Other years are NOT marked as storm years.
+
+kalsnava:
+  aoi: ../data/test_aoi_kalsnava.geojson
+  suspects: ../output/test_kalsnava_2025/vectors/suspects.gpkg
+  year: 2025
+
+# LVM open data (CC0). lvmgeo.lvm.lv/PublicData returns HTTP 404 since (at least) 2026-10-23;
+# Internet Archive copies, provenance + sha256 in docs/DATU_AVOTI.md. Never committed.
+lvm:
+  damage: ../cache/lvm_open/LVM_BOJAJUMI_wayback20250503.zip
+  damage_snapshot: 2025-04-27        # file dates inside the archive
+  land_units: ../cache/lvm_open/LVM_ZEMES_VIENIBAS_wayback20250421.zip
+  stem_pest: 620
+  years: [2013, 2024]
+  timing_offsets: [-1, 0, 1, 2]
+  match_buffer_m: 20
+  min_target_ha: 0.5
+  s2forest:                          # stage 5b replication runs (frozen v0.2 config, configs/lvm5b_riga_<year>.yaml)
+    - {label: lvm5b_riga_2022, year: 2022, variant: all, path: ../output/lvm5b_riga_2022/vectors/suspects.gpkg}
+    - {label: lvm5b_riga_2023, year: 2023, variant: all, path: ../output/lvm5b_riga_2023/vectors/suspects.gpkg}
+    - {label: lvm5b_riga_2024, year: 2024, variant: all, path: ../output/lvm5b_riga_2024/vectors/suspects.gpkg}
+    - {label: lvm5b_riga_2025, year: 2025, variant: all, path: ../output/lvm5b_riga_2025/vectors/suspects.gpkg}
+  s1_targets: ../docs/s1_earlysignal/targets.csv
+  # VMD Forest State Register, district 2253 (Madona), extracted from vidzemes.7z with tar.exe
+  mvr_kalsnava: ../cache/vmd_mvr/extract/vidzemes/nodala2253.shp
+  mps: ../cache/lvm_open/MPS_NOGABALI_wayback20250414.zip
+  aoi:                               # 5b AOI criteria (user, 2026-10-23)
+    min_lvm_share: 0.8
+    min_conifer_share: 0.5           # HRL DLT 2018 conifer / tree cover
+    min_targets: 30                  # 620 polygons >= min_target_ha registered in `years`
+    years: [2023, 2024]
+    prefer_region: Vidzeme
+    top_cells: 10
+    n_candidates: 3
+  validation:                        # 5b replication (user, 2026-10-29): AOI = candidate 3 (Riga region)
+    aoi: ../data/aoi_lvm5b_riga.geojson
+    reg_years: [2023, 2024]
+    offsets: [-1, 0, 1]
+    placebo_n: 100
+    seed: 42
+    placebo_groups: ["620", "100"]   # + LVM windthrow (many in this AOI)

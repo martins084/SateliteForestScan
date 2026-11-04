@@ -101,6 +101,47 @@ Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
   `data/aoi_lvm5b_vidzeme.geojson` (5 × 5 km LKS-92 šūna 650000 / 310000), 2019–2025. Kešs: `cache/35e44980c075_09b9ac/`.
 - **HRL DLT 2018** un **OSM ceļi** — s2forest meža maska, kā v0.2.
 - **LVM_BOJAJUMI** un **LVM_ZEMES_VIENIBAS** — Wayback kopijas no 5a sadaļas.
+- **Replikācija AOI 3 (2026-10-29):** jaunu avotu nav. Sentinel-2 L2A (tie paši STAC avoti) AOI
+  `data/aoi_lvm5b_riga.geojson` (LKS-92 šūna 505000 / 285000), 2019–2025. Kešs: `cache/7da254194883_60874f/` (454 MB,
+  netiek commitots).
+
+## 4. posms — laikapstākļi, RITY-2, ūdens bilance (2026-10-29)
+
+| Avots | Licence | Versija / piekļuve | Atsauce |
+|---|---|---|---|
+| **Open-Meteo vēsturiskais API, `models=era5`** | CC BY 4.0 [P, cenu lapa] | `https://archive-api.open-meteo.com/v1/archive`; ERA5 0,25°, 1940–, „Daily with 5 days delay” [P docs]; vaicāts 2026-10-29 | Hersbach u. c. (2023) ERA5 hourly data on single levels from 1940 to present, doi:10.24381/cds.adbb2d47; Zippenfenig (2023) Open-Meteo.com Weather API, doi:10.5281/ZENODO.7970649; „Generated using Copernicus Climate Change Service information” [P, Open-Meteo lapa] |
+| **VMD paziņojums (LVMI „Silava” monitorings)** | ziņu teksts, tikai datums citēts | LV portāls, 02.06.2023 | https://lvportals.lv/dienaskartiba/352281-valsts-meza-dienests-rosina-turpinat-eglu-astonzobu-mizgrauza-izplatibas-ierobezojosos-pasakumus-2023 |
+
+- RITY-2 un PHENIPS-Clim — avoti augstāk (1. posma tabula); RITY-2 teksts no Europe PMC kešā `cache/rm_test/`.
+- **Open-Meteo limiti** [P, https://open-meteo.com/en/pricing, 2026-10-29]: 600 / min, 5 000 / h, 10 000 / dienā,
+  300 000 / mēn.; garāks par 2 nedēļām vai > 10 mainīgie = vairāki izsaukumi. Bezmaksas līmenis ir nekomerciālai
+  lietošanai.
+- **Kešs:** `cache/rm/openmeteo/era5/<mezgls>/<sākums>_<beigas>.json` (+ `_request` ar vaicājuma datumu),
+  `cache/rm/openmeteo/ledger.csv` (svērto izsaukumu žurnāls). Netiek commitots.
+- **Testa fails:** `tests/data/openmeteo_era5_daily_sample.json` — Open-Meteo `era5` atbilde, mezgls 56,75 / 25,75,
+  2023-04-18..21 (4 dienas, 909 B), CC BY 4.0, atsauce kā augstāk; bez izmaiņām, izņemot noņemtu `generationtime_ms`.
+
+## CDS ERA5-Land — pilots 2026-10-29, pilnā lejupielāde no 2026-10-30
+
+| Avots | Licence | Versija / piekļuve | Atsauce |
+|---|---|---|---|
+| **ERA5-Land post-processed daily statistics** (`derived-era5-land-daily-statistics`) | CC-BY-4.0 [P, CDS katalogs] | 0,1°; 1950-01-01 – 2026-10-23 (katalogs 2026-10-29); bez akumulētajiem mainīgajiem | doi:10.24381/cds.e9c9c792 |
+| **ERA5-Land hourly** (`reanalysis-era5-land`) | CC-BY-4.0 [P, CDS katalogs] | 0,1°; 1950 – 2026-10-23; netCDF vai GRIB | doi:10.24381/cds.e2161bac |
+| **ERA5 post-processed daily statistics on single levels** (`derived-era5-single-levels-daily-statistics`) | [N: licence nav atvērta] | 0,25°; `daily_sum` akumulētajiem | rezerves variants |
+| ERA5-Land dokumentācija (ECMWF Confluence) | — | https://confluence.ecmwf.int/display/CKB/ERA5-Land%3A+data+documentation | izšķirtspēja, aizture, akumulācija, `pev` definīcija, zināmās problēmas |
+| CDS API apraksti | — | `https://cds.climate.copernicus.eu/api/retrieve/v1/processes/<datu kopa>` | mainīgo nosaukumi, parametri |
+| ECMWF forums par pieprasījumu limitiem | — | https://forum.ecmwf.int/t/request-too-large-item-limit-for-era5-land-data/1488 | 1 000 → 12 000 lauku [datums nav zināms] |
+| **FAO-56** (Allen, Pereira, Raes, Smith 1998, FAO Irrigation and Drainage Paper 56) | FAO publikācija [N: licence nav izlasīta] | https://www.fao.org/4/x0490e/x0490e06.htm (2. nod.), …07.htm (3. nod.), …08.htm (4. nod., Example 18) | ET0 metode un testa piemērs |
+
+- Atslēga `~/.cdsapirc` — lietotāja (saturs netiek lasīts); autentifikācija pārbaudīta 2026-10-29.
+- **Izmantots:** pilots — dienas statistika (T_max, T_min, vidējie) un stundu 00 UTC akumulācijas 2023-04, stundu u / v
+  Kalsnavai; **pilnā lejupielāde — tikai `reanalysis-era5-land` stundu dati** (lietotāja lēmums 2026-10-30): 252 mēneši
+  + 35 `acc00` pieprasījumi, `cache/rm/cds/reanalysis-era5-land/hourly/` (nav git), ~4,8 GB [N novērtējums].
+  Kataloga beigas 2026-10-24 00:00 (vaicāts 2026-10-30).
+- ERA5-Land mainīgo saraksts (CDS forma, 2026-10-30): 2 m maks. / min. temperatūras mainīgā nav [P].
+- **Open-Meteo stundu dati (ET0 skaidrojumam):** 1 pieprasījums, mezgls 56,75 / 25,75, 2023-04-01 – 2023-05-01,
+  `temperature_2m, dew_point_2m, wind_speed_10m, shortwave_radiation, surface_pressure, et0_fao_evapotranspiration,
+  precipitation`, `models=era5`, `timezone=GMT`, `wind_speed_unit=ms` (Kalsnavas prototipa apjomā; 2026-10-30).
 
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 

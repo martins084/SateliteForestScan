@@ -1,0 +1,52 @@
+# MežaSargs risk model, stage 4: weather (ERA5 via Open-Meteo `models=era5`), RITY-2 phenology
+# (Ogris 2020, MethodsX 7:100845) and the climatic water balance anomaly (P - ET0, IV-IX, vs 1991-2020;
+# not SPEI). User decisions: plan 2.13 points 3-5 and 9, task T3 (2026-10-29). Data: docs/DATU_AVOTI.md.
+# `efda` / `boundaries` as in the other risk-model configs (boundaries -> Latvian ERA5 nodes).
+run_name: rm4_klimats
+output_dir: ../output
+cache_dir: ../cache
+
+efda:
+  main:
+    version: v3.0.0
+    doi: 10.5281/zenodo.21722408
+    archive: Lithuania.zip        # v3.0 swap: the Latvian rasters are in Lithuania.zip (checked by extent)
+    dir: ../cache/efda/v3.0/Lithuania.zip
+    first_year: 1985
+    agent: disturbance_agent_lithuania_v30.tif
+    agent_aggregated: disturbance_agent_aggregated_lithuania_v30.tif
+    forest: forestlanduse_mask_lithuania_v30.tif
+  crosscheck:
+    version: v2.1.1
+    doi: 10.5281/zenodo.13333034
+    archive: latvia.zip
+    dir: ../cache/efda/v2.1.1/latvia.zip
+    first_year: 1985
+    agent: disturbance_agent_1985_2023_latvia.tif
+    agent_aggregated: disturbance_agent_aggregated_latvia.tif
+    forest: forest_mask_latvia.tif
+
+boundaries:
+  path: ../cache/boundaries/NUTS_RG_01M_2024_3035_LEVL_3.geojson   # GISCO NUTS 2024, (c) EuroGeographics
+  country: LV
+  min_cover: 0.95
+  border_buffer_m: 1000
+  control_lonlat: [25.85, 56.69]
+
+climate:
+  openmeteo:
+    model: era5                      # not best_match, not era5_land
+    timezone: Europe/Riga
+    max_per_minute: 500              # own budget below the free limits 600 / 5000 / 10000
+    max_per_hour: 4500
+    max_per_day: 9000
+  points:
+    - {name: Kalsnava, lon: 25.8688, lat: 56.6771}   # centroid of data/test_aoi_kalsnava.geojson
+  grid_buffer_cells: 1
+  years: [2018, 2026]
+  baseline: [1991, 2020]
+  wb_months: [4, 9]
+  scenarios: [AVG, MIN, MAX]
+  main_scenario: AVG
+  check_date: 2023-04-20             # LVMI Silava via VMD: "aktīva izlidošana šogad ir sākusies 20. aprīlī"
+  check_source: "https://lvportals.lv/dienaskartiba/352281-valsts-meza-dienests-rosina-turpinat-eglu-astonzobu-mizgrauza-izplatibas-ierobezojosos-pasakumus-2023 (VMD, 02.06.2023)"

@@ -28,3 +28,15 @@ def test_method_text_follows_config(tmp_path):
     cfg.linear_features.enabled = False
     text = " ".join(method_lines(cfg))
     assert "±30 dienu logā" in text and "harmonisks" not in text and "ceļu maska izslēgta" in text
+
+
+def test_monthly_availability_mixed_datetime_formats():
+    # STAC times with and without fractional seconds in one table (2020 scenes)
+    acq = pd.DataFrame({
+        "datetime": ["2019-05-02 09:30:41.024000+00:00", "2020-07-13 09:44:34+00:00",
+                     "2020-07-18T09:40:31Z"],
+        "status": ["accepted", "accepted", "rejected"],
+    })
+    a = monthly_availability(acq).set_index(["year", "month"])
+    assert a.loc[(2019, 5), "accepted"] == 1
+    assert a.loc[(2020, 7), "total"] == 2 and a.loc[(2020, 7), "accepted"] == 1

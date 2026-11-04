@@ -1,6 +1,6 @@
 # 5b posms: s2forest aklā validācija uz LVM zemes
 
-Statuss: **pabeigts (a–d).** Lietotājs izvēlējās 1. kandidātu (Vidzeme). Visi skaitļi b)–d) daļā ir no palaišanas. **[P]** = aprēķināts no datiem,
+Statuss: **pabeigts (a–d) + replikācija uz AOI 3 (2026-10-29, sadaļa „Replikācija (AOI 3)”).** Lietotājs izvēlējās 1. kandidātu (Vidzeme). Visi skaitļi b)–d) daļā ir no palaišanas. **[P]** = aprēķināts no datiem,
 **[N]** = pieņēmums. Avoti kā 5a posmā (`docs/DATU_AVOTI.md`, 5a sadaļa): LVM_BOJAJUMI un LVM_ZEMES_VIENIBAS (Wayback
 kopijas), HRL Dominant Leaf Type 2018 (100 m, tas pats kešs kā 5. posmā), GISCO NUTS 2024.
 
@@ -102,6 +102,8 @@ Konfigurācijas: `configs/lvm5b_vidzeme_<gads>[_stress_only].yaml`. Palaišana: 
   neizdevās. Cēlonis: `viz.monthly_availability` → `pd.to_datetime` ar jauktiem datuma formātiem 2020. gada ainās
   (`2020-07-13 09:44:34+00:00`). Detekcijas izvade (`suspects.gpkg`, rastri, maska) ir pilnīga. s2forest kods nav
   mainīts (iesaldēts).
+  - **2026-10-29 labots** (lietotāja lēmums, commit `b00649c`): `format="ISO8601"` `viz.monthly_availability` un
+    `report.py`; zelta tests iziet; atskaites 2022 un 2023 ģenerētas no keša, detekcija nepārrēķināta.
 
 ## c) Validācija pret LVM bojājumiem [P]
 
@@ -198,6 +200,160 @@ Konfigurācijas: `configs/lvm5b_vidzeme_<gads>[_stress_only].yaml`. Palaišana: 
 
 ![Detekcija](rm_figures/rm5b_detekcija.png)
 
+## Replikācija (AOI 3)
+
+Lietotāja lēmums (2026-10-29): 5b validāciju atkārtot tikai uz AOI 3. kandidāta (Rīgas reģions, LKS-92 šūna
+505000/285000, centrs 24,123 / 56,731; `data/aoi_lvm5b_riga.geojson`). 2. kandidāts nav pārbaudīts. Tikai variants
+`all`, gadi 2022–2025 (4 palaišanas). Validācija tā pati kā AOI 1: ≤ 20 m un ≥ 25 %, gadi r−1 / r / r+1, placebo
+100 permutācijas, seed 42. Papildus placebo arī LVM vējgāzēm (`validation.placebo_groups: ["620", "100"]`; 620
+placebo kolonnas ar to nemainās, tests `test_placebo_relocates_inside_aoi`).
+
+Reproducēšana: `s2forest run configs/lvm5b_riga_<gads>.yaml` (`output/rm5b_lvm_aoi3/run_all.sh`), tad
+`mezasargs-risk lvm-validate configs/rm_5b_lvm_aoi3.yaml` → `output/rm5b_lvm_aoi3/tables/val_*.csv`. Stresa poligonu
+laika diagnostika: `python scripts/rm5b_stress_timing.py configs/rm_5b_lvm.yaml configs/rm_5b_lvm_aoi3.yaml`.
+
+### Konfigurācijas diff pret v0.2 [P]
+
+Tāpat kā AOI 1: mainīts tikai komentārs, `run_name`, `aoi`, `time.monitor_year`; `reference` bloks noņemts. Pret
+Vidzemes konfigurāciju atšķiras tikai komentārs, `run_name` un `aoi` (`output/rm5b_lvm_aoi3/config_diff_v02_<gads>.diff`).
+
+```diff
+-run_name: test_kalsnava_2025
+-aoi: ../data/test_aoi_kalsnava.geojson
++run_name: lvm5b_riga_2023
++aoi: ../data/aoi_lvm5b_riga.geojson
+...
+-  monitor_year: 2025
++  monitor_year: 2023
+...
+-reference:   (Kalsnavas ziemas cirtes; viss bloks noņemts)
+```
+
+### Palaišanas [P]
+
+| Gads | cut | stress | analizētais mežs (% no AOI 2500 ha) |
+|---|---|---|---|
+| 2022 | 47 (32,8 ha) | 15 (3,0 ha) | 41,5 % |
+| 2023 | 81 (76,6 ha) | 4 (0,6 ha) | 37,3 % |
+| 2024 | 79 (85,1 ha) | 26 (6,2 ha) | 38,4 % |
+| 2025 | 43 (50,3 ha) | 18 (3,1 ha) | 36,3 % |
+
+- 49,1 % AOI nav HRL DLT 2018 skujkoku klasē (Vidzemes AOI 36,7 %); analizēti 36–42 % AOI (Vidzemē 47–56 %).
+- Visas 4 palaišanas beidzās ar kodu 0, ieskaitot HTML atskaiti 2022. un 2023. gadam (labojums `b00649c`).
+
+### LVM bojājumi AOI 3 [P]
+
+- 372 poligoni ar reprezentatīvo punktu AOI. Reģistrēti 2023–2024: 620 — 111 (192,7 ha); vējgāzes — 72 (162,7 ha);
+  citi — 11 (27,4 ha: uguns 6, dzīvnieki 5).
+- 620 ≥ 0,5 ha: **n = 101 (189 ha)**, no tiem 28 reģistrēti 2023. g., 73 — 2024. g.
+
+### Detekcija — LVM 620 ≥ 0,5 ha (n = 101) [P]
+
+| Gads attiecībā pret reģistrāciju | ≤ 20 m | placebo (95 %) | p | pārklāj ≥ 25 % | placebo (95 %) | p |
+|---|---|---|---|---|---|---|
+| r−1 | 40,6 % | 27,3 % (17,8–37,1) | 0,010 | **10,9 %** | 6,6 % (2,0–11,4) | **0,109** |
+| r | 62,4 % | 35,5 % (27,7–43,6) | 0,010 | 26,7 % | 7,8 % (3,5–13,4) | 0,010 |
+| r+1 | 58,4 % | 27,3 % (19,3–34,7) | 0,010 | 37,6 % | 5,9 % (3,0–9,9) | 0,010 |
+| **jebkurā (r−1..r+1)** | **87,1 %** | 61,5 % (51,5–72,3) | 0,010 | **61,4 %** | 19,8 % (13,9–26,7) | 0,010 |
+
+- **Kā atrasti (jebkurā gadā, ≤ 20 m):** 85 no 88 kā **cut**, 23 (arī) kā stress.
+- **Stingrās sakritības (≥ 25 %) pa gadiem:** r−1 11 (visas kā cut, 0 kā stress), r 27 (cut 27, stress 2), r+1 38
+  (visas kā cut).
+- **Lielumu klases (jebkurā gadā, ≤ 20 m / ≥ 25 %):** visi 620 (n = 111) 85,6 % / 61,3 %; ≥ 1 ha (n = 67)
+  91,0 % / 55,2 %; ≥ 0,5 ha un ≥ 50 % analizēts (n = 96) 87,5 % / 61,5 %.
+- **Laika nobīde** (visi 620, agrākais `first_detected` pret reģistrācijas gadu): ≤ 20 m (n = 95) r−1 42, r 37,
+  r+1 16; ≥ 25 % (n = 68) r−1 11, r 25, r+1 32. `onset_before_season` 69 / 95 un 59 / 68 (pirmais datums maijā
+  74 / 95 un 62 / 68), t. i. galvenokārt ziemas cirtes.
+- **Placebo fons šeit ir augstāks** nekā AOI 1 (≤ 20 m jebkurā gadā 61,5 % pret 36,2 %): AOI 3 ir blīvāki ciršu un
+  bojājumu poligoni.
+
+### Precizitāte 2022–2024 (`all`) [P]
+
+| | n | jebkura gada bojājumos | placebo | p | reģ. y−1..y+1 | placebo | p | 620, reģ. y−1..y+1 | placebo | p |
+|---|---|---|---|---|---|---|---|---|---|---|
+| cut | 207 | 84,5 % | 73,6 % | 0,010 | 62,8 % | 51,8 % | 0,010 | 43,5 % | 34,4 % | 0,010 |
+| stress | 45 | 71,1 % | 64,3 % | 0,23 | **62,2 %** | 39,1 % | **0,020** | **40,0 %** | 23,8 % | **0,030** |
+
+- **2025 atsevišķi — neapstiprinātas (reģistrs beidzas 2025-04):** cut 43, no tām 37 jebkura gada bojājumos,
+  **6 neapstiprinātas**; stress 18, no tiem 12 bojājumos, **6 neapstiprināti**.
+- **Atšķirība no AOI 1:** stresa poligoni reģistrācijas logā (y−1..y+1) ir **virs placebo** (AOI 1: p 0,14 un 0,48).
+- **Kad šie stresa poligoni parādās** (`scripts/rm5b_stress_timing.py`, tieša krustošanās bez bufera, tāpēc skaits
+  nedaudz atšķiras no tabulas): 25 no 45 krusto bojājumu, kas reģistrēts y−1..y+1. Reģistrācijas gads pret stresa gadu:
+  **tas pats gads 17**, nākamais gads 2, iepriekšējais 1, vairāki 5. 12 no 25 nākamā gada palaišanā pārklāj cirte.
+  - Tātad AOI 3 stresa poligoni iezīmē bojājumus **reģistrācijas gadā** (bieži pirms sanitārās cirtes), nevis gadu
+    pirms reģistrācijas [P].
+  - AOI 1 tie paši skaitļi: 13 no 30 logā; nākamais gads 6, iepriekšējais 4, tas pats 2, vairāki 1; nākamā gada
+    cirte 3 [P].
+
+### Vējgāzes (100) ar placebo [P]
+
+≥ 0,5 ha, n = 65 (160 ha):
+
+| | ≤ 20 m | placebo | p | pārklāj ≥ 25 % | placebo | p |
+|---|---|---|---|---|---|---|
+| r−1 | 44,6 % | 29,8 % | 0,030 | 1,5 % | 6,1 % | 0,96 |
+| r | 61,5 % | 38,2 % | 0,010 | 15,4 % | 7,4 % | 0,050 |
+| r+1 | 36,9 % | 27,0 % | 0,030 | 7,7 % | 5,0 % | 0,25 |
+| jebkurā | 84,6 % | 62,7 % | 0,010 | **23,1 %** | 18,2 % | **0,21** |
+
+- Vējgāzes ir **tuvu** s2forest poligoniem biežāk nekā nejauši, bet pašas vējgāžu platības s2forest **neiezīmē**
+  biežāk nekā nejauši (≥ 25 % jebkurā gadā p 0,21; tikai reģistrācijas gadā robežā, p 0,05).
+- Atrastās: 53 kā cut, 14 (arī) kā stress. Citi bojājumi (n = 11): 63,6 % / 27,3 %, 7 kā cut, 4 kā stress; placebo nav.
+- **Cēloņa atšķiršana [P]:** tāpat kā AOI 1 — visas grupas galvenokārt kā cut.
+
+### Maska [P]
+
+620 (2023–2024, visi, 192,7 ha): analizēti 82,8 %; nav analizēti **33,1 ha = 17,2 %**: nav HRL skujkoku klasē 10,3 %,
+liela sezonālā amplitūda 4,5 %, ceļa buferī 1,8 %, zems bāzes NDVI 0,6 %. Vējgāzēm ārpus maskas 33,0 %, citiem 55,6 %.
+
+![Kartes AOI 3](rm_figures/rm5b_aoi3_kartes.png)
+
+![Detekcija AOI 3](rm_figures/rm5b_aoi3_detekcija.png)
+
+### Abi AOI kopā [P]
+
+| | AOI 1 (Vidzeme) | AOI 3 (Rīgas reģions) |
+|---|---|---|
+| 620 ≥ 0,5 ha, n | 81 | 101 |
+| ≤ 20 m jebkurā gadā (placebo; p) | 69,1 % (36,2 %; 0,010) | 87,1 % (61,5 %; 0,010) |
+| ≥ 25 % jebkurā gadā (placebo; p) | 32,1 % (8,2 %; 0,010) | 61,4 % (19,8 %; 0,010) |
+| r−1, ≤ 20 m (placebo; p) | 29,6 % (16,0 %; 0,010) | 40,6 % (27,3 %; 0,010) |
+| **r−1, ≥ 25 % (placebo; p)** | **2,5 % (2,6 %; 0,61)** | **10,9 % (6,6 %; 0,11)** — visas kā cut |
+| atrasti kā cut / stress (≤ 20 m) | 55 / 8 no 56 | 85 / 23 no 88 |
+| stresa poligoni 2022–24, n | 30 | 45 |
+| stress jebkura gada bojājumos (placebo; p) | 73,3 % (70,7 %; 0,52) | 71,1 % (64,3 %; 0,23) |
+| stress bojājumos reģ. y−1..y+1 (placebo; p) | 50,0 % (39,8 %; 0,14) | **62,2 % (39,1 %; 0,020)** |
+| stress 620 reģ. y−1..y+1 (placebo; p) | 23,3 % (21,0 %; 0,48) | **40,0 % (23,8 %; 0,030)** |
+| 620 platība ārpus maskas | 18,1 % | 17,2 % |
+
+### Vai AOI 3 apstiprina AOI 1 secinājumu?
+
+AOI 1 secinājums: *s2forest atrod sekas / cirtes, nevis agrīnu stresu pirms reģistrācijas.*
+
+- **Apstiprina [P]:**
+  - 620 bojājumi atrasti biežāk nekā nejauši abos rādītājos, galvenokārt kā **cut** gadā r un r+1 (≥ 25 %:
+    27 un 38 pret 11 gadā r−1), lielākoties ziemas cirtes;
+  - gadā **r−1** stingrais rādītājs nav virs placebo (p 0,11), un visas 11 r−1 stingrās sakritības ir **cirtes**,
+    nevis stress. Agrīna stresa signāla gadu pirms reģistrācijas nav;
+  - cēloni (mizgrauži / vējgāzes / citi) s2forest neatšķir.
+- **Daļēji neapstiprina [P]:** AOI 3 stresa poligoni reģistrācijas logā ir virs placebo (p 0,02–0,03), AOI 1 nav.
+  Lielākā daļa no tiem ir **tajā pašā gadā** kā reģistrācija, un puse vēlāk nocirsti. Tas ir bojājuma signāls
+  reģistrācijas gadā (pirms sanitārās cirtes), nevis brīdinājums gadu iepriekš. Vai tas ir pirms vai pēc LVM
+  reģistrācijas datuma gada iekšienē, nav zināms: LVM poligoniem ir tikai gads [N].
+- **Kopā:** galvenais secinājums apstiprināts; papildus AOI 3 rāda, ka S2 stresa poligoni var iezīmēt jau notiekošu
+  bojājumu reģistrācijas gadā. Ar 2 AOI un 30 + 45 stresa poligoniem tas nav pietiekami, lai stresu lietotu kā
+  etiķeti [N].
+
+### Ierobežojumi (AOI 3)
+
+- (a) 2023. gada bojājumi ir 2024. gada bāzē (v0.2 īpašība). Šeit 2024. gadā stresa poligonu ir vairāk (26) nekā
+  2023. gadā (4) — pretēji AOI 1; ierobežojuma ietekme nav nosakāma no šiem datiem [N].
+- (b) 17,2 % 620 platības ārpus maskas (tabula augstāk).
+- Placebo fons AOI 3 ir augsts (blīvi poligoni), tāpēc absolūtās daļas starp AOI nav tieši salīdzināmas; salīdzina
+  pārsniegumu pār placebo.
+- Placebo pārvieto visus poligonus kopā tikai HRL skujkoku mežā (kā AOI 1).
+- Stresa laika diagnostika ir viena skripta rezultāts bez placebo pa gadu nobīdēm [N].
+
 ## Ierobežojumi
 
 - **(a) 2023. gada bojājumi ir 2024. gada bāzē** (v0.2 metodes īpašība, nemainīta). 2024. gada palaišanā ir tikai
@@ -235,8 +391,12 @@ Konfigurācijas: `configs/lvm5b_vidzeme_<gads>[_stress_only].yaml`. Palaišana: 
 
 ## Kas NAV izdarīts
 
-- s2forest kods nav mainīts. Atskaites datuma kļūda (`viz.monthly_availability`) nav labota; detekciju tā neietekmē.
+- s2forest detekcijas kods nav mainīts. Atskaites datuma kļūda (`viz.monthly_availability`) labota vēlāk (2026-10-29,
+  `b00649c`); detekciju tā neietekmē.
 - Placebo nav rēķināts vējgāzēm, citiem bojājumiem un `stress_only` variantam (tikai 620 un precizitāte, `all`).
-- Nav pārbaudīti citi AOI kandidāti (2, 3).
+  Replikācijā (AOI 3) placebo rēķināts arī vējgāzēm; AOI 1 vējgāžu placebo nav pārrēķināts.
+- Nav pārbaudīti citi AOI kandidāti (2, 3). Replikācijā (2026-10-29) pārbaudīts 3. kandidāts (tikai `all`); 2. nav.
+- Replikācijā nav `stress_only` varianta un nav placebo stresa poligonu laika nobīdēm (reģistrācijas gads pret
+  stresa gadu).
 - Nav salīdzināts ar MVR vai ortofoto (bez attēlu lejupielādes).
 - Nav S1 testa ar šiem mērķiem.

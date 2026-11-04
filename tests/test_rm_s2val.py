@@ -71,6 +71,11 @@ def test_placebo_relocates_inside_aoi(tmp_path):
     aoi = gpd.GeoDataFrame(geometry=[box(X0, Y0, X0 + 4000, Y0 + 4000)], crs=3059)
     pl = s2val.placebo(d, runs, aoi, path, c)
     assert len(pl) == 3 and {"found_share_r-1..r+1", "cut_in_lvm_damage_any_year"} <= set(pl.columns)
+    assert not any(k.startswith("100_") for k in pl.columns)
+    c.validation.placebo_groups = ["620", "100"]               # wind placebo: extra columns only
+    pw = s2val.placebo(d, runs, aoi, path, c)
+    assert {"100_found_share_0", "100_found_overlap25_share_r-1..r+1"} <= set(pw.columns)
+    assert pw[pl.columns].equals(pl)
     cmp = s2val.placebo_compare({"cut_in_lvm_damage_any_year": 2.0}, pl)
     assert cmp["p_one_sided"].iloc[0] == 0.25                  # (1 + 0) / (3 + 1)
     moved = s2val.relocate(d, np.array([[X0 + 2000.0, Y0 + 2000.0]]), aoi.union_all(), np.random.default_rng(1))

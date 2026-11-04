@@ -1,0 +1,61 @@
+{
+ "latitude": 56.75,
+ "longitude": 25.75,
+ "utc_offset_seconds": 7200,
+ "timezone": "Europe/Riga",
+ "timezone_abbreviation": "GMT+2",
+ "elevation": 168.0,
+ "daily_units": {
+  "time": "iso8601",
+  "temperature_2m_max": "\u00b0C",
+  "temperature_2m_min": "\u00b0C",
+  "temperature_2m_mean": "\u00b0C",
+  "precipitation_sum": "mm",
+  "et0_fao_evapotranspiration": "mm",
+  "daylight_duration": "s"
+ },
+ "daily": {
+  "time": [
+   "2023-04-18",
+   "2023-04-19",
+   "2023-04-20",
+   "2023-04-21"
+  ],
+  "temperature_2m_max": [
+   13.1,
+   15.5,
+   15.8,
+   16.2
+  ],
+  "temperature_2m_min": [
+   4.1,
+   4.1,
+   4.6,
+   4.0
+  ],
+  "temperature_2m_mean": [
+   8.8,
+   10.0,
+   10.6,
+   10.5
+  ],
+  "precipitation_sum": [
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  "et0_fao_evapotranspiration": [
+   3.19,
+   4.17,
+   4.07,
+   2.99
+  ],
+  "daylight_duration": [
+   52103.07,
+   52385.58,
+   52667.14,
+   52947.54
+  ]
+ }
+}

@@ -25,6 +25,9 @@ dependencies = [
     "pyyaml>=6.0",
     "typer>=0.12",
     "requests>=2.31",
+    "cdsapi>=0.7.7",
+    "h5netcdf>=1.8",
+    "h5py>=3.16",
 ]
 
 [project.scripts]
