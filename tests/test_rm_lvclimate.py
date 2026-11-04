@@ -77,3 +77,36 @@ def test_rity_cell_uses_eq34_day_length_and_grids_back():
     g = L.to_grid(w, ["tsum_F1"], np.array(LAT), np.array(LON))
     assert g["tsum_F1"].sel(year=2023, latitude=56.7, longitude=25.9) == pytest.approx(w["tsum_F1"].iloc[0])
     assert int(g["tsum_F1"].notnull().sum()) == 1
+
+
+def test_year_daily_rebuilds_when_months_are_added(tmp_path):
+    _hourly(tmp_path / "h_2015_04.nc", "2015-04-01", 30 * 24)
+    out = tmp_path / "daily" / "d_2015.nc"
+    L.year_daily(tmp_path, 2015, out)
+    with xr.open_dataset(out, engine="h5netcdf") as d:
+        assert d.attrs["months"] == "[4]" and d.sizes["valid_time"] == 30
+    L.year_daily(tmp_path, 2015, out)                       # unchanged months: cached file kept
+    _hourly(tmp_path / "h_2015_03.nc", "2015-03-01", 31 * 24)
+    L.year_daily(tmp_path, 2015, out)
+    with xr.open_dataset(out, engine="h5netcdf") as d:
+        assert d.attrs["months"] == "[3, 4]" and d.sizes["valid_time"] == 61
+        assert pd.Timestamp(d.valid_time.values[0]) == pd.Timestamp("2015-03-01")
+        assert np.isfinite(d["precip"].values[30]).all()   # 31 March from the April file 00 UTC
+
+
+def test_cds_jobs_add_pheno_extra_years():
+    from datetime import date
+
+    from mezasargs_risk import cds
+
+    pm = (1, 10)
+    base = cds.plan_months((1991, 2026), (4, 9), (2018, 2026), pm)
+    extra = sorted(set(base) | set(cds.plan_months((2011, 2017), pm, (2011, 2017), pm)))
+    new = sorted(set(extra) - set(base))
+    assert len(new) == 28 and new[0] == (2011, 1) and (2011, 10) in new and (2011, 4) not in new
+    jobs = cds.month_jobs(new, date(2026, 10, 27), ["2m_temperature"], ["total_precipitation"], [58, 20, 55, 28])
+    names = {j["name"] for j in jobs}
+    assert "acc00_2011_11" in names and "acc00_2011_04" in names     # month_jobs alone does not know April exists
+    jobs = cds.month_jobs(extra, date(2026, 10, 27), ["2m_temperature"], ["total_precipitation"], [58, 20, 55, 28])
+    names = {j["name"] for j in jobs}
+    assert "acc00_2011_11" in names and "acc00_2011_04" not in names and "h_2011_03" in names

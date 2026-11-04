@@ -164,6 +164,9 @@ class ClimateConfig(BaseModel):
     points: list[Point] = Field(default_factory=list)      # e.g. Kalsnava (nearest ERA5 node is used)
     grid_buffer_cells: int = 1       # ERA5 nodes whose 0.25 deg cell touches Latvia + this many rings
     years: tuple[int, int] = (2018, 2026)                  # RITY-2 and annual outputs
+    # extra years whose phenology months (pheno_start..pheno_end) are downloaded and run through RITY-2 (user
+    # 2026-11-04: 2011-2017, so that Tsum t-1 / t-2 exists for the LVM 620 labels from 2013)
+    pheno_extra_years: tuple[int, int] | None = None
     baseline: tuple[int, int] = (1991, 2020)               # water balance reference period
     wb_months: tuple[int, int] = (4, 9)                    # P - ET0 summed over these months (incl.)
     pheno_start: str = "01-01"       # weather window per year for phenology (PHENIPS-Clim sums from 1 Jan)

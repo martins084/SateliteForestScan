@@ -595,8 +595,10 @@ def _cds_jobs(cfg: RiskConfig, last_day) -> list[dict]:
     from . import cds
 
     c = cfg.climate
-    months = cds.plan_months((c.baseline[0], c.years[1]), c.wb_months, c.years,
-                             (int(c.pheno_start[:2]), int(c.pheno_end[:2])))
+    pm = (int(c.pheno_start[:2]), int(c.pheno_end[:2]))
+    months = cds.plan_months((c.baseline[0], c.years[1]), c.wb_months, c.years, pm)
+    if c.pheno_extra_years:
+        months = sorted(set(months) | set(cds.plan_months(c.pheno_extra_years, pm, c.pheno_extra_years, pm)))
     return cds.month_jobs(months, last_day, c.cds.hourly_vars, c.cds.accum_vars, c.cds.area)
 
 
@@ -719,6 +721,7 @@ def _lv_paths(cfg: RiskConfig):
 
 @app.command("cds-latvia")
 def cds_latvia(config: Path = ConfigArg, step: str = typer.Option("all", help="daily | wb | pheno | all")):
+    # phenology years: `years` plus `pheno_extra_years` (user 2026-11-04); parts/rity2_<y>.csv per year
     """Stage 4, Latvia (user decision 2026-11-04; run on the server, one year in memory): daily ERA5-Land cubes per
     year (cache/rm/cds/daily/), water balance P - ET0 (IV-IX) 1991-2026 with the standardized anomaly vs 1991-2020,
     RITY-2 per 0.1 deg cell 2018-2026 (resumable per year). Results: <run_dir>/latvia/ (NetCDF + tables)."""
@@ -764,7 +767,10 @@ def cds_latvia(config: Path = ConfigArg, step: str = typer.Option("all", help="d
         t.round(3).to_csv(odir / "water_balance_cells.csv", index=False)
         typer.echo(f"water balance: {wb.sizes['year']} years, {int(wb['cwb_z'].notnull().any('year').sum())} cells")
     if step in ("pheno", "all"):
-        for y in range(c.years[0], c.years[1] + 1):
+        pyears = list(range(c.years[0], c.years[1] + 1))
+        if c.pheno_extra_years:
+            pyears = sorted(set(pyears) | set(range(c.pheno_extra_years[0], c.pheno_extra_years[1] + 1)))
+        for y in pyears:
             part = odir / "parts" / f"rity2_{y}.csv"
             if part.exists():
                 continue
@@ -779,7 +785,7 @@ def cds_latvia(config: Path = ConfigArg, step: str = typer.Option("all", help="d
         ph.to_csv(odir / "rity2_cells_long.csv.gz", index=False)
         wide = L.pheno_wide(ph, c.main_scenario)
         wide.to_csv(odir / "rity2_cells.csv", index=False)
-        g = load(c.years[0])
+        g = load(pyears[0])
         cols = [k for k in wide.columns if k not in ("latitude", "longitude", "year", "scenario", "variant",
                                                      "last_date", "swarming_date", "daylength_shift_min")]
         grid = L.to_grid(wide.assign(complete=wide["complete"].astype(float)), cols, g.latitude.values,
@@ -919,8 +925,9 @@ def cds_latvia_report(config: Path = ConfigArg):
         raise typer.Exit(4)
 
     # maps (cells touching Latvia)
-    mp, mw = (x[x["touch_lv"]].rename(columns={"latitude": "lat", "longitude": "lon"}) for x in (ph, wb))
     yrs = list(range(c.years[0], c.years[1] + 1))
+    mp, mw = (x[x["touch_lv"]].rename(columns={"latitude": "lat", "longitude": "lon"}) for x in (ph, wb))
+    mp = mp[mp["year"].isin(yrs)]                     # maps: `years` only (pheno_extra_years are in the tables)
     kw_ = {"step": 0.1, "marked": tuple(incomplete)}
     figs = {
         "swarming": viz.climate_maps(lv, mp, "swarming_doy", yrs, "RITY-2 izlidošanas diena (DOY), ERA5-Land 0,1°",

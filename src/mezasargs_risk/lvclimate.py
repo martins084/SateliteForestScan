@@ -66,10 +66,13 @@ def month_daily(folder: Path, y: int, m: int) -> xr.Dataset:
 
 
 def year_daily(folder: Path, y: int, out: Path) -> Path:
-    """All downloaded months of year `y` as one daily NetCDF (cached)."""
-    if out.exists():
-        return out
+    """All downloaded months of year `y` as one daily NetCDF (cached; rebuilt when the set of downloaded months
+    differs from the cached one, e.g. after the 2011-2017 phenology months were added)."""
     months = [m for m in range(1, 13) if cds.find_target(folder, f"h_{y}_{m:02d}")]
+    if out.exists():
+        with xr.open_dataset(out, engine="h5netcdf") as old:
+            if old.attrs.get("months") == str(months):
+                return out
     d = xr.concat([month_daily(folder, y, m) for m in months], T)
     d.attrs = {"source": "ERA5-Land hourly (CDS reanalysis-era5-land), UTC days", "months": str(months)}
     out.parent.mkdir(parents=True, exist_ok=True)
