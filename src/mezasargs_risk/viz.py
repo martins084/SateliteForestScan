@@ -563,7 +563,10 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
 
     n = len(years)
     nrow = int(np.ceil(n / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(10 * ncol / 3, 2.7 * nrow + 0.6), dpi=200, squeeze=False)
+    # panel ~3.0 x 2.15 in (Latvia extent 8 x 2.9 deg at 57 N); constrained layout, room at the bottom for the note
+    fig, axes = plt.subplots(nrow, ncol, figsize=(3.0 * ncol + 0.9, 2.15 * nrow + 0.5), dpi=200, squeeze=False,
+                             layout="constrained")
+    fig.get_layout_engine().set(rect=(0, 0.035 * 3 / max(nrow, 3), 1, 1 - 0.035 * 3 / max(nrow, 3)), w_pad=0.02, h_pad=0.02)
     if discrete is not None:
         cm = ListedColormap([plt.get_cmap(cmap)(i / max(len(discrete) - 1, 1)) for i in range(len(discrete))])
         norm = BoundaryNorm(np.arange(len(discrete) + 1) - 0.5 + discrete[0], cm.N)
@@ -586,6 +589,8 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
         ax.set_xticks([])
         ax.set_yticks([])
         ax.grid(False)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
     for ax in list(axes.flat)[n:]:
         ax.axis("off")
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cm)
@@ -596,7 +601,93 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
     note = "Robežas: © EuroGeographics for the administrative boundaries (GISCO NUTS 2024)"
     if any(y in marked for y in years):
         note += "; * nepilns gads"
-    fig.text(0.01, 0.01, note, fontsize=7, color=INK)
-    fig.savefig(path, bbox_inches="tight")
+    fig.text(0.01, 0.005, note, fontsize=7, color=INK2, va="bottom")
+    fig.savefig(path, bbox_inches="tight", pad_inches=0.05)
+    plt.close(fig)
+    return path
+
+
+# --- drought comparison (after stage 4) ------------------------------------------------------------------------------
+
+DRY, WET = "#c4452f", "#2a78d6"          # diverging pair for the water balance anomaly (dry / wet)
+EVENT_YEARS = (2018, 2023)
+
+
+def _events(ax, years=EVENT_YEARS):
+    for y in years:
+        ax.axvspan(y - 0.5, y + 0.5, color=GRID, alpha=0.7, lw=0, zorder=0)
+
+
+def drought_series(nat: pd.DataFrame, damage: dict, storms, path: Path) -> Path:
+    """Annual series in one figure: drought on top (cwb_z bars, RITY-2 Tsum), damage below (one unit per panel)."""
+    panels = [("CSP MEB012: izcirstais apjoms, tūkst. m³ (visi īpašnieki)",
+               [("CSP MEB012 stumbra kaitēkļi, izcirsts tūkst. m3", S2, "stumbra kaitēkļi"),
+                ("CSP MEB012 vējgāzes (kontrole), izcirsts tūkst. m3", INK2, "vējgāzes, snieglauzes (kontrole)")]),
+              ("LVM 620 (stumbra kaitēkļi), ha pēc reģistrācijas gada", [("LVM 620, ha", S2, None)]),
+              ("EFDA v3.0 klase 1 (vējš / mizgrauži, nav tīra mizgraužu etiķete), ha", [("EFDA v3.0 klase 1, ha", S3, None)]),
+              ("EFDA v3.0 klase 3 (cirte), ha", [("EFDA v3.0 klase 3 (cirte), ha", INK2, None)])]
+    fig, axes = plt.subplots(2 + len(panels), 1, figsize=(9, 2.0 * (2 + len(panels))), dpi=200, sharex=True,
+                             layout="constrained")
+    ax = axes[0]
+    z = nat["cwb_z"].dropna()
+    ax.bar(z.index, z.values, width=0.75, color=[DRY if v < 0 else WET for v in z.values], lw=0)
+    ax.axhline(0, color=AXIS, lw=0.8)
+    ax.set_title("Ūdens bilances anomālija z (P − ET0, IV–IX, Latvijas vidējais; bāze 1991–2020; < 0 = sausāks)",
+                 loc="left")
+    ax = axes[1]
+    for col, c, lab in (("tsum_F1", S2, "Tsum_F1"), ("tsum_F2", S1, "Tsum_F2")):
+        s = nat[col].dropna()
+        ax.plot(s.index, s.values, color=c, marker="o", ms=3, label=lab)
+        ax.annotate(lab, (s.index[-1], s.values[-1]), xytext=(4, 0), textcoords="offset points", fontsize=7,
+                    color=INK2, va="center")
+    ax.set_title("RITY-2 relatīvā termālā summa (AVG, Latvijas vidējais; tikai 2018–2026, 2026* līdz 27.10)",
+                 loc="left")
+    ax.legend(loc="upper left", fontsize=7, ncol=2)
+    for ax, (title, series) in zip(axes[2:], panels):
+        for key, c, lab in series:
+            s = damage[key].dropna()
+            ax.plot(s.index, s.values, color=c, marker="o", ms=3, label=lab, ls="-" if c != INK2 or lab is None else "--")
+        if any(lab for _, _, lab in series):
+            ax.legend(loc="upper left", fontsize=7)
+        ax.set_title(title, loc="left")
+        ax.set_ylim(0, None)
+    _storms(axes[4], storms)
+    for ax in axes:
+        _events(ax)
+    for y in EVENT_YEARS:
+        axes[-1].annotate(str(y), (y, 0.03), xycoords=("data", "axes fraction"), ha="center", va="bottom", fontsize=7,
+                          color=INK2)
+    axes[-1].set_xlim(1984.5, 2026.5)
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def drought_regions(feat: pd.DataFrame, dens: pd.DataFrame, years: tuple[int, int], path: Path) -> Path:
+    """Per NUTS 2024 region: water balance anomaly (top row) and LVM 620 ha per 1000 ha LVM land (bottom row)."""
+    regs = sorted(dens["region"].unique())
+    fig, axes = plt.subplots(2, len(regs), figsize=(2.2 * len(regs), 4.6), dpi=200, sharex=True, sharey="row",
+                             layout="constrained")
+    fig.get_layout_engine().set(rect=(0, 0.05, 1, 0.95))
+    top = float(dens["lvm_620_ha_per_1000ha"].max()) * 1.05
+    for j, r in enumerate(regs):
+        f = feat[(feat["region"] == r) & feat["year"].between(years[0] - 2, years[1])]
+        ax = axes[0, j]
+        ax.bar(f["year"], f["cwb_z"], width=0.75, color=[DRY if v < 0 else WET for v in f["cwb_z"]], lw=0)
+        ax.axhline(0, color=AXIS, lw=0.8)
+        ax.set_title(r, loc="left")
+        g = dens[dens["region"] == r]
+        ax = axes[1, j]
+        ax.plot(g["year"], g["lvm_620_ha_per_1000ha"], color=S2, marker="o", ms=3)
+        ax.set_ylim(0, top)
+        for a in axes[:, j]:
+            _events(a)
+            a.set_xticks([years[0] - 2, 2018, 2023])
+    axes[0, 0].set_ylabel("cwb_z")
+    axes[1, 0].set_ylabel("LVM 620, ha / 1000 ha")
+    fig.suptitle("Reģioni (NUTS 2024): ūdens bilances anomālija un LVM 620 bojājumu blīvums", fontweight="bold")
+    fig.text(0.01, 0.005, "Reģionu robežas: © EuroGeographics for the administrative boundaries (GISCO NUTS 2024)",
+             fontsize=6, color=INK2, va="bottom")
+    fig.savefig(path, bbox_inches="tight", pad_inches=0.08)
     plt.close(fig)
     return path

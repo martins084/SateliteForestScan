@@ -937,8 +937,143 @@ def cds_latvia_report(config: Path = ConfigArg):
         "cwb_z": viz.climate_maps(lv, mw, "cwb_z", sorted(int(y) for y in mw["year"].unique()),
                                   "Standartizēta ūdens bilances anomālija z (P − ET0, IV–IX; bāze 1991–2020)",
                                   fdir / "rm4_lv_era5land_udens_bilance.png", cmap="RdBu", vmin=-2.5, vmax=2.5,
-                                  ncol=6, **kw_),
+                                  ncol=6, step=0.1, marked=()),          # IV-IX 2026 is complete: no '*'
     }
     for n, f in figs.items():
         typer.echo(f"{n}: {f}")
     _metadata(cfg, "cds_latvia_report", {"cells_in_latvia": out["cells_in_latvia"], "incomplete_years": incomplete})
+
+
+@app.command("drought-compare")
+def drought_compare(config: Path = ConfigArg):
+    """Drought comparison after stage 4 (user 2026-11-04; DESCRIPTIVE): national damage series (CSP MEB012, EFDA
+    classes 1 / 3, LVM 620) and the regional LVM 620 panel vs the ERA5-Land water balance anomaly and RITY-2 thermal
+    sums at lags t, t-1, t-2, t-1 + t-2 (Spearman, permutation p, block bootstrap CI, n in every row); event table
+    (2002 / 2006 / 2018 / 2023) and the 2023 eastern drought by region. Reads existing outputs only."""
+    from shapely.geometry import Point as SPoint
+
+    from . import drought as D
+    from . import lvm as LV
+    from . import viz
+    from .describe import read_csp
+    from .efda import country_regions
+
+    cfg = load_config(config)
+    d = cfg.drought
+    if d is None:
+        raise typer.BadParameter("config has no `drought` section")
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fdir.mkdir(parents=True, exist_ok=True)
+    y0, y1 = d.damage_years
+
+    # --- climate features (stage 4) ------------------------------------------------------------------------------
+    wb = pd.read_csv(d.climate_dir / "tables" / "lv_water_balance_years.csv").set_index("year")
+    ry = pd.read_csv(d.climate_dir / "tables" / "lv_rity2_years.csv").set_index("year")
+    nat = pd.DataFrame({"cwb_z": wb["cwb_z_mean"], "tsum_F1": ry["tsum_F1_mean"], "tsum_F2": ry["tsum_F2_mean"]})
+    feats = ["cwb_z", "tsum_F1", "tsum_F2"]
+    regions = country_regions(cfg.boundaries).to_crs(4326)
+    wc = pd.read_csv(d.climate_dir / "latvia" / "water_balance_cells.csv")
+    pc = pd.read_csv(d.climate_dir / "latvia" / "rity2_cells.csv")
+    cells = wc[["latitude", "longitude"]].drop_duplicates().reset_index(drop=True)
+    pts = [SPoint(lo, la) for la, lo in zip(cells["latitude"], cells["longitude"])]
+    cells["region"] = [next((r.NAME_LATN for r in regions.itertuples() if r.geometry.contains(p)), None) for p in pts]
+    cells = cells.dropna(subset=["region"])
+    reg_feat = (wc.merge(cells, on=["latitude", "longitude"]).groupby(["region", "year"])["cwb_z"].mean().to_frame()
+                .join(pc.merge(cells, on=["latitude", "longitude"]).groupby(["region", "year"])[["tsum_F1", "tsum_F2"]]
+                      .mean(), how="left"))
+    reg_feat.reset_index().round(4).to_csv(tdir / "drought_region_features.csv", index=False)
+    nat.round(4).to_csv(tdir / "drought_national_features.csv")
+
+    # --- damage series (existing tables) -------------------------------------------------------------------------
+    meb = read_csp(cfg.stats.meb012, 2)
+    meb = meb[meb["Meža īpašuma forma"] == "Pavisam"]
+
+    def csp(kind, ind):
+        m = meb[(meb["Meža bojājumi"] == kind) & (meb["indicator"] == ind)]
+        return m.set_index("year")["value"].astype(float)
+
+    m3, ha = "Bojājumu rezultātā izcirstais apjoms, tūkst. m³", "Bojā aizgājušās audzes, ha"
+    ef = pd.read_csv(d.efda_counts)
+    ef = ef[(ef["version"] == d.efda_version) & (ef["region_name"] != "outside")]
+    efy = ef.groupby(["agent", "year"])["px"].sum().unstack("agent") * viz.PX_HA
+    la = pd.read_csv(d.lvm_annual).set_index("year")
+    la = la[(la.index >= y0) & (la.index <= y1)]
+    damage = {
+        "CSP MEB012 stumbra kaitēkļi, izcirsts tūkst. m3": csp("..kaitēkļu izraisīti stumbru bojājumi", m3),
+        "CSP MEB012 stumbra kaitēkļi, bojā gājušas audzes ha": csp("..kaitēkļu izraisīti stumbru bojājumi", ha),
+        "CSP MEB012 vējgāzes (kontrole), izcirsts tūkst. m3": csp("Vējgāzes, snieglauzes", m3),
+        "EFDA v3.0 klase 1, ha": efy["wind_bark_beetle"],
+        "EFDA v3.0 klase 3 (cirte), ha": efy["harvest"],
+        "LVM 620, ha": la["lvm_ha"],
+        "LVM 620, poligoni": la["lvm_n"].astype(float),
+    }
+    pd.DataFrame(damage).round(2).to_csv(tdir / "drought_national_damage.csv")
+
+    # --- 1. national lags ----------------------------------------------------------------------------------------
+    lf = D.lagged(nat, feats)
+    lt = D.lag_table(damage, lf, d.n_perm, d.n_boot, d.seed, d.min_n_ci)
+    lt.round(3).to_csv(tdir / "drought_national_lags.csv", index=False)
+
+    # --- 2. regional panel (LVM 620 per 1000 ha LVM land) + 0.1 deg sparsity ----------------------------------------
+    lr = pd.read_csv(d.lvm_regions).set_index("NAME_LATN")
+    yrs = [c for c in lr.columns if c.isdigit() and y0 <= int(c) <= y1]
+    dens = (lr[yrs].div(lr["lvm_land_ha"], axis=0) * 1000).stack().rename("lvm_620_ha_per_1000ha").reset_index()
+    dens.columns = ["region", "year", "lvm_620_ha_per_1000ha"]
+    dens["year"] = dens["year"].astype(int)
+    rl = pd.concat({r: D.lagged(g.droplevel("region"), feats) for r, g in reg_feat.groupby(level="region")},
+                   names=["region", "year"]).reset_index()
+    panel = dens.merge(rl, on=["region", "year"], how="left")
+    panel.round(4).to_csv(tdir / "drought_regional_panel_data.csv", index=False)
+    prow = []
+    for col in [c for c in rl.columns if "|" in c]:
+        s = D.panel_stats(panel, "lvm_620_ha_per_1000ha", col, d.n_perm, d.n_boot, d.seed)
+        f, lag = col.split("|")
+        prow.append({"feature": f, "lag": lag} | {k: v for k, v in s.items() if k != "feature"})
+    pd.DataFrame(prow).round(3).to_csv(tdir / "drought_regional_panel.csv", index=False)
+    sparse = None
+    if d.lvm_cells and cfg.lvm is not None:
+        g = LV.load_damage(cfg.lvm)
+        g = g[(g["subtype"] == cfg.lvm.stem_pest) & ~g["empty"] & g["year"].between(y0, y1)].to_crs(4326)
+        rp = g.geometry.representative_point()
+        key = pd.DataFrame({"year": g["year"].astype(int).to_numpy(),
+                            "latitude": np.round(np.round(rp.y.to_numpy() / 0.1) * 0.1, 1),
+                            "longitude": np.round(np.round(rp.x.to_numpy() / 0.1) * 0.1, 1)})
+        key = key.merge(cells[["latitude", "longitude"]], on=["latitude", "longitude"])
+        per = key.groupby(["year", "latitude", "longitude"]).size()
+        sparse = pd.DataFrame({"polygons": key.groupby("year").size(),
+                               "cells_with_polygon": per.groupby("year").size(),
+                               "cells_in_latvia": len(cells),
+                               "median_polygons_per_nonempty_cell": per.groupby("year").median()})
+        sparse["share_cells_with_polygon"] = (sparse["cells_with_polygon"] / len(cells)).round(3)
+        sparse.to_csv(tdir / "drought_lvm_cells_sparsity.csv")
+
+    # --- 3. events -------------------------------------------------------------------------------------------------
+    ev = D.event_table({**damage, "cwb_z (Latvijas vid.)": nat["cwb_z"]}, d.events)
+    ev.round(3).to_csv(tdir / "drought_events_national.csv", index=False)
+    m11 = read_csp(cfg.stats.meb011_owner, 3)
+    m11 = m11[(m11["Meža bojājumi"] == "..kaitēkļu izraisīti stumbru bojājumi") & (m11["Meža īpašuma forma"] == "Pavisam")
+              & m11["Teritoriālā vienība"].isin(list(LV.MEB011_REGIONS))]
+    m11 = m11.assign(region=m11["Teritoriālā vienība"].map(LV.MEB011_REGIONS))
+    e23 = reg_feat["cwb_z"].unstack("year")[[2022, 2023, 2024]].add_prefix("cwb_z_")
+    e23 = e23.join(dens.pivot(index="region", columns="year", values="lvm_620_ha_per_1000ha")[[2022, 2023, 2024]]
+                   .add_prefix("lvm620_ha_per_1000ha_"))
+    for ind, tag in ((ha, "meb011_dead_ha"), (m3, "meb011_km3")):
+        e23 = e23.join(m11[m11["indicator"] == ind].pivot(index="region", columns="year", values="value")
+                       .add_prefix(f"{tag}_"))
+    e23["lvm620_ratio_2024_2022"] = e23["lvm620_ha_per_1000ha_2024"] / e23["lvm620_ha_per_1000ha_2022"]
+    e23["meb011_dead_ha_ratio_2024_2022"] = e23["meb011_dead_ha_2024"] / e23["meb011_dead_ha_2022"]
+    e23["meb011_dead_ha_ratio_2025_2022"] = e23["meb011_dead_ha_2025"] / e23["meb011_dead_ha_2022"]
+    e23["region_area_ha"] = regions.set_index("NAME_LATN").to_crs(3035).area.reindex(e23.index) / 1e4
+    e23.round(3).to_csv(tdir / "drought_event_2023_regions.csv")
+
+    # --- figures ---------------------------------------------------------------------------------------------------
+    figs = {"series": viz.drought_series(nat, damage, cfg.storms, fdir / "rm4b_sausums_gadi.png"),
+            "regions": viz.drought_regions(reg_feat.reset_index(), dens, (y0, y1), fdir / "rm4b_sausums_regioni.png")}
+    out = {"national_rows": len(lt), "regional_rows": len(prow),
+           "sparsity": None if sparse is None else sparse[["polygons", "cells_with_polygon"]].to_dict()}
+    typer.echo(json.dumps(out, indent=1, default=str, ensure_ascii=False))
+    for n, f in figs.items():
+        typer.echo(f"{n}: {f}")
+    _metadata(cfg, "drought_compare", {"inputs": {k: str(v) for k, v in d.model_dump().items() if "Path" in type(v).__name__},
+                                       "n_perm": d.n_perm, "n_boot": d.n_boot, "seed": d.seed})

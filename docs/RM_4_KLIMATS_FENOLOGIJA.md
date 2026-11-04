@@ -452,5 +452,6 @@ vidējā (dienās), slīpums un korelācijas.
 - Izlidošanas DOY ir sliekšņa pazīme ar lēcieniem (2021, 2025). Riska modelim piemērotāka ir gluda Tsum [N].
 - 2026. gads ir nepilns (temperatūra līdz 27.10, akumulētie līdz 26.10); ūdens bilanci tas neietekmē, jo IV–IX ir
   pilns.
-- Sausuma salīdzinājums (ūdens bilance pret S2 / LVM bojājumiem) un 6. posms **nav sākti** (lietotāja lēmums:
-  apstāties).
+- Sausuma salīdzinājums: `docs/RM_4b_SAUSUMS.md` (2026-11-04). 6. posms nav sākts.
+- 4. posms pieņemts (lietotājs 2026-11-04). Piekrastes vēlākā izlidošana — [N] jūras pavasara vēsums (lietotāja
+  piezīme: fizikāli loģiski); „DR agrāk” bija pieņēmums, nevis prasība.

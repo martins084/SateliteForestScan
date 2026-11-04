@@ -174,6 +174,22 @@ class ClimateConfig(BaseModel):
     check_source: str = ""
 
 
+class DroughtConfig(BaseModel):
+    """Drought comparison after stage 4 (descriptive; user 2026-11-04). Reads existing outputs only."""
+    climate_dir: Path                # stage 4 run dir (tables/lv_*.csv, latvia/*_cells.csv)
+    efda_counts: Path                # stage 5 efda_annual_counts.csv (EFDA px per year x agent x region)
+    lvm_annual: Path                 # stage 5a lvm_620_vs_csp_meb012.csv
+    lvm_regions: Path                # stage 5a lvm_620_by_region.csv
+    damage_years: tuple[int, int] = (2013, 2024)   # complete CSP / LVM years
+    efda_version: str = "v3.0.0"
+    events: list[int] = Field(default_factory=lambda: [2002, 2006, 2018, 2023])
+    lvm_cells: bool = True           # 0.1 deg sparsity check of the LVM polygons (needs `lvm`)
+    n_perm: int = 9999
+    n_boot: int = 9999
+    seed: int = 20261104
+    min_n_ci: int = 8
+
+
 class RiskConfig(BaseModel):
     run_name: str
     output_dir: Path
@@ -187,6 +203,7 @@ class RiskConfig(BaseModel):
     kalsnava: KalsnavaConfig | None = None
     lvm: LvmConfig | None = None
     climate: ClimateConfig | None = None
+    drought: DroughtConfig | None = None
 
     @property
     def run_dir(self) -> Path:

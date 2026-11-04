@@ -155,6 +155,21 @@ Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
   `temperature_2m, dew_point_2m, wind_speed_10m, shortwave_radiation, surface_pressure, et0_fao_evapotranspiration,
   precipitation`, `models=era5`, `timezone=GMT`, `wind_speed_unit=ms` (Kalsnavas prototipa apjomā; 2026-10-30).
 
+## Sausuma salīdzinājums pēc 4. posma (2026-11-04)
+
+Jauni dati **nav lejupielādēti**; izmantoti tikai esošie:
+- 4. posma ERA5-Land rezultāti (`output/rm4_klimats/`);
+- 5. posma EFDA gadu skaiti;
+- 5a LVM 620 tabulas un LVM_BOJAJUMI Wayback kopija (0,1° retuma pārbaudei);
+- CSP **MEB012** un **MEB011** no `cache/rm5_sources/` (lejupielādēti 5. un 5a posmā).
+
+Sk. `docs/RM_4b_SAUSUMS.md`.
+
+| Avots | Licence | Izmantots | Atsauce |
+|---|---|---|---|
+| **CSP MEB012** (VMD dati), stumbra kaitēkļi un vējgāzes, visi īpašnieki, 2013–2024 | lietotājs 2026-11-04: publiski, CC BY [N: licences teksts šeit nav atvērts] | `cache/rm5_sources/csp_MEB012.csv` | Centrālā statistikas pārvalde, tabula MEB012 „Meža bojājumi un augtspēju zaudējušās mežaudzes” (VMD dati), data.stat.gov.lv |
+| **CSP MEB011** (VMD dati), stumbra kaitēkļi pa statistiskajiem reģioniem (no 01.01.2024), 2021–2025 | kā MEB012 [N] | `cache/rm5_sources/csp_MEB011_owner.csv` | Centrālā statistikas pārvalde, tabula MEB011 (VMD dati) |
+
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 
 | Pakotne | Versija (PyPI) | Licence [P] |
