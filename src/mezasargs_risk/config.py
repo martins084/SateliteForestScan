@@ -193,6 +193,20 @@ class DroughtConfig(BaseModel):
     min_n_ci: int = 8
 
 
+class FeaturesConfig(BaseModel):
+    """Stage 6a pilot block (user 2026-11-04): feature layers + training table on the EFDA 30 m grid."""
+    block_3059: list[float]          # x0, y0, x1, y1 in LKS-92 (EPSG:3059)
+    margin_m: float = 5000.0         # inputs read this far around the block (distances capped at 5 km)
+    years: tuple[int, int] = (2013, 2024)
+    k_exclude: int = 5               # cells with an EFDA disturbance in t-k..t-1 are out of the training set (2.5)
+    climate_dir: Path                # stage 4 run dir (latvia/water_balance_cells.csv, latvia/rity2_cells.csv)
+    hrl_dlt: Path                    # HRL DLT 2018, 100 m, Latvia (0 no trees, 1 broadleaf, 2 conifer)
+    chm: bool = True
+    chm_url: str = "https://dataforgood-fb-data.s3.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/chm/{qk}.tif"
+    chm_from_year: int = 2020        # L2: CHMv2 (imagery ~2018) only for t >= 2020
+    source: str = "lvm620_wayback20250503"
+
+
 class RiskConfig(BaseModel):
     run_name: str
     output_dir: Path
@@ -207,6 +221,7 @@ class RiskConfig(BaseModel):
     lvm: LvmConfig | None = None
     climate: ClimateConfig | None = None
     drought: DroughtConfig | None = None
+    features: FeaturesConfig | None = None
 
     @property
     def run_dir(self) -> Path:

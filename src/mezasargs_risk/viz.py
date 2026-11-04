@@ -691,3 +691,43 @@ def drought_regions(feat: pd.DataFrame, dens: pd.DataFrame, years: tuple[int, in
     fig.savefig(path, bbox_inches="tight", pad_inches=0.08)
     plt.close(fig)
     return path
+
+
+# --- stage 6a pilot -------------------------------------------------------------------------------------------------
+
+def pilot_overview(py: pd.DataFrame, path: Path) -> Path:
+    """Positives (LVM 620 cells) per year in the pilot block and their share of the training cells."""
+    fig, axes = plt.subplots(2, 1, figsize=(8, 4.6), dpi=200, sharex=True, layout="constrained")
+    axes[0].bar(py["year"], py["positives"], color=S2, width=0.7, lw=0)
+    axes[0].set_title("Pozitīvās šūnas (LVM 620 pēc reģistrācijas gada), skaits", loc="left")
+    axes[1].bar(py["year"], py["share_pos"] * 100, color=S2, width=0.7, lw=0)
+    axes[1].set_title("Pozitīvo daļa apmācības kopā, %", loc="left")
+    axes[1].set_xticks(py["year"])
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def pilot_features(tab: pd.DataFrame, feats: list[tuple[str, str, bool]], path: Path) -> Path:
+    """ECDF of each feature: positives vs other training cells (no model). feats: (column, title, log x)."""
+    d = tab[tab["in_set"] == 1]
+    n = len(feats)
+    ncol = 4
+    nrow = int(np.ceil(n / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(11, 2.4 * nrow), dpi=200, layout="constrained", squeeze=False)
+    for ax, (c, title, logx) in zip(axes.flat, feats):
+        for lab, col, name in ((0, INK2, "pārējās"), (1, S2, "pozitīvās")):
+            x = np.sort(d.loc[d["label"] == lab, c].dropna().to_numpy())
+            if len(x):
+                ax.plot(x, np.arange(1, len(x) + 1) / len(x), color=col, lw=1.6, label=f"{name} (n={len(x):,})")
+        if logx:
+            ax.set_xscale("symlog", linthresh=1)
+        ax.set_title(title, loc="left", fontsize=8)
+        ax.set_ylim(0, 1)
+        ax.legend(fontsize=6, loc="best")
+    for ax in list(axes.flat)[n:]:
+        ax.axis("off")
+    fig.suptitle("Pilota bloks: pazīmju sadalījums (ECDF), pozitīvās pret pārējām šūnām, 2013–2024", fontweight="bold")
+    fig.savefig(path)
+    plt.close(fig)
+    return path

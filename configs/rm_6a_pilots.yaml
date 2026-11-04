@@ -1,0 +1,43 @@
+# MežaSargs risk model, stage 6a (user decision 2026-11-04): feature specification and a PILOT block training table
+# (cell x year, 2013-2024). Not all of Latvia. Labels: LVM 620 (Wayback copy, plan 2.16). Report: docs/RM_6a_PAZIMES.md.
+# Pilot block: 20 x 20 km in LKS-92 containing AOI 3 (5b validation); chosen as the top 20 km block by the number of
+# years 2013-2024 with >= 5 LVM 620 polygons (12 / 12; 806 polygons) - see RM_6a.
+run_name: rm6a_pilots
+output_dir: ../output
+cache_dir: ../cache
+
+efda:
+  main:
+    version: v3.0.0
+    doi: 10.5281/zenodo.21722408
+    archive: Lithuania.zip
+    dir: ../cache/efda/v3.0/Lithuania.zip
+    first_year: 1985
+    agent: disturbance_agent_lithuania_v30.tif
+    agent_aggregated: disturbance_agent_aggregated_lithuania_v30.tif
+    forest: forestlanduse_mask_lithuania_v30.tif
+
+boundaries:
+  path: ../cache/boundaries/NUTS_RG_01M_2024_3035_LEVL_3.geojson   # GISCO NUTS 2024, (c) EuroGeographics
+  country: LV
+  min_cover: 0.95
+  border_buffer_m: 1000
+  control_lonlat: [25.85, 56.69]
+
+lvm:
+  damage: ../cache/lvm_open/LVM_BOJAJUMI_wayback20250503.zip
+  damage_snapshot: 2025-04-27
+  land_units: ../cache/lvm_open/LVM_ZEMES_VIENIBAS_wayback20250421.zip
+  stem_pest: 620
+  years: [2013, 2024]
+
+features:
+  block_3059: [490000, 275000, 510000, 295000]
+  margin_m: 5000
+  years: [2013, 2024]
+  k_exclude: 5
+  climate_dir: ../output/rm4_klimats
+  hrl_dlt: ../cache/rm/hrl_dlt2018_LV_100m.tif
+  chm: true
+  chm_from_year: 2020
+  source: lvm620_wayback20250503

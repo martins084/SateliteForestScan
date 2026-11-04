@@ -1084,3 +1084,61 @@ def drought_compare(config: Path = ConfigArg):
         typer.echo(f"{n}: {f}")
     _metadata(cfg, "drought_compare", {"inputs": {k: str(v) for k, v in d.model_dump().items() if "Path" in type(v).__name__},
                                        "n_perm": d.n_perm, "n_boot": d.n_boot, "seed": d.seed})
+
+
+@app.command("features-pilot")
+def features_pilot(config: Path = ConfigArg):
+    """Stage 6a (user 2026-11-04): pilot block training table (cell x year, LVM 620 labels, features <= t-1),
+    leakage record (years used per feature and year), descriptive statistics (no model), time / memory."""
+    import xarray as xr
+
+    from . import features as F
+    from . import features_io as FIO
+    from . import viz
+
+    cfg = load_config(config)
+    if cfg.features is None:
+        raise typer.BadParameter("config has no `features` section")
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fdir.mkdir(parents=True, exist_ok=True)
+    tab, info = FIO.training_table(cfg)
+    used = info.pop("years_used")
+    lk = pd.DataFrame([{"year": t, "feature": k, "years": " ".join(map(str, v)), "max_offset": max(v) - t,
+                        "min_offset": min(v) - t} for t, fu in used.items() for k, v in fu.items()])
+    lk.to_csv(tdir / "pilot_leakage_years_used.csv", index=False)
+    if (lk["max_offset"] >= 0).any():
+        raise typer.Exit(5)
+    ds = xr.Dataset({c: ("row", tab[c].to_numpy()) for c in tab.columns if c != "source"},
+                    attrs={"source": cfg.features.source, "block_3059": str(cfg.features.block_3059),
+                           "schema": "cell_id (EFDA v3.0 grid row * width + col), year, label, source, confidence"})
+    enc = {c: {"zlib": True, "complevel": 4} for c in ds.data_vars}
+    ds.to_netcdf(tdir / "training_pilot.nc", engine="h5netcdf", encoding=enc)
+    feats = [c for c in tab.columns if c not in ("cell_id", "year", "label", "confidence", "source", "in_set", "hrl_after_t")]
+    py, dist = F.describe(tab, feats)
+    py.to_csv(tdir / "pilot_positives_by_year.csv", index=False)
+    dist.round(4).to_csv(tdir / "pilot_feature_distributions.csv", index=False)
+    byyear = []
+    for t, g in tab[tab["in_set"] == 1].groupby("year"):
+        _, d = F.describe(g, ["p620_dist_t1", "p620_ha2k_t1", "p620_dist_t23", "cut_dist_t13", "cwb_z_t1", "tsum_F1_t1"])
+        byyear.append(d.assign(year=t))
+    pd.concat(byyear).round(4).to_csv(tdir / "pilot_feature_distributions_by_year.csv", index=False)
+    show = [("p620_dist_t1", "LVM 620 t−1: attālums, m", False), ("p620_ha2k_t1", "LVM 620 t−1: ha 2 km", True),
+            ("p620_dist_t23", "LVM 620 t−2..t−3: attālums, m", False), ("p620_ha500_t1", "LVM 620 t−1: ha 500 m", True),
+            ("efda1_dist_t1", "EFDA klase 1 t−1: attālums, m (jutīgums)", False),
+            ("cut_dist_t13", "EFDA cirte t−1..t−3: attālums, m", False),
+            ("hrl_conifer_share_500m", "HRL 2018 skujkoku daļa 500 m", False), ("chm_p90", "CHMv2 p90, m (t ≥ 2020)", False),
+            ("cwb_z_t1", "cwb_z t−1", False), ("cwb_z_t12", "cwb_z t−1 + t−2", False), ("tsum_F1_t1", "Tsum_F1 t−1", False),
+            ("years_since_dist", "gadi kopš EFDA traucējuma (99: nav)", False)]
+    figs = {"overview": viz.pilot_overview(py, fdir / "rm6a_pilots_pozitivie.png"),
+            "features": viz.pilot_features(tab, show, fdir / "rm6a_pilots_pazimes.png")}
+    info |= {"rows": len(tab), "rows_in_set": int(tab["in_set"].sum()), "positives": int(tab["label"].sum()),
+             "positives_in_set": int(tab.loc[tab["in_set"] == 1, "label"].sum()),
+             "file_mb": round((tdir / "training_pilot.nc").stat().st_size / 2 ** 20, 1)}
+    (tdir / "pilot_info.json").write_text(json.dumps(info, indent=1, default=str), encoding="utf-8")
+    typer.echo(json.dumps(info, indent=1, default=str))
+    typer.echo(py.to_string(index=False))
+    for n, f in figs.items():
+        typer.echo(f"{n}: {f}")
+    _metadata(cfg, "features_pilot", {"block_3059": cfg.features.block_3059, "years": cfg.features.years,
+                                      "chm_tiles": info["chm"].get("tiles")})
