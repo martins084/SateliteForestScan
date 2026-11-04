@@ -139,7 +139,16 @@ def training_table(cfg: RiskConfig) -> tuple[pd.DataFrame, dict]:
     t_in = time.time() - t0
     chm, chm_info = ({}, {"tiles": [], "seconds": 0})
     if fc.chm:
-        chm, chm_info = chm_layers(cfg, inp)
+        cpath = cfg.cache_dir / "rm" / "chmv2_30m" / ("block_%d_%d_%d_%d.npz" % tuple(fc.block_3059))
+        if cpath.exists():                                  # derived 30 m layers of this block (not in git)
+            z = np.load(cpath)
+            chm = {k: z[k] for k in ("chm_mean", "chm_p90", "chm_gt5")}
+            chm_info = {"tiles": str(z["tiles"]).split(","), "seconds": 0, "cached": str(cpath.name),
+                        "coverage": float(z["coverage"])}
+        else:
+            chm, chm_info = chm_layers(cfg, inp)
+            cpath.parent.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(cpath, **chm, tiles=",".join(chm_info["tiles"]), coverage=chm_info["coverage"])
     ctx = F.Ctx(shape=inp["shape"], lvm620=inp["share"], efda=inp["efda"], climate=climate_table(fc.climate_dir),
                 clim_cell=inp["clim_cell"])
     sel = inp["inner"] & inp["forest"] & inp["lvm_land"]

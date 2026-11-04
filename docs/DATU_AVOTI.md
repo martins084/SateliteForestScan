@@ -170,6 +170,32 @@ Sk. `docs/RM_4b_SAUSUMS.md`.
 | **CSP MEB012** (VMD dati), stumbra kaitēkļi un vējgāzes, visi īpašnieki, 2013–2024 | lietotājs 2026-11-04: publiski, CC BY [N: licences teksts šeit nav atvērts] | `cache/rm5_sources/csp_MEB012.csv` | Centrālā statistikas pārvalde, tabula MEB012 „Meža bojājumi un augtspēju zaudējušās mežaudzes” (VMD dati), data.stat.gov.lv |
 | **CSP MEB011** (VMD dati), stumbra kaitēkļi pa statistiskajiem reģioniem (no 01.01.2024), 2021–2025 | kā MEB012 [N] | `cache/rm5_sources/csp_MEB011_owner.csv` | Centrālā statistikas pārvalde, tabula MEB011 (VMD dati) |
 
+## 6a posms — pazīmes un pilota bloks (2026-11-04)
+
+| Avots | Licence | Izmantots | Atsauce |
+|---|---|---|---|
+| **CHMv2** (`s3://dataforgood-fb-data/forests/v2/global/dinov3_global_chm_v2_ml3/chm/<quadkey>.tif`, z10 quadkey, EPSG:3857, 1,19 m, uint8 m, COG deflate ar pārskatiem) [P: S3 saraksts un faila galvene 2026-11-04] | CC BY 4.0 [P, kā augstāk] | pilota blokam 4 flīzes (`1201222031`, `…033`, `…120`, `…122`; katra 200–300 MB) — **lasīti tikai bloka logi** (`/vsicurl`, COG range), neviena flīze nav saglabāta; atvasinātais 30 m slānis `cache/rm/chmv2_30m/` (nav git). Attēlu datums Kalsnavas flīzē 2018 [P metadati] | kā augstāk |
+| **HRL DLT 2018** 100 m Latvija (`cache/rm/hrl_dlt2018_LV_100m.tif`, 5. posms) | kā augstāk [N] | skujkoku pazīmes 30 m (tuvākais) | Copernicus Land Monitoring Service |
+| **LVM_BOJAJUMI 620** un **LVM_ZEMES_VIENIBAS** (Wayback, 5a) | CC0 [P, 5a] | etiķetes un mizgraužu spiediena pazīmes | LVM |
+| **EFDA v3.0** (5. posms) | CC BY 4.0 | cirtes / traucējumu vēsture, malas, klase 1 jutīgumam | kā augstāk |
+| **ERA5-Land** (4. posms) | CC-BY-4.0 | cwb_z, RITY-2 Tsum t−1 (tuvākā 0,1° šūna) | kā augstāk |
+
+**Papildu CDS lejupielāde (lietotājs 2026-11-04), serverī:** `reanalysis-era5-land` I–III un X 2011–2017.
+- Apjoms: 28 mēneši + 7 `acc00_YYYY_11` pieprasījumi; novērtējums ~0,5 GB pirms sākšanas.
+- Mainīgie tie paši 8 (tikai `t2m` prasītu izmaiņas 4 apstrādes funkcijās).
+- Kataloga beigas 2026-10-29.
+
+**Literatūra (pārbaudīta 2026-11-04, Crossref / OpenAlex):**
+- **Kärvemo, S., Van Boeckel, T. P., Gilbert, M., Grégoire, J.-C., Schroeder, M. (2014).** Large-scale risk mapping of
+  an eruptive bark beetle – Importance of forest susceptibility and beetle pressure. *Forest Ecology and Management*
+  318:158–166, doi:10.1016/j.foreco.2014.01.025 [P bibliogrāfija].
+  - OpenAlex: „green OA”, ULB DI-fusion ieraksts 2013/157766. Kopsavilkums un pilnais teksts tur netika atrasti →
+    **saturs nav atvērts [N]**.
+- **Stadelmann, G., Bugmann, H., Meier, F., Wermelinger, B., Bigler, C. (2013).** Effects of salvage logging and
+  sanitation felling on bark beetle (*Ips typographus* L.) infestations. *Forest Ecology and Management*
+  305:273–281, doi:10.1016/j.foreco.2013.06.003 [P bibliogrāfija].
+  - OpenAlex: slēgta piekļuve → **saturs nav atvērts [N]**.
+
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 
 | Pakotne | Versija (PyPI) | Licence [P] |
