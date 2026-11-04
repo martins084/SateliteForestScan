@@ -708,3 +708,234 @@ def xr_align(a, b):
     import xarray as xr
 
     return xr.align(a, b, join="inner")
+
+
+def _lv_paths(cfg: RiskConfig):
+    from . import cds
+
+    cache = cfg.cache_dir / "rm" / "cds"
+    return cache / cds.HOURLY / "hourly", cache / "daily", cfg.run_dir / "latvia"
+
+
+@app.command("cds-latvia")
+def cds_latvia(config: Path = ConfigArg, step: str = typer.Option("all", help="daily | wb | pheno | all")):
+    """Stage 4, Latvia (user decision 2026-11-04; run on the server, one year in memory): daily ERA5-Land cubes per
+    year (cache/rm/cds/daily/), water balance P - ET0 (IV-IX) 1991-2026 with the standardized anomaly vs 1991-2020,
+    RITY-2 per 0.1 deg cell 2018-2026 (resumable per year). Results: <run_dir>/latvia/ (NetCDF + tables)."""
+    import time
+
+    import xarray as xr
+
+    from . import lvclimate as L
+
+    cfg = load_config(config)
+    c = cfg.climate
+    folder, ddir, odir = _lv_paths(cfg)
+    (odir / "parts").mkdir(parents=True, exist_ok=True)
+    years_all = range(c.baseline[0], c.years[1] + 1)
+    dfile = lambda y: ddir / f"era5land_daily_{y}.nc"  # noqa: E731
+
+    def load(y):
+        with xr.open_dataset(dfile(y), engine="h5netcdf") as d:
+            return d.load()
+
+    if step in ("daily", "all"):
+        cov = []
+        for y in years_all:
+            t0 = time.time()
+            done = dfile(y).exists()
+            L.year_daily(folder, y, dfile(y))
+            d = load(y)
+            t = pd.DatetimeIndex(d["valid_time"].values)
+            last = lambda v: str(t[d[v].notnull().any(["latitude", "longitude"]).values][-1].date())  # noqa: E731
+            cov.append({"year": y, "first_day": str(t[0].date()),
+                        "last_day_temperature": last("tmax"), "last_day_accumulations": last("precip"),
+                        "days": int(d.sizes["valid_time"])})
+            typer.echo(f"daily {y}: {'cached' if done else f'{time.time() - t0:.0f} s'}; {cov[-1]}")
+        pd.DataFrame(cov).to_csv(odir / "data_coverage.csv", index=False)
+    if step in ("wb", "all"):
+        wb = L.anomaly_grid(xr.concat([L.seasonal_grid(load(y), y, c.wb_months) for y in years_all], "year"),
+                            c.baseline)
+        wb.attrs = {"what": "climatic water balance P - ET0 (FAO-56), months %d-%d, standardized anomaly vs %d-%d "
+                            "(ddof 1); not SPEI" % (*c.wb_months, *c.baseline),
+                    "incomplete_year": "2026: temperature to 2026-10-27, accumulations to 2026-10-26"}
+        wb.to_netcdf(odir / "water_balance_latvia.nc", engine="h5netcdf")
+        t = wb[["precip_mm", "et0_mm", "cwb_mm", "cwb_z"]].to_dataframe().dropna(subset=["cwb_mm"]).reset_index()
+        t.round(3).to_csv(odir / "water_balance_cells.csv", index=False)
+        typer.echo(f"water balance: {wb.sizes['year']} years, {int(wb['cwb_z'].notnull().any('year').sum())} cells")
+    if step in ("pheno", "all"):
+        for y in range(c.years[0], c.years[1] + 1):
+            part = odir / "parts" / f"rity2_{y}.csv"
+            if part.exists():
+                continue
+            t0 = time.time()
+            d = load(y)
+            rows = []
+            for la, lo in L.land_cells(d):
+                rows += L.rity_cell(d, la, lo, y, c.scenarios)
+            pd.DataFrame(rows).to_csv(part, index=False)
+            typer.echo(f"RITY-2 {y}: {len(rows)} rows, {time.time() - t0:.0f} s")
+        ph = pd.concat([pd.read_csv(p) for p in sorted((odir / "parts").glob("rity2_*.csv"))], ignore_index=True)
+        ph.to_csv(odir / "rity2_cells_long.csv.gz", index=False)
+        wide = L.pheno_wide(ph, c.main_scenario)
+        wide.to_csv(odir / "rity2_cells.csv", index=False)
+        g = load(c.years[0])
+        cols = [k for k in wide.columns if k not in ("latitude", "longitude", "year", "scenario", "variant",
+                                                     "last_date", "swarming_date", "daylength_shift_min")]
+        grid = L.to_grid(wide.assign(complete=wide["complete"].astype(float)), cols, g.latitude.values,
+                         g.longitude.values)
+        grid.attrs = {"what": "RITY-2 (Ogris 2020) per ERA5-Land cell; main: AVG, ERA5-Land direct, day length FAO-56 "
+                              "Eq. 34; suffixes: _MIN/_MAX scenarios, _inca = (1)-(3), _dl-16/_dl+16 = day length "
+                              "-/+16 min",
+                      "incomplete_year": "2026: temperature to 2026-10-27 (Tsum at that day)"}
+        grid.to_netcdf(odir / "rity2_latvia.nc", engine="h5netcdf")
+        typer.echo(f"RITY-2: {len(wide)} cell-years, {wide['year'].nunique()} years")
+    _metadata(cfg, f"cds_latvia_{step}", {"years": c.years, "baseline": c.baseline, "wb_months": c.wb_months,
+                                         "scenarios": c.scenarios, "daylength": "FAO-56 Eq. 34, +-16 min"})
+
+
+@app.command("cds-latvia-report")
+def cds_latvia_report(config: Path = ConfigArg):
+    """Stage 4, Latvia, from the results copied from the server (<run_dir>/latvia/): Latvia mask (statistics: cell
+    centre in Latvia; maps: cell touches Latvia), checks (Kalsnava vs the Open-Meteo prototype, Silava 2023, 2018
+    water balance sign, south-west vs north-east swarming), year tables and maps. Exit 4 if 2018 is not negative
+    in most of Latvia (user 2026-11-04: stop and report)."""
+    from shapely.geometry import Point as SPoint
+    from shapely.geometry import box
+
+    from . import viz
+    from .efda import country_regions
+
+    cfg = load_config(config)
+    c = cfg.climate
+    _, _, odir = _lv_paths(cfg)
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    lv = country_regions(cfg.boundaries).to_crs(4326)
+    shape = lv.union_all()
+    ph = pd.read_csv(odir / "rity2_cells.csv")
+    wb = pd.read_csv(odir / "water_balance_cells.csv")
+    cov = pd.read_csv(odir / "data_coverage.csv").set_index("year")
+    cells = pd.concat([ph, wb])[["latitude", "longitude"]].drop_duplicates().reset_index(drop=True)
+    cells["in_lv"] = [shape.contains(SPoint(lo, la)) for la, lo in zip(cells["latitude"], cells["longitude"])]
+    cells["touch_lv"] = [shape.intersects(box(lo - 0.05, la - 0.05, lo + 0.05, la + 0.05))
+                         for la, lo in zip(cells["latitude"], cells["longitude"])]
+    ph, wb = (x.merge(cells, on=["latitude", "longitude"]) for x in (ph, wb))
+    pin, win = ph[ph["in_lv"]], wb[wb["in_lv"]]
+    incomplete = [int(y) for y in cov.index if cov.loc[y, "last_day_temperature"] < f"{y}-10-31" and y >= c.years[0]]
+    out = {"cells_in_latvia": int(cells["in_lv"].sum()), "cells_touching_latvia": int(cells["touch_lv"].sum()),
+           "incomplete_years": incomplete, "coverage_last_year": cov.loc[c.years[1]].to_dict()}
+
+    def q(s, p):
+        return float(np.nanpercentile(s, p)) if s.notna().any() else np.nan
+
+    # year tables (cells with their centre in Latvia)
+    rows = []
+    for y, g in pin.groupby("year"):
+        r = {"year": y, "incomplete": y in incomplete, "cells": len(g),
+             "swarming_doy_min": g["swarming_doy"].min(), "swarming_doy_p10": q(g["swarming_doy"], 10),
+             "swarming_doy_median": g["swarming_doy"].median(), "swarming_doy_p90": q(g["swarming_doy"], 90),
+             "swarming_doy_max": g["swarming_doy"].max(), "infestation_doy_median": g["infestation_doy"].median(),
+             "phenips_clim_doy_median": g["phenips_clim_swarming_doy"].median()}
+        for k in ("tsum_F1", "tsum_F2", "tsum_F1_inca", "tsum_F2_inca"):
+            r |= {f"{k}_min": g[k].min(), f"{k}_mean": g[k].mean(), f"{k}_max": g[k].max()}
+        for k in ("n_filial", "n_filial_inca", "n_filial_MIN", "n_filial_MAX"):
+            r |= {f"{k}_{n}": round(float((g[k] == n).mean()), 3) for n in range(4)}
+        for s in ("-16", "+16"):
+            r[f"share_n_filial_changed_dl{s}"] = round(float((g[f"n_filial_dl{s}"] != g["n_filial"]).mean()), 3)
+            r[f"share_n_filial_inca_changed_dl{s}"] = round(float((g[f"n_filial_inca_dl{s}"] != g["n_filial_inca"]).mean()), 3)
+            r[f"tsum_F2_dl{s}_mean_diff"] = float((g[f"tsum_F2_dl{s}"] - g["tsum_F2"]).mean())
+            r[f"onset_doy_F2_dl{s}_mean_diff"] = float((g[f"onset_doy_F2_dl{s}"] - g["onset_doy_F2"]).mean())
+        rows.append(r)
+    pd.DataFrame(rows).round(3).to_csv(tdir / "lv_rity2_years.csv", index=False)
+    wyears = win.groupby("year").agg(cells=("cwb_z", "count"), precip_mm=("precip_mm", "mean"), et0_mm=("et0_mm", "mean"),
+                                     cwb_mm=("cwb_mm", "mean"), cwb_z_mean=("cwb_z", "mean"), cwb_z_min=("cwb_z", "min"),
+                                     cwb_z_max=("cwb_z", "max"),
+                                     share_z_negative=("cwb_z", lambda s: float((s < 0).mean())),
+                                     share_z_below_minus1=("cwb_z", lambda s: float((s < -1).mean()))).reset_index()
+    wyears["incomplete"] = wyears["year"].isin(incomplete)
+    wyears.round(3).to_csv(tdir / "lv_water_balance_years.csv", index=False)
+
+    # Kalsnava: nearest ERA5-Land cell vs the Open-Meteo prototype (ERA5 0.25 deg node)
+    p = c.points[0]
+    k = cells.iloc[int(np.argmin(np.hypot((cells["longitude"] - p.lon) * np.cos(np.radians(p.lat)),
+                                          cells["latitude"] - p.lat)))]
+    at_k = lambda d: d[(d["latitude"] == k["latitude"]) & (d["longitude"] == k["longitude"])].set_index("year")  # noqa: E731
+    kc, kw = at_k(ph), at_k(wb)
+    om = pd.read_csv(tdir / "climate_summary_points.csv").set_index("year")
+    cmp_cols = ["swarming_doy", "infestation_doy", "f1_complete_doy", "tsum_F1", "tsum_F2", "n_filial", "n_filial_MIN",
+                "n_filial_MAX", "n_filial_inca", "tsum_F1_inca", "phenips_clim_swarming_doy"]
+    kal = pd.concat({"era5land": kc[cmp_cols].join(kw[["cwb_mm", "cwb_z"]]),
+                     "openmeteo": om[cmp_cols + ["cwb_mm", "cwb_z"]]}, axis=1)
+    kal = kal[kal.index >= c.years[0]]
+    for col in cmp_cols + ["cwb_mm", "cwb_z"]:
+        kal[("diff", col)] = kal[("era5land", col)] - kal[("openmeteo", col)]
+    kal.columns = [f"{a}_{b}" for a, b in kal.columns]
+    kal.round(3).to_csv(tdir / "lv_kalsnava_era5land_vs_openmeteo.csv")
+    out["kalsnava_cell"] = [float(k["latitude"]), float(k["longitude"])]
+    out["kalsnava_mean_diff"] = {col: round(float(kal[f"diff_{col}"].mean()), 3) for col in cmp_cols + ["cwb_mm", "cwb_z"]}
+
+    # Silava 2023 (public flight onset 20 April)
+    if c.check_date is not None:
+        y, doy = c.check_date.year, c.check_date.timetuple().tm_yday
+        g = pin[pin["year"] == y]
+        out["silava"] = {"public_date": str(c.check_date), "public_doy": doy,
+                         "kalsnava_cell_swarming_doy": float(kc.loc[y, "swarming_doy"]),
+                         "kalsnava_cell_minus_public": float(kc.loc[y, "swarming_doy"] - doy),
+                         "openmeteo_prototype_swarming_doy": float(om.loc[y, "swarming_doy"]),
+                         "latvia_swarming_doy_p10_median_p90": [q(g["swarming_doy"], 10), float(g["swarming_doy"].median()),
+                                                                q(g["swarming_doy"], 90)],
+                         "latvia_share_cells_swarming_by_public_date": round(float((g["swarming_doy"] <= doy).mean()), 3),
+                         "kalsnava_cell_phenips_clim_doy": float(kc.loc[y, "phenips_clim_swarming_doy"])}
+
+    # south-west -> north-east gradient of the swarming day (expected earlier in the SW; only reported)
+    sw = []
+    for y, g in pin.groupby("year"):
+        s = ((g["longitude"] - g["longitude"].mean()) * np.cos(np.radians(57.0))
+             + (g["latitude"] - g["latitude"].mean())) / np.sqrt(2) * 111.2      # km along the SW -> NE diagonal
+        ok = g["swarming_doy"].notna()
+        slope = float(np.polyfit(s[ok], g.loc[ok, "swarming_doy"], 1)[0] * 100) if ok.sum() > 2 else np.nan
+        lo_, hi_ = s.quantile(1 / 3), s.quantile(2 / 3)
+        sw.append({"year": y, "slope_days_per_100km_towards_NE": round(slope, 2),
+                   "swarming_doy_mean_SW_third": round(float(g.loc[s <= lo_, "swarming_doy"].mean()), 2),
+                   "swarming_doy_mean_NE_third": round(float(g.loc[s >= hi_, "swarming_doy"].mean()), 2),
+                   "lon_corr": round(float(g["swarming_doy"].corr(g["longitude"])), 3),
+                   "lat_corr": round(float(g["swarming_doy"].corr(g["latitude"])), 3)})
+    swt = pd.DataFrame(sw)
+    swt["NE_minus_SW_days"] = (swt["swarming_doy_mean_NE_third"] - swt["swarming_doy_mean_SW_third"]).round(2)
+    swt.to_csv(tdir / "lv_swarming_sw_ne.csv", index=False)
+    out["sw_ne"] = swt[["year", "NE_minus_SW_days", "slope_days_per_100km_towards_NE"]].to_dict(orient="records")
+
+    # 2018 drought sign check
+    z18 = win[win["year"] == 2018]["cwb_z"]
+    out["check_2018"] = {"cells": int(z18.notna().sum()), "share_z_negative": round(float((z18 < 0).mean()), 3),
+                         "mean_z": round(float(z18.mean()), 3)}
+    (tdir / "lv_checks.json").write_text(json.dumps(out, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
+    typer.echo(json.dumps(out, indent=1, ensure_ascii=False, default=str))
+    if not out["check_2018"]["share_z_negative"] > 0.5:
+        typer.echo("STOP: 2018 water balance anomaly is not negative in most of Latvia (user 2026-11-04)")
+        raise typer.Exit(4)
+
+    # maps (cells touching Latvia)
+    mp, mw = ph[ph["touch_lv"]], wb[wb["touch_lv"]]
+    yrs = list(range(c.years[0], c.years[1] + 1))
+    kw_ = {"step": 0.1, "marked": tuple(incomplete)}
+    figs = {
+        "swarming": viz.climate_maps(lv, mp, "swarming_doy", yrs, "RITY-2 izlidošanas diena (DOY), ERA5-Land 0,1°",
+                                     fdir / "rm4_lv_era5land_izlidosana.png", cmap="viridis_r", **kw_),
+        "tsum_F1": viz.climate_maps(lv, mp, "tsum_F1", yrs, "Relatīvā termālā summa Tsum_F1 (AVG, ERA5-Land tieši)",
+                                    fdir / "rm4_lv_era5land_tsum_f1.png", cmap="YlOrRd", **kw_),
+        "tsum_F2": viz.climate_maps(lv, mp, "tsum_F2", yrs, "Relatīvā termālā summa Tsum_F2 (AVG, ERA5-Land tieši)",
+                                    fdir / "rm4_lv_era5land_tsum_f2.png", cmap="YlOrRd", **kw_),
+        "generations": viz.climate_maps(lv, mp, "n_filial", yrs, "Paaudzes (AVG, ERA5-Land tieši)",
+                                        fdir / "rm4_lv_era5land_paaudzes.png", cmap="YlOrRd", discrete=[0, 1, 2, 3], **kw_),
+        "generations_inca": viz.climate_maps(lv, mp, "n_filial_inca", yrs, "Paaudzes (AVG, INCA (1)–(3))",
+                                             fdir / "rm4_lv_era5land_paaudzes_inca.png", cmap="YlOrRd",
+                                             discrete=[0, 1, 2, 3], **kw_),
+        "cwb_z": viz.climate_maps(lv, mw, "cwb_z", sorted(int(y) for y in mw["year"].unique()),
+                                  "Standartizēta ūdens bilances anomālija z (P − ET0, IV–IX; bāze 1991–2020)",
+                                  fdir / "rm4_lv_era5land_udens_bilance.png", cmap="RdBu", vmin=-2.5, vmax=2.5,
+                                  ncol=6, **kw_),
+    }
+    for n, f in figs.items():
+        typer.echo(f"{n}: {f}")
+    _metadata(cfg, "cds_latvia_report", {"cells_in_latvia": out["cells_in_latvia"], "incomplete_years": incomplete})

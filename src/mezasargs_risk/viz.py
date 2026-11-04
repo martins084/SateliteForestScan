@@ -553,15 +553,16 @@ def climate_point(name: str, ph: pd.DataFrame, wb: pd.DataFrame, years: tuple[in
 
 
 def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title: str, path: Path,
-                 cmap="viridis", vmin=None, vmax=None, discrete: list | None = None) -> Path:
-    """Stage 4: one small map per year of a node value (0.25 deg cells, EPSG:4326)."""
+                 cmap="viridis", vmin=None, vmax=None, discrete: list | None = None, step: float = 0.25,
+                 ncol: int = 3, marked: tuple = ()) -> Path:
+    """Stage 4: one small map per year of a grid value (cells of `step` deg around lon / lat, EPSG:4326);
+    years in `marked` get a `*` (incomplete)."""
     from matplotlib.colors import BoundaryNorm, ListedColormap
     from matplotlib.patches import Rectangle
 
     n = len(years)
-    ncol = 3
     nrow = int(np.ceil(n / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(10, 2.7 * nrow + 0.6), dpi=200, squeeze=False)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(10 * ncol / 3, 2.7 * nrow + 0.6), dpi=200, squeeze=False)
     if discrete is not None:
         cm = ListedColormap([plt.get_cmap(cmap)(i / max(len(discrete) - 1, 1)) for i in range(len(discrete))])
         norm = BoundaryNorm(np.arange(len(discrete) + 1) - 0.5 + discrete[0], cm.N)
@@ -571,13 +572,13 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
     for ax, y in zip(axes.flat, years):
         d = cells[cells["year"] == y]
         for lo, la, v in zip(d["lon"], d["lat"], d[col]):
-            ax.add_patch(Rectangle((lo - 0.125, la - 0.125), 0.25, 0.25, lw=0,
+            ax.add_patch(Rectangle((lo - step / 2, la - step / 2), step, step, lw=0,
                                    color=cm(norm(v)) if np.isfinite(v) else "#ffffff"))
         country.boundary.plot(ax=ax, color=INK, lw=0.5)
         ax.set_xlim(20.6, 28.6)
         ax.set_ylim(55.4, 58.3)
         ax.set_aspect(1 / np.cos(np.radians(57)))
-        ax.set_title(str(y))
+        ax.set_title(f"{y}*" if y in marked else str(y))
         ax.set_xticks([])
         ax.set_yticks([])
         ax.grid(False)
