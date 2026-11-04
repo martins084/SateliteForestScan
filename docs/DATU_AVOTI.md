@@ -138,6 +138,18 @@ Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
   Kalsnavai; **pilnā lejupielāde — tikai `reanalysis-era5-land` stundu dati** (lietotāja lēmums 2026-10-30): 252 mēneši
   + 35 `acc00` pieprasījumi, `cache/rm/cds/reanalysis-era5-land/hourly/` (nav git), ~4,8 GB [N novērtējums].
   Kataloga beigas 2026-10-24 00:00 (vaicāts 2026-10-30).
+- **Pilnā lejupielāde pabeigta 2026-11-04 (serverī ubuntu@vps-823ea645, `~/s2-forest-screening`) [P]:**
+  - 287 faili (252 `h_` + 35 `acc00_`), visi 287 darbi `done`, `ls | wc -l` = 287;
+  - `du -sh hourly/` = **4,7 GB** (4 959 MB pēc baitiem; lielākais fails 21 MB, katrs < 200 MB);
+  - iesniegts 2026-10-30 12:44 – 2026-11-04 10:27 UTC;
+  - 2026-10: temperatūra līdz 27.10 23:00 UTC, akumulētie mainīgie līdz 26.10 (katalogs pa to laiku bija pagarināts);
+  - `cds-check-month` serverī: 2023-04 pret pilotu starpība 0,0 visiem mainīgajiem.
+- **Atvasinātie dati (2026-11-04, nav git):**
+  - serverī: dienas kubi `cache/rm/cds/daily/era5land_daily_YYYY.nc` (1991–2026);
+  - serverī un laptopā: `output/rm4_klimats/latvia/` (RITY-2 un ūdens bilance uz 0,1° režģa).
+
+  Uz laptopu kopēti tikai rezultāti, ne izejdati. Sk. RM_4 sadaļu „Latvija”.
+- **Latvijas robeža statistikai un kartēm:** NUTS LV (tas pats avots, kas `country_regions`, sk. augstāk).
 - ERA5-Land mainīgo saraksts (CDS forma, 2026-10-30): 2 m maks. / min. temperatūras mainīgā nav [P].
 - **Open-Meteo stundu dati (ET0 skaidrojumam):** 1 pieprasījums, mezgls 56,75 / 25,75, 2023-04-01 – 2023-05-01,
   `temperature_2m, dew_point_2m, wind_speed_10m, shortwave_radiation, surface_pressure, et0_fao_evapotranspiration,

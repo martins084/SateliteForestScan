@@ -557,6 +557,7 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
                  ncol: int = 3, marked: tuple = ()) -> Path:
     """Stage 4: one small map per year of a grid value (cells of `step` deg around lon / lat, EPSG:4326);
     years in `marked` get a `*` (incomplete)."""
+    from matplotlib.collections import PatchCollection
     from matplotlib.colors import BoundaryNorm, ListedColormap
     from matplotlib.patches import Rectangle
 
@@ -571,10 +572,13 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
         norm = plt.Normalize(vmin if vmin is not None else cells[col].min(), vmax if vmax is not None else cells[col].max())
     for ax, y in zip(axes.flat, years):
         d = cells[cells["year"] == y]
-        for lo, la, v in zip(d["lon"], d["lat"], d[col]):
-            ax.add_patch(Rectangle((lo - step / 2, la - step / 2), step, step, lw=0,
-                                   color=cm(norm(v)) if np.isfinite(v) else "#ffffff"))
+        v = d[col].to_numpy(dtype=float)
+        rects = [Rectangle((lo - step / 2, la - step / 2), step, step) for lo, la in zip(d["lon"], d["lat"])]
+        ax.add_collection(PatchCollection(rects, lw=0, facecolors=[cm(norm(x)) if np.isfinite(x) else "#ffffff"
+                                                                   for x in v]))
         country.boundary.plot(ax=ax, color=INK, lw=0.5)
+        ax.set_xlabel("")
+        ax.set_ylabel("")
         ax.set_xlim(20.6, 28.6)
         ax.set_ylim(55.4, 58.3)
         ax.set_aspect(1 / np.cos(np.radians(57)))
@@ -589,6 +593,10 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
     if discrete is not None:
         cb.set_ticks(discrete)
     fig.suptitle(title, fontweight="bold")
+    note = "Robežas: © EuroGeographics for the administrative boundaries (GISCO NUTS 2024)"
+    if any(y in marked for y in years):
+        note += "; * nepilns gads"
+    fig.text(0.01, 0.01, note, fontsize=7, color=INK)
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
     return path

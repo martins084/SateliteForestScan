@@ -832,6 +832,8 @@ def cds_latvia_report(config: Path = ConfigArg):
     rows = []
     for y, g in pin.groupby("year"):
         r = {"year": y, "incomplete": y in incomplete, "cells": len(g),
+             "swarming_not_reached": int(g["swarming_doy"].isna().sum()),
+             "swarming_not_reached_all_cells": int(ph.loc[ph["year"] == y, "swarming_doy"].isna().sum()),
              "swarming_doy_min": g["swarming_doy"].min(), "swarming_doy_p10": q(g["swarming_doy"], 10),
              "swarming_doy_median": g["swarming_doy"].median(), "swarming_doy_p90": q(g["swarming_doy"], 90),
              "swarming_doy_max": g["swarming_doy"].max(), "infestation_doy_median": g["infestation_doy"].median(),
@@ -847,6 +849,7 @@ def cds_latvia_report(config: Path = ConfigArg):
             r[f"onset_doy_F2_dl{s}_mean_diff"] = float((g[f"onset_doy_F2_dl{s}"] - g["onset_doy_F2"]).mean())
         rows.append(r)
     pd.DataFrame(rows).round(3).to_csv(tdir / "lv_rity2_years.csv", index=False)
+    out["swarming_not_reached"] = {int(r["year"]): [r["swarming_not_reached"], r["cells"]] for r in rows}
     wyears = win.groupby("year").agg(cells=("cwb_z", "count"), precip_mm=("precip_mm", "mean"), et0_mm=("et0_mm", "mean"),
                                      cwb_mm=("cwb_mm", "mean"), cwb_z_mean=("cwb_z", "mean"), cwb_z_min=("cwb_z", "min"),
                                      cwb_z_max=("cwb_z", "max"),
@@ -916,7 +919,7 @@ def cds_latvia_report(config: Path = ConfigArg):
         raise typer.Exit(4)
 
     # maps (cells touching Latvia)
-    mp, mw = ph[ph["touch_lv"]], wb[wb["touch_lv"]]
+    mp, mw = (x[x["touch_lv"]].rename(columns={"latitude": "lat", "longitude": "lon"}) for x in (ph, wb))
     yrs = list(range(c.years[0], c.years[1] + 1))
     kw_ = {"step": 0.1, "marked": tuple(incomplete)}
     figs = {
