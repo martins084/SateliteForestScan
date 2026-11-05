@@ -731,3 +731,71 @@ def pilot_features(tab: pd.DataFrame, feats: list[tuple[str, str, bool]], path: 
     fig.savefig(path)
     plt.close(fig)
     return path
+
+
+MODEL_STYLE = {"random": ("nejaušs", "#9a9890", ":"), "dist_t1": ("tikai 620 t−1 attālums", INK2, "--"),
+               "dist_t23": ("tikai 620 t−2..t−3 (L3)", "#a3a29a", "-."), "A": ("A spiediens", S1, "-"),
+               "A_mono": ("A monotons (jutīgums)", "#86b6ef", "--"),
+               "B": ("B + audze", S3, "-"), "B_chm": ("B + CHMv2", "#8a5cd1", "-"), "C": ("C + klimats", S2, "-")}
+
+
+def model_metrics(met: pd.DataFrame, path: Path, title_suffix: str = "") -> Path:
+    """Per test year: PR-AUC / share of positives, hit share in the top 5 % and 10 % of the area; all cells (top row)
+    and new foci (bottom row); 95 % cluster-bootstrap CI as error bars."""
+    panels = [("ap_ratio", "PR-AUC / pozitīvo daļa (1 = nejaušs)"), ("hit5", "Trāpījumi augšējos 5 % platības, %"),
+              ("hit10", "Trāpījumi augšējos 10 % platības, %")]
+    subs = [("visi", "VISAS ŠŪNAS"), ("jaunie", "JAUNIE PERĒKĻI\n(> 500 m no 620 t−1)")]
+    models = [m for m in MODEL_STYLE if m in set(met["model"])]
+    fig, axes = plt.subplots(2, 3, figsize=(11, 6.4), dpi=200, layout="constrained", sharex=True)
+    off = np.linspace(-0.3, 0.3, len(models))
+    for i, (sub, sname) in enumerate(subs):
+        for j, (col, ptitle) in enumerate(panels):
+            ax = axes[i, j]
+            k = 100 if col.startswith("hit") else 1
+            top = 0
+            for o, m in zip(off, models):
+                g = met[(met["subset"] == sub) & (met["model"] == m)].sort_values("year")
+                if g.empty:
+                    continue
+                lab, c, ls = MODEL_STYLE[m]
+                yv, lo, hi = g[col] * k, g[f"{col}_lo"] * k, g[f"{col}_hi"] * k
+                top = max(top, float(np.nanmax(hi.to_numpy())) if hi.notna().any() else 0)
+                ax.errorbar(g["year"] + o, yv, yerr=[(yv - lo).clip(lower=0), (hi - yv).clip(lower=0)], color=c, ls=ls,
+                            lw=1.3, marker="o", ms=3.5, elinewidth=0.8, capsize=0, label=lab)
+            if col == "ap_ratio":
+                ax.axhline(1, color=INK2, lw=0.8, ls=":", zorder=0)
+            ax.set_ylim(0, top * 1.08 if top > 0 else 1)
+            if i == 0:
+                ax.set_title(ptitle, loc="left", fontsize=8)
+            if j == 0:
+                ax.set_ylabel(sname, fontsize=8, fontweight="bold")
+            ax.set_xticks(sorted(met["year"].unique()))
+    h, lab = axes[0, 0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="outside lower center", ncol=len(lab), fontsize=7, frameon=False)
+    fig.suptitle("7a pilots: tests gadā t, apmācība ≤ t−1" + title_suffix + "; 95 % TI — bootstrap pa ~5 km blokiem",
+                 fontsize=10, x=0.01, ha="left")
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def model_importance(pm: pd.DataFrame, path: Path) -> Path:
+    """Permutation importance (drop in average precision on the test year) of model C: bar = mean over test years,
+    dots = single years; all cells and new foci."""
+    subs = [("visi", "visas šūnas"), ("jaunie", "jaunie perēkļi")]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.2), dpi=200, layout="constrained", sharey=True)
+    order = pm[pm["subset"] == "visi"].groupby("feature")["importance_mean"].mean().sort_values().index.tolist()
+    for ax, (sub, sname) in zip(axes, subs):
+        g = pm[pm["subset"] == sub]
+        mean = g.groupby("feature")["importance_mean"].mean().reindex(order)
+        ax.barh(range(len(order)), mean.to_numpy(), color=S2, height=0.6, lw=0)
+        for k, f in enumerate(order):
+            v = g.loc[g["feature"] == f, "importance_mean"].to_numpy()
+            ax.plot(v, np.full(len(v), k), "o", ms=2.5, color=INK, alpha=0.6, lw=0)
+        ax.axvline(0, color=AXIS, lw=0.8)
+        ax.set_yticks(range(len(order)), order, fontsize=7)
+        ax.set_title(f"C modelis: PR-AUC kritums, permutējot pazīmi — {sname}", loc="left", fontsize=8)
+        ax.set_xlabel("PR-AUC kritums (stabiņš: vidēji 2020–2024; punkti: gadi)", fontsize=7)
+    fig.savefig(path)
+    plt.close(fig)
+    return path

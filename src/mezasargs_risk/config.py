@@ -217,6 +217,22 @@ class FeaturesConfig(BaseModel):
     block_size_m: float = 20000.0
 
 
+class ModelsConfig(BaseModel):
+    """Stage 7a (user 2026-11-05): first models on the pilot block training table."""
+    table: Path                                  # training_pilot.nc (stage 6a)
+    test_years: tuple[int, int] = (2020, 2024)   # expanding window: train <= t-1, test t
+    neg_ratio: float = 10.0                      # L5: negatives 1:10 per training year, weighted
+    seed: int = 20261105
+    n_boot: int = 999                            # cluster bootstrap over spatial tiles of the test year
+    zoom: int = 12                               # Web Mercator tiles for spatial blocks (~5 km at 57 N)
+    n_folds: int = 5
+    new_focus_m: float = 500.0                   # "new foci": > this distance from any LVM 620 t-1 polygon
+    perm_repeats: int = 5
+    hgb: dict = Field(default_factory=lambda: {"learning_rate": 0.05, "max_iter": 300, "max_leaf_nodes": 31,
+                                               "min_samples_leaf": 100, "l2_regularization": 1.0,
+                                               "early_stopping": False})
+
+
 class RiskConfig(BaseModel):
     run_name: str
     output_dir: Path
@@ -232,6 +248,7 @@ class RiskConfig(BaseModel):
     climate: ClimateConfig | None = None
     drought: DroughtConfig | None = None
     features: FeaturesConfig | None = None
+    models: ModelsConfig | None = None
 
     @property
     def run_dir(self) -> Path:

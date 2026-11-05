@@ -1240,3 +1240,111 @@ def features_latvia(config: Path = ConfigArg, limit: int = typer.Option(0, help=
     n_done = sum((bdir / f"block_{int(b[0])}_{int(b[1])}.nc").exists() for b in blocks)
     typer.echo(f"blocks done: {n_done} / {len(blocks)}")
     _metadata(cfg, "features_latvia", {"blocks": len(blocks), "done": n_done, "chm": False, "years": fc.years})
+
+
+@app.command("models-pilot")
+def models_pilot(config: Path = ConfigArg, spatial: bool = typer.Option(True, help="also spatial-tile folds")):
+    """Stage 7a (user 2026-11-05): baselines + HistGradientBoosting variants A / B / B_chm / C on the PILOT block,
+    expanding-window validation in time (test 2020-2024) and spatial tiles, metrics per year for all cells and new
+    foci (> 500 m from LVM 620 t-1), cluster-bootstrap CI, paired differences, permutation importance."""
+    import time
+
+    import xarray as xr
+    from sklearn.inspection import permutation_importance
+
+    from . import models as M
+    from . import viz
+    from .efda import layer
+
+    cfg = load_config(config)
+    mc = cfg.models
+    if mc is None:
+        raise typer.BadParameter("config has no `models` section")
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fdir.mkdir(parents=True, exist_ok=True)
+    t_start = time.time()
+    with xr.open_dataset(mc.table, engine="h5netcdf") as ds:
+        d = ds.to_dataframe().reset_index(drop=True)
+    d = d[d["in_set"] == 1].reset_index(drop=True)
+    with rasterio.open(layer(cfg.efda.main, "agent")) as s:
+        d["tile"] = M.tiles(d["cell_id"].to_numpy(), s.transform, s.width, mc.zoom)
+    d["new"] = d["p620_dist_t1"] > mc.new_focus_m
+    folds = M.group_folds(d["tile"].to_numpy(), mc.n_folds, mc.seed)
+    d["fold"] = d["tile"].map(folds)
+    subsets = {"visi": None, "jaunie": "new"}
+    rows, diffs, perm, fold_rows, train_info = [], [], [], [], []
+    pairs = [("dist_t1", "A"), ("dist_t1", "A_mono"), ("dist_t1", "B"), ("dist_t1", "C"), ("A", "B"), ("A", "C"), ("B", "C"), ("B", "B_chm"), ("dist_t23", "A")]
+
+    def ev(scheme, t, model, test, s):
+        for sub, col in subsets.items():
+            m = np.ones(len(test), bool) if col is None else test[col].to_numpy()
+            r = M.evaluate(test["label"].to_numpy()[m], s[m], test["tile"].to_numpy()[m], mc.n_boot, mc.seed + t)
+            rows.append({"scheme": scheme, "year": t, "subset": sub, "model": model} | r)
+
+    for t in range(mc.test_years[0], mc.test_years[1] + 1):
+        t0 = time.time()
+        test = d[d["year"] == t].reset_index(drop=True)
+        pool = d[d["year"] < t]
+        tr = M.subsample(pool, mc.neg_ratio, mc.seed + t)
+        train_info.append({"year": t, "train_years": f"{int(pool['year'].min())}-{t - 1}", "train_rows": len(tr),
+                           "train_pos": int(tr["label"].sum()), "test_rows": len(test), "test_pos": int(test["label"].sum()),
+                           "test_new_rows": int(test["new"].sum()), "test_new_pos": int(test.loc[test["new"], "label"].sum())})
+        scores = {b: M.baseline_score(test, b) for b in M.BASELINES}
+        for b, s in scores.items():
+            ev("laiks", t, b, test, s)
+        for v, feats in M.VARIANTS.items():
+            mdl = M.fit(tr, feats, mc.hgb, mc.seed, M.MONO.get(v))
+            scores[v] = M.score(mdl, test, feats)
+            ev("laiks", t, v, test, scores[v])
+            if v in ("A", "B", "C"):
+                for sub, col in subsets.items():
+                    m = np.ones(len(test), bool) if col is None else test[col].to_numpy()
+                    pi = permutation_importance(mdl, test.loc[m, feats].to_numpy(np.float32), test.loc[m, "label"].to_numpy(),
+                                                scoring="average_precision", n_repeats=mc.perm_repeats,
+                                                random_state=mc.seed, n_jobs=1)
+                    for i, f in enumerate(feats):
+                        perm.append({"year": t, "model": v, "subset": sub, "feature": f,
+                                     "importance_mean": pi.importances_mean[i], "importance_std": pi.importances_std[i]})
+        for a, b in pairs:
+            for sub, col in subsets.items():
+                m = np.ones(len(test), bool) if col is None else test[col].to_numpy()
+                r = M.paired_diff(test["label"].to_numpy()[m], scores[a][m], scores[b][m], test["tile"].to_numpy()[m],
+                                  mc.n_boot, mc.seed + t)
+                diffs.append({"year": t, "subset": sub, "base": a, "model": b} | r)
+        if spatial:
+            for f in range(mc.n_folds):
+                tm = test["fold"] == f
+                fold_rows.append({"year": t, "fold": f, "tiles": int(test.loc[tm, "tile"].nunique()), "test_rows": int(tm.sum()),
+                                  "test_pos": int(test.loc[tm, "label"].sum()),
+                                  "test_new_pos": int(test.loc[tm & test["new"], "label"].sum())})
+            for v, feats in M.VARIANTS.items():
+                s_sp = np.full(len(test), np.nan)
+                for f in range(mc.n_folds):
+                    tm = (test["fold"] == f).to_numpy()
+                    if not tm.any():
+                        continue
+                    trf = M.subsample(pool[pool["fold"] != f], mc.neg_ratio, mc.seed + t * 10 + f)
+                    s_sp[tm] = M.score(M.fit(trf, feats, mc.hgb, mc.seed, M.MONO.get(v)), test[tm], feats)
+                ev("laiks+telpa", t, v, test, s_sp)
+        typer.echo(f"test {t}: {time.time() - t0:.0f} s")
+    met = pd.DataFrame(rows)
+    met.round(5).to_csv(tdir / "rm7a_metrics.csv", index=False)
+    pd.DataFrame(diffs).round(5).to_csv(tdir / "rm7a_paired_differences.csv", index=False)
+    pm = pd.DataFrame(perm)
+    pm.round(6).to_csv(tdir / "rm7a_permutation_importance.csv", index=False)
+    pd.DataFrame(fold_rows).to_csv(tdir / "rm7a_spatial_folds.csv", index=False)
+    pd.DataFrame(train_info).to_csv(tdir / "rm7a_train_test_sizes.csv", index=False)
+    figs = {"metrics": viz.model_metrics(met[met["scheme"] == "laiks"], fdir / "rm7a_metrikas.png"),
+            "importance": viz.model_importance(pm[pm["model"] == "C"], fdir / "rm7a_nozimigums.png")}
+    if spatial:
+        figs["spatial"] = viz.model_metrics(met[met["scheme"] == "laiks+telpa"], fdir / "rm7a_metrikas_telpa.png",
+                                            title_suffix=" (laiks + telpiskie bloki)")
+    info = {"rows_in_set": len(d), "tiles": int(d["tile"].nunique()), "seconds": round(time.time() - t_start, 1),
+            "variants": M.VARIANTS, "baselines": M.BASELINES, "hgb": mc.hgb, "neg_ratio": mc.neg_ratio, "seed": mc.seed,
+            "n_boot": mc.n_boot, "zoom": mc.zoom, "n_folds": mc.n_folds, "new_focus_m": mc.new_focus_m}
+    (tdir / "rm7a_info.json").write_text(json.dumps(info, indent=1, default=str), encoding="utf-8")
+    typer.echo(json.dumps({k: info[k] for k in ("rows_in_set", "tiles", "seconds")}))
+    for n, f in figs.items():
+        typer.echo(f"{n}: {f}")
+    _metadata(cfg, "models_pilot", {"table": str(mc.table), "test_years": mc.test_years})

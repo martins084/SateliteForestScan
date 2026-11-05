@@ -37,8 +37,10 @@ def block_inputs(cfg: RiskConfig, years: tuple[int, int]) -> dict:
         w = Window(int(np.floor(w.col_off)), int(np.floor(w.row_off)), int(np.ceil(w.width)), int(np.ceil(w.height)))
         tf, shape = s.window_transform(w), (int(w.height), int(w.width))
         first, last = v.first_year, v.first_year + s.count - 1
-        efda = {y: s.read(y - first + 1, window=w) for y in range(max(first, years[0] - 12), min(last, years[1]) + 1)}
-        forest = fm.read(1, window=w) == 1
+        # boundless: blocks at the edge of the EFDA raster (outside = no disturbance / not forest)
+        efda = {y: s.read(y - first + 1, window=w, boundless=True, fill_value=255)
+                for y in range(max(first, years[0] - 12), min(last, years[1]) + 1)}
+        forest = fm.read(1, window=w, boundless=True, fill_value=0) == 1
         full_w = s.width
     rows, cols = np.indices(shape)
     xs, ys = rasterio.transform.xy(tf, rows.ravel(), cols.ravel())
