@@ -140,6 +140,8 @@ Visi gadi kopā, apmācības kopa. Mediāna [IQR]; SMD = standartizēta vidējo 
 | CHMv2 daļa > 5 m | 0,97 [0,80; 1,00] | 0,94 [0,44; 1,00] | 0,46 |
 | cwb_z t−1 | 0,06 [−1,24; 0,50] | 0,12 [−0,21; 0,88] | −0,31 |
 | cwb_z t−1 + t−2 | 0,04 [−0,76; 0,65] | 0,73 [−0,81; 0,87] | −0,24 |
+| Tsum_F1 t−1 (visi gadi 2013–2024, 2026-11-05) | 2,25 [2,08; 2,49] | 2,24 [2,05; 2,36] | +0,14 |
+| izlidošanas DOY t−1 (jutīgums) | 109 [101; 111] | 111 [108; 116] | −0,61 |
 
 - **Mizgraužu spiediens ir spēcīgākā atšķirība** (|SMD| 0,7–1,05), arī **t−2 … t−3 grupā bez t−1**.
 - **Pa gadiem tas nav vienmērīgi** (`pilot_feature_distributions_by_year.csv`):
@@ -153,6 +155,9 @@ Visi gadi kopā, apmācības kopa. Mediāna [IQR]; SMD = standartizēta vidējo 
   (−0,25), D / DR malas pazīme gandrīz nemainās (svaigas cirtes ≤ 60 m ir retas).
 - **Klimats bloka iekšienē nav informatīvs:** 20 km blokā ir tikai 2–3 ERA5-Land šūnas, tāpēc gada ietvaros vērtība ir
   gandrīz konstanta. Kopējā SMD ir tikai gadu sastāvs. Klimata pazīmēm vajag visu Latviju vai vairākus blokus [N].
+  - Pārbaudīts arī ar pilnu Tsum (2026-11-05): gada ietvaros Tsum_F1 t−1 starpkvartiļu diapazons pārējām šūnām
+    ir ≤ 0,014 (piem., 2023: 2,077–2,079). Gada SMD (−1,15 … +1,39) tāpēc ir skaitliski nestabils un nav
+    interpretējams [P skaitļi, N interpretācija].
 
 ![Pazīmes](rm_figures/rm6a_pilots_pazimes.png)
 
@@ -177,24 +182,49 @@ Visi gadi kopā, apmācības kopa. Mediāna [IQR]; SMD = standartizēta vidējo 
 
 - **DTM (slīpums, TPI):** LĢIA DTM 20 m 7z ir 399 MB > 200 MB, un vajag sistēmas 7-Zip → vajag lietotāja atļauju.
 - **Picea varbūtība:** pilotā nav lejupielādēta (Zenodo slānis; apjoms blokam nav novērtēts).
-- **Tsum t−1 gadiem 2013–2018:** gaida papildu lejupielādi (I–III, X 2011–2017); sk. 9. sadaļu.
+- ~~Tsum t−1 gadiem 2013–2018~~ — izdarīts 2026-11-05 (9. sadaļa).
 - Literatūra (Kärvemo u. c. 2014; Stadelmann u. c. 2013): DOI un bibliogrāfija pārbaudīta, saturs nav atvērts → [N]
   (`DATU_AVOTI.md`).
 
-## 9. Tsum papildu lejupielāde 2011–2017 (A daļa) — PROCESĀ [P]
+## 9. Tsum papildu lejupielāde 2011–2017 (A daļa) — PABEIGTA 2026-11-05 [P]
 
 - **Mērķis:** Tsum t−1 / t−2 LVM 620 etiķetēm no 2013. gada.
 - **Pieprasījumi:** I–III un X 2011–2017 = 28 mēneši + 7 `acc00_YYYY_11`; novērtējums pirms sākšanas ~0,5 GB (< 1 GB).
   Mainīgie tie paši 8: tikai `t2m` prasītu izmaiņas 4 apstrādes funkcijās.
-- **Gaita:** serverī, `tmux`, secīgi, atsākšana pēc job ID; auth kļūdu nav. Sākts 2026-11-04 13:15 UTC.
-- **Stāvoklis 2026-11-04 15:53 UTC:** 3 / 35 gatavi (h_2011_01–03, 17–20 MB katrs). CDS rindas gaidīšana pieaug: 18 s
-  → 1 883 s → 3 029 s; darbs aizņem 9–80 min. Ar šādu rindu atlikušais laiks ir ~1–2 diennaktis [N].
-- **Kods gatavs** (commits 15395dc): `pheno_extra_years: [2011, 2017]`. Dienas kubs tiek pārbūvēts, kad parādās jauni
-  mēneši; `cds-latvia --step daily`, pēc tam `--step pheno` rēķina tikai 2011–2017.
-- **Pēc lejupielādes:**
-  1. RITY-2 2011–2017 serverī (~8 min);
-  2. uz laptopu tikai `output/rm4_klimats/latvia/*`;
-  3. Kalsnavas pārbaude: Open-Meteo prototipā 2011–2017 ir tikai IV–IX, tāpēc RITY-2 salīdzināt nevar. Salīdzinās
-     dienas T_max / T_min IV–IX;
-  4. pilota tabula no jauna; tad Tsum_F1 t−1 būs arī gadiem 2013–2018. Šobrīd Tsum t−1 ir tikai t ≥ 2019:
-     n = 15 423 pozitīvās / 1 139 202 pārējās.
+- **Gaita:** serverī, `tmux`, secīgi, atsākšana pēc job ID. Sākts 2026-11-04 13:15 UTC, beigas 2026-11-05 08:44 UTC.
+  - 35 / 35 faili, **533 MB** (diskā 509 MiB); darbu laiks kopā 19,3 h, no tā CDS rindā 13,6 h.
+  - Auth / licences kļūdu nav. Viena `HTTP 502 Bad Gateway`, ko klients pats atkārtoja ("attempt 1 of 500"); mūsu
+    kods neko no jauna neiesniedza.
+- **Apstrāde serverī** (commits 15395dc, `pheno_extra_years: [2011, 2017]`):
+  - `cds-latvia --step daily`: 2 min 08 s, RSS 325 MB; 2011–2017 dienas kubi pārbūvēti ar mēnešiem I–X (304 / 305 dienas);
+  - `cds-latvia --step pheno`: tikai 2011–2017 (pārējie gadi no `parts/`), 63–74 s / gadā, kopā 8 min 31 s, RSS 355 MB;
+  - uz laptopu kopēts tikai `output/rm4_klimats/latvia/*`.
+- **RITY-2 2011–2017 (946 šūnas ar centru Latvijā; `lv_rity2_years.csv`):** izlidošana sasniegta visās šūnās;
+
+| Gads | Izlidošanas DOY p10 / mediāna / p90 | Tsum_F1 min / vid. / maks. | Tsum_F2 vid. |
+|---|---|---|---|
+| 2011 | 113 / 115 / 116 | 1,96 / 2,19 / 2,37 | 1,20 |
+| 2012 | 114 / 116 / 118 | 1,60 / 1,85 / 2,07 | 0,86 |
+| 2013 | 122 / 124 / 126 | 1,89 / 2,18 / 2,40 | 1,19 |
+| 2014 | 108 / 110 / 111 | 1,83 / 2,07 / 2,28 | 1,08 |
+| 2015 | 115 / 116 / 117 | 1,58 / 1,80 / 2,02 | 0,81 |
+| 2016 | 103 / 119 / 123 | 1,85 / 2,08 / 2,28 | 1,08 |
+| 2017 | 124 / 125 / 134 | 1,38 / 1,65 / 1,92 | 0,66 |
+
+  Salīdzinājumam: 2018 vid. Tsum_F1 2,56, 2024 — 2,55. 2017 ir zemākā vērtība visā 2011–2026 rindā.
+- **Kalsnavas pārbaude** (šūna 56,70 / 25,90, UTC dienas, pret Open-Meteo ERA5 mezglu 56,75 / 25,75, Rīgas dienas;
+  IV–IX, jo prototipā 2011–2017 nav I–III un X, tāpēc RITY-2 salīdzināt nevar;
+  `lv_kalsnava_2011_2017_temperature_vs_openmeteo.csv`):
+
+| Periods | n dienas | T_max starpība / r | T_min starpība / r | T_mean starpība / r |
+|---|---|---|---|---|
+| 2011–2017 | 1 281 | +0,05 °C / 0,991 | **+1,42 °C** / 0,979 | +0,61 °C / 0,995 |
+| 2018–2025 (atsauce, tas pats kods) | 1 464 | +0,04 °C / 0,992 | **+1,35 °C** / 0,983 | +0,62 °C / 0,996 |
+
+  - Pa gadiem 2011–2017 T_min starpība ir +1,24 … +1,61 °C, T_max −0,18 … +0,22 °C.
+  - Novirze ir **vienāda abos periodos**, tātad jaunie dati ir saskanīgi ar 2018–2026 [P]. T_min novirzes cēlonis
+    (cita šūna un augstums, 0,1° pret 0,25°, UTC pret vietējo dienu) nav pārbaudīts [N]. 4. posmā Tsum starpība
+    Kalsnavā bija +0,19 (2018–2026).
+- **Pilota tabula no jauna** (`features-pilot`, CHMv2 no kešatmiņas, 79 s): Tsum_F1 t−1 tagad ir visiem gadiem
+  2013–2024 (n = 16 176 pozitīvās / 2 293 206 pārējās; iepriekš tikai t ≥ 2019: 15 423 / 1 139 202). Etiķetes,
+  spiediena, uzņēmības un noplūdes ieraksts nemainījās (maks. nobīde −1).

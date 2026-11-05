@@ -453,5 +453,8 @@ vidējā (dienās), slīpums un korelācijas.
 - 2026. gads ir nepilns (temperatūra līdz 27.10, akumulētie līdz 26.10); ūdens bilanci tas neietekmē, jo IV–IX ir
   pilns.
 - Sausuma salīdzinājums: `docs/RM_4b_SAUSUMS.md` (2026-11-04). 6. posms nav sākts.
+- 2026-11-05: RITY-2 arī 2011–2017 (papildu I–III, X lejupielāde; `pheno_extra_years`). Gadu tabulā
+  `lv_rity2_years.csv` ir 2011–2026; kartes paliek 2018–2026. Rezultāti un Kalsnavas temperatūru pārbaude:
+  `docs/RM_6a_PAZIMES.md` 9. sadaļa.
 - 4. posms pieņemts (lietotājs 2026-11-04). Piekrastes vēlākā izlidošana — [N] jūras pavasara vēsums (lietotāja
   piezīme: fizikāli loģiski); „DR agrāk” bija pieņēmums, nevis prasība.

@@ -184,6 +184,10 @@ Sk. `docs/RM_4b_SAUSUMS.md`.
 - Apjoms: 28 mēneši + 7 `acc00_YYYY_11` pieprasījumi; novērtējums ~0,5 GB pirms sākšanas.
 - Mainīgie tie paši 8 (tikai `t2m` prasītu izmaiņas 4 apstrādes funkcijās).
 - Kataloga beigas 2026-10-29.
+- **Pabeigta 2026-11-05 08:44 UTC** (sākta 2026-11-04 13:15 UTC): 35 / 35 faili, **533 MB** (diskā 509 MiB;
+  `h_2011..2017_01–03, _10`, `acc00_2011..2017_11`); darbi kopā 19,3 h, no tā CDS rindā 13,6 h. Viens
+  `HTTP 502`, ko klients pats atkārtoja; auth / licences kļūdu nav. Dati tikai serverī un `cache/` (nav git).
+- Atvasinātais: RITY-2 2011–2017 `output/rm4_klimats/latvia/` (sk. RM_6a 9. sadaļu).
 
 **Literatūra (pārbaudīta 2026-11-04, Crossref / OpenAlex):**
 - **Kärvemo, S., Van Boeckel, T. P., Gilbert, M., Grégoire, J.-C., Schroeder, M. (2014).** Large-scale risk mapping of
