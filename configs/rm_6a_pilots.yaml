@@ -41,3 +41,4 @@ features:
   chm: true
   chm_from_year: 2020
   source: lvm620_wayback20250503
+  picea_dir: ../cache/rm/picea            # Picea abies p, Latvia windows (picea-fetch, user 2026-11-05)

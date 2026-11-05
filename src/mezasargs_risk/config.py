@@ -205,6 +205,16 @@ class FeaturesConfig(BaseModel):
     chm_url: str = "https://dataforgood-fb-data.s3.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/chm/{qk}.tif"
     chm_from_year: int = 2020        # L2: CHMv2 (imagery ~2018) only for t >= 2020
     source: str = "lvm620_wayback20250503"
+    # Picea abies realized distribution, probability 0-100 (Bonannella et al. 2022, Zenodo 6961187 v3, CC BY 4.0);
+    # windows over Latvia (+ margin) cached by `picea-fetch`; for year t the latest period ending <= t-1 is used (2.4)
+    picea_dir: Path | None = None
+    picea_url: str = ("https://zenodo.org/api/records/6961187/files/"
+                      "veg_picea.abies_anv.eml_p_30m_0..0cm_{a}..{b}_eumap_epsg3035_v0.3.tif/content")
+    picea_periods: list[tuple[int, int]] = Field(default_factory=lambda: [(2006, 2010), (2010, 2014), (2014, 2018),
+                                                                         (2018, 2020)])
+    # all of Latvia (stage 6b, user 2026-11-05): 20 km LKS-92 blocks aligned with `block_3059`, kept if they
+    # intersect LVM land; one output file per block (resumable)
+    block_size_m: float = 20000.0
 
 
 class RiskConfig(BaseModel):

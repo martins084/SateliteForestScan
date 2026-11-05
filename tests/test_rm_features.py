@@ -104,3 +104,24 @@ def test_describe_counts_and_smd():
     assert list(py["positives"]) == [1, 2] and list(py["cells"]) == [3, 2]
     r = dist.iloc[0]
     assert r["n_pos"] == 3 and r["n_other"] == 2 and r["pos_median"] == 5 and r["other_median"] == 2
+
+
+def test_picea_uses_latest_period_ending_before_t():
+    ctx = _ctx()
+    ctx.picea = {e: np.full(SHAPE, float(e - 2000), np.float32) for e in (2010, 2014, 2018, 2020)}
+    ctx.picea500 = {e: v + 0.5 for e, v in ctx.picea.items()}
+    f = F.year_features(ctx, 2015)                       # t-1 = 2014 -> period 2010-2014
+    assert f["picea_p"][0, 0] == 14 and f["picea_p500"][0, 0] == 14.5 and ctx.used["picea_p"] == {2014}
+    f = F.year_features(ctx, 2020)                       # 2018-2020 ends in 2020 = t -> not allowed; 2014-2018 used
+    assert f["picea_p"][0, 0] == 18 and max(max(v) for v in ctx.used.values()) <= 2019
+    f = F.year_features(ctx, 2011)                       # no period ends <= 2010? 2006-2010 ends 2010 -> allowed
+    assert f["picea_p"][0, 0] == 10
+    f = F.year_features(ctx, 2010)                       # nothing ends <= 2009
+    assert np.isnan(f["picea_p"]).all()
+
+
+def test_mean_within_ignores_nan():
+    x = np.full((21, 21), np.nan, np.float32)
+    x[10, 10], x[10, 11] = 10.0, 20.0
+    m = F.mean_within(x, 100)
+    assert m[10, 10] == pytest.approx(15.0, abs=1e-3) and np.isnan(m[0, 0])

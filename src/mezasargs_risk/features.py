@@ -43,6 +43,8 @@ class Ctx:
     efda: dict[int, np.ndarray] = field(default_factory=dict)        # EFDA agent per year (1, 2, 3, 255)
     climate: pd.DataFrame | None = None     # index (year, clim_cell), columns cwb_z, tsum_F1, swarming_doy, ...
     clim_cell: np.ndarray | None = None     # int id of the ERA5-Land cell of each 30 m cell
+    picea: dict[int, np.ndarray] = field(default_factory=dict)       # Picea p (0-100), key = period END year
+    picea500: dict[int, np.ndarray] = field(default_factory=dict)    # mean Picea p within 500 m, same keys
     t: int | None = None
     used: dict[str, set] = field(default_factory=dict)
 
@@ -61,6 +63,16 @@ class Ctx:
         if s is None:
             return np.full(self.shape, np.nan, dtype=np.float32)
         return s.reindex(self.clim_cell.ravel()).to_numpy(dtype=np.float32).reshape(self.shape)
+
+
+def mean_within(x: np.ndarray, radius_m: float) -> np.ndarray:
+    """Mean of the finite values of `x` within `radius_m` of each cell centre (NaN where none)."""
+    ok = np.isfinite(x)
+    k = disk(radius_m)
+    s = fftconvolve(np.where(ok, x, 0).astype(np.float32), k, mode="same")
+    n = fftconvolve(ok.astype(np.float32), k, mode="same")
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(n > 0.5, s / np.maximum(n, 1e-6), np.nan).astype(np.float32)
 
 
 def disk(radius_m: float) -> np.ndarray:
@@ -130,6 +142,14 @@ def year_features(ctx: Ctx, t: int, efda_first: int = 1985) -> dict[str, np.ndar
     f["cut_dist_t110"] = dist_to(cut110)
     f["edge_s_sw_w_t13"] = south_edge(cut13)
     f["years_since_dist"] = np.where(last_any >= 0, t - last_any, 99).astype(np.float32)   # 99 = none in 10 years
+    # Picea abies probability (stand, user 2026-11-05): latest period ending <= t-1 (plan 2.4), cell + 500 m mean
+    if ctx.picea:
+        ends = [e for e in ctx.picea if e <= t - 1]
+        if ends:
+            f["picea_p"] = ctx.layer("picea", max(ends), "picea_p")
+            f["picea_p500"] = ctx.layer("picea500", max(ends), "picea_p500")
+        else:
+            f["picea_p"] = f["picea_p500"] = np.full(ctx.shape, np.nan, dtype=np.float32)
     # climate (ERA5-Land nearest 0.1 deg cell)
     if ctx.climate is not None:
         z1, z2 = ctx.clim("cwb_z", t - 1, "cwb_z_t1"), ctx.clim("cwb_z", t - 2, "cwb_z_t12")

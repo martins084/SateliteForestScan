@@ -1142,3 +1142,101 @@ def features_pilot(config: Path = ConfigArg):
         typer.echo(f"{n}: {f}")
     _metadata(cfg, "features_pilot", {"block_3059": cfg.features.block_3059, "years": cfg.features.years,
                                       "chm_tiles": info["chm"].get("tiles")})
+
+
+@app.command("picea-fetch")
+def picea_fetch(config: Path = ConfigArg, margin_m: float = typer.Option(6000.0, help="around Latvia (3035)")):
+    """Picea abies probability (Bonannella et al. 2022, Zenodo 6961187 v3, CC BY 4.0), periods of
+    `features.picea_periods`: windows over Latvia + margin read from the Europe-wide COGs (HTTP range, no full
+    file) into `features.picea_dir` (user 2026-11-05: pilot block, all of Latvia only if < 1 GB)."""
+    from . import features_io as FIO
+    from .efda import country_regions
+
+    cfg = load_config(config)
+    x0, y0, x1, y1 = country_regions(cfg.boundaries).total_bounds
+    b = (x0 - margin_m, y0 - margin_m, x1 + margin_m, y1 + margin_m)
+    info = FIO.picea_fetch(cfg, b)
+    tdir = cfg.run_dir / "tables"
+    tdir.mkdir(parents=True, exist_ok=True)
+    (tdir / "picea_fetch.json").write_text(json.dumps({"bounds_3035": b, "files": info}, indent=1), encoding="utf-8")
+    typer.echo(json.dumps(info, indent=1))
+    _metadata(cfg, "picea_fetch", {"bounds_3035": b, "files": info})
+
+
+@app.command("features-latvia")
+def features_latvia(config: Path = ConfigArg, limit: int = typer.Option(0, help="process at most N new blocks")):
+    """Stage 6b (user 2026-11-05; run on the server): feature table for LVM land in all of Latvia, WITHOUT CHMv2.
+    20 km blocks (`FIO.latvia_blocks`), one file per block <run_dir>/blocks/block_<x0>_<y0>.nc with one group per
+    year (y2013 ...); blocks already written are skipped (resume). Log: <run_dir>/logs/features_latvia.jsonl
+    (time, rows, positives, traced peak memory, process max RSS). Exit 5 on any feature reading a year >= t."""
+    import time
+    import tracemalloc
+
+    import xarray as xr
+
+    from . import features_io as FIO
+
+    try:
+        import resource                                     # Linux / server only
+    except ImportError:
+        resource = None
+    cfg = load_config(config)
+    fc = cfg.features
+    if fc.chm:
+        raise typer.BadParameter("features-latvia runs without CHMv2 (user 2026-11-05): set features.chm: false")
+    bdir, ldir, tdir = cfg.run_dir / "blocks", cfg.run_dir / "logs", cfg.run_dir / "tables"
+    for d in (bdir, ldir, tdir):
+        d.mkdir(parents=True, exist_ok=True)
+    blocks = FIO.latvia_blocks(cfg)
+    pd.DataFrame(blocks, columns=["x0", "y0", "x1", "y1"]).to_csv(tdir / "latvia_blocks.csv", index=False)
+    climate = FIO.climate_table(fc.climate_dir)
+    log = ldir / "features_latvia.jsonl"
+    done = 0
+    typer.echo(f"{len(blocks)} blocks; {sum((bdir / f'block_{int(b[0])}_{int(b[1])}.nc').exists() for b in blocks)} done")
+    for k, b in enumerate(blocks):
+        out = bdir / f"block_{int(b[0])}_{int(b[1])}.nc"
+        if out.exists():
+            continue
+        if limit and done >= limit:
+            break
+        t0 = time.time()
+        tracemalloc.start()
+        bc = cfg.model_copy(update={"features": fc.model_copy(update={"block_3059": list(b)})})
+        inp, ctx, chm, _ = FIO.block_context(bc, climate)
+        t_in = time.time() - t0
+        tmp = out.with_suffix(".part")
+        tmp.unlink(missing_ok=True)
+        rows = pos = pos_set = 0
+        max_off = -99
+        for i, t in enumerate(range(fc.years[0], fc.years[1] + 1)):
+            tab, used = FIO.year_rows(bc, inp, ctx, chm, t)
+            max_off = max(max_off, max(max(v) - t for v in used.values()))
+            if max_off >= 0:
+                typer.echo(f"STOP: leakage in block {b}, year {t}: {used}")
+                raise typer.Exit(5)
+            ds = xr.Dataset({c: ("row", tab[c].to_numpy()) for c in tab.columns if c != "source"},
+                            attrs={"source": fc.source, "block_3059": str(list(b)), "year": t})
+            ds.to_netcdf(tmp, group=f"y{t}", mode="w" if i == 0 else "a", engine="h5netcdf",
+                         encoding={c: {"zlib": True, "complevel": 4} for c in ds.data_vars})
+            rows += len(tab)
+            pos += int(tab["label"].sum())
+            pos_set += int(tab.loc[tab["in_set"] == 1, "label"].sum())
+            del tab, ds
+        tmp.replace(out)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        rec = {"time_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"), "k": k, "n_blocks": len(blocks),
+               "block_3059": list(b), "cells": int((inp["inner"] & inp["forest"] & inp["lvm_land"]).sum()),
+               "rows": rows, "positives": pos, "positives_in_set": pos_set, "polygons_620_in_window": inp["n_polygons"],
+               "max_offset": max_off, "seconds_inputs": round(t_in, 1), "seconds_total": round(time.time() - t0, 1),
+               "peak_traced_mb": round(peak / 2 ** 20, 1),
+               "max_rss_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1) if resource else None,
+               "file_mb": round(out.stat().st_size / 2 ** 20, 2)}
+        with log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+        typer.echo(json.dumps(rec))
+        done += 1
+        del inp, ctx
+    n_done = sum((bdir / f"block_{int(b[0])}_{int(b[1])}.nc").exists() for b in blocks)
+    typer.echo(f"blocks done: {n_done} / {len(blocks)}")
+    _metadata(cfg, "features_latvia", {"blocks": len(blocks), "done": n_done, "chm": False, "years": fc.years})

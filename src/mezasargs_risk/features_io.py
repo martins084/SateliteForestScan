@@ -81,9 +81,70 @@ def block_inputs(cfg: RiskConfig, years: tuple[int, int]) -> dict:
     static = {"hrl_conifer_100m": np.where(dlt == 255, np.nan, (dlt == 2).astype(np.float32)),
               "hrl_conifer_share_500m": con500.astype(np.float32)}
     del k
+    picea, picea500 = picea_layers(cfg, tf, shape)
     return {"tf": tf, "shape": shape, "efda": efda, "forest": forest, "inner": inner, "lvm_land": lvm_land,
             "share": share, "centre": centre, "clim_cell": clim_cell, "cell_id": cell_id, "static": static,
+            "picea": picea, "picea500": picea500,
             "window": w, "n_polygons": int(len(g)), "lonlat_centre": (float(np.mean(lon)), float(np.mean(lat)))}
+
+
+def picea_path(cfg: RiskConfig, a: int, b: int):
+    return cfg.features.picea_dir / f"picea_anv_p_{a}_{b}_LV3035.tif"
+
+
+def picea_fetch(cfg: RiskConfig, bounds_3035: tuple[float, float, float, float]) -> list[dict]:
+    """Windows of the Picea abies probability COGs (one per period) over `bounds_3035`, read over HTTP range
+    requests (full resolution, no Europe-wide file) and stored as deflate GeoTIFFs in `picea_dir`."""
+    fc = cfg.features
+    fc.picea_dir.mkdir(parents=True, exist_ok=True)
+    out = []
+    with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR", GDAL_HTTP_MAX_RETRY="3", GDAL_HTTP_RETRY_DELAY="5"):
+        for a, b in fc.picea_periods:
+            dst = picea_path(cfg, a, b)
+            if dst.exists():
+                out.append({"period": f"{a}-{b}", "file": dst.name, "bytes": dst.stat().st_size, "cached": True})
+                continue
+            t0 = time.time()
+            url = fc.picea_url.format(a=a, b=b)
+            with rasterio.open("/vsicurl/" + url) as s:
+                w = from_bounds(*bounds_3035, transform=s.transform)
+                w = Window(int(np.floor(w.col_off)), int(np.floor(w.row_off)), int(np.ceil(w.width)) + 1,
+                           int(np.ceil(w.height)) + 1)
+                x = s.read(1, window=w)
+                prof = {"driver": "GTiff", "dtype": "uint8", "count": 1, "width": x.shape[1], "height": x.shape[0],
+                        "crs": s.crs, "transform": s.window_transform(w), "nodata": s.nodata, "compress": "deflate",
+                        "tiled": True, "blockxsize": 512, "blockysize": 512}
+            tmp = dst.with_suffix(".part")
+            with rasterio.open(tmp, "w", **prof) as d:
+                d.write(x, 1)
+                d.update_tags(source=url, license="CC BY 4.0", doi="10.5281/zenodo.6961187")
+            tmp.replace(dst)
+            nod = prof["nodata"]
+            out.append({"period": f"{a}-{b}", "file": dst.name, "bytes": dst.stat().st_size, "cached": False,
+                        "shape": list(x.shape), "nodata": nod, "seconds": round(time.time() - t0, 1),
+                        "share_nodata": float((x == nod).mean()) if nod is not None else None,
+                        "max_valid": int(x[x != nod].max()) if nod is not None and (x != nod).any() else int(x.max())})
+    return out
+
+
+def picea_layers(cfg: RiskConfig, tf, shape) -> tuple[dict, dict]:
+    """Picea p (0-100, NaN = nodata) on the block grid (nearest) and its 500 m mean, keyed by period end year."""
+    fc = cfg.features
+    if fc.picea_dir is None:
+        return {}, {}
+    p, p500 = {}, {}
+    for a, b in fc.picea_periods:
+        x = np.full(shape, 255, dtype=np.uint8)
+        with rasterio.open(picea_path(cfg, a, b)) as s:
+            reproject(rasterio.band(s, 1), x, dst_transform=tf, dst_crs="EPSG:3035", resampling=Resampling.nearest,
+                      dst_nodata=255)
+            nod = s.nodata
+        bad = (x == 255) | (x > 100)
+        if nod is not None:
+            bad |= x == nod
+        v = np.where(bad, np.nan, x.astype(np.float32)).astype(np.float32)
+        p[b], p500[b] = v, F.mean_within(v, 500)
+    return p, p500
 
 
 def chm_layers(cfg: RiskConfig, inp: dict) -> tuple[dict, dict]:
@@ -130,13 +191,10 @@ def climate_table(climate_dir) -> pd.DataFrame:
     return t.set_index(["year", "clim_cell"])[["cwb_z"] + cols].sort_index()
 
 
-def training_table(cfg: RiskConfig) -> tuple[pd.DataFrame, dict]:
-    """Cell x year table of the pilot block with labels (2.5 schema), all features and timing / memory info."""
+def block_context(cfg: RiskConfig, climate: pd.DataFrame | None = None) -> tuple[dict, F.Ctx, dict, dict]:
+    """Inputs, feature context and (optional) CHMv2 layers of the block `cfg.features.block_3059`."""
     fc = cfg.features
-    tracemalloc.start()
-    t0 = time.time()
     inp = block_inputs(cfg, fc.years)
-    t_in = time.time() - t0
     chm, chm_info = ({}, {"tiles": [], "seconds": 0})
     if fc.chm:
         cpath = cfg.cache_dir / "rm" / "chmv2_30m" / ("block_%d_%d_%d_%d.npz" % tuple(fc.block_3059))
@@ -149,31 +207,50 @@ def training_table(cfg: RiskConfig) -> tuple[pd.DataFrame, dict]:
             chm, chm_info = chm_layers(cfg, inp)
             cpath.parent.mkdir(parents=True, exist_ok=True)
             np.savez_compressed(cpath, **chm, tiles=",".join(chm_info["tiles"]), coverage=chm_info["coverage"])
-    ctx = F.Ctx(shape=inp["shape"], lvm620=inp["share"], efda=inp["efda"], climate=climate_table(fc.climate_dir),
-                clim_cell=inp["clim_cell"])
+    ctx = F.Ctx(shape=inp["shape"], lvm620=inp["share"], efda=inp["efda"],
+                climate=climate if climate is not None else climate_table(fc.climate_dir),
+                clim_cell=inp["clim_cell"], picea=inp["picea"], picea500=inp["picea500"])
+    return inp, ctx, chm, chm_info
+
+
+def year_rows(cfg: RiskConfig, inp: dict, ctx: F.Ctx, chm: dict, t: int) -> tuple[pd.DataFrame, dict]:
+    """Rows of year t (analysis set: inner block AND EFDA forest AND LVM land) and the years used per feature."""
+    fc = cfg.features
+    idx = np.nonzero(inp["inner"] & inp["forest"] & inp["lvm_land"])
+    f = F.year_features(ctx, t, cfg.efda.main.first_year)
+    used = {k: sorted(v) for k, v in ctx.used.items()}
+    share_t = inp["share"].get(t, np.zeros(inp["shape"], np.float32))
+    centre_t = inp["centre"].get(t, np.zeros(inp["shape"], bool))
+    lab, conf = F.labels(share_t, centre_t)
+    d = {"cell_id": inp["cell_id"][idx], "year": np.full(len(idx[0]), t, np.int16), "label": lab[idx],
+         "confidence": conf[idx]}
+    d["in_set"] = (f["years_since_dist"][idx] > fc.k_exclude).astype(np.uint8)
+    for k, v in f.items():
+        d[k] = v[idx]
+    for k, v in inp["static"].items():
+        d[k] = v[idx]
+    d["hrl_after_t"] = np.full(len(idx[0]), t <= 2018, np.uint8)   # HRL 2018 snapshot not before t (2.4)
+    for k, v in chm.items():
+        d[k] = v[idx] if t >= fc.chm_from_year else np.full(len(idx[0]), np.nan, np.float32)
+    tab = pd.DataFrame(d)
+    tab.insert(4, "source", fc.source)
+    return tab, used
+
+
+def training_table(cfg: RiskConfig) -> tuple[pd.DataFrame, dict]:
+    """Cell x year table of the pilot block with labels (2.5 schema), all features and timing / memory info."""
+    fc = cfg.features
+    tracemalloc.start()
+    t0 = time.time()
+    inp, ctx, chm, chm_info = block_context(cfg)
+    t_in = time.time() - t0
     sel = inp["inner"] & inp["forest"] & inp["lvm_land"]
-    idx = np.nonzero(sel)
     parts, used = [], {}
     t1 = time.time()
     for t in range(fc.years[0], fc.years[1] + 1):
-        f = F.year_features(ctx, t, cfg.efda.main.first_year)
-        used[t] = {k: sorted(v) for k, v in ctx.used.items()}
-        share_t = inp["share"].get(t, np.zeros(inp["shape"], np.float32))
-        centre_t = inp["centre"].get(t, np.zeros(inp["shape"], bool))
-        lab, conf = F.labels(share_t, centre_t)
-        d = {"cell_id": inp["cell_id"][idx], "year": np.full(len(idx[0]), t, np.int16), "label": lab[idx],
-             "confidence": conf[idx]}
-        d["in_set"] = (f["years_since_dist"][idx] > fc.k_exclude).astype(np.uint8)
-        for k, v in f.items():
-            d[k] = v[idx]
-        for k, v in inp["static"].items():
-            d[k] = v[idx]
-        d["hrl_after_t"] = np.full(len(idx[0]), t <= 2018, np.uint8)   # HRL 2018 snapshot not before t (2.4)
-        for k, v in chm.items():
-            d[k] = v[idx] if t >= fc.chm_from_year else np.full(len(idx[0]), np.nan, np.float32)
-        parts.append(pd.DataFrame(d))
+        tab_t, used[t] = year_rows(cfg, inp, ctx, chm, t)
+        parts.append(tab_t)
     tab = pd.concat(parts, ignore_index=True)
-    tab.insert(4, "source", fc.source)
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     info = {"window": [int(inp["window"].col_off), int(inp["window"].row_off), int(inp["window"].width),
@@ -183,3 +260,21 @@ def training_table(cfg: RiskConfig) -> tuple[pd.DataFrame, dict]:
             "seconds_features": round(time.time() - t1, 1), "seconds_total": round(time.time() - t0, 1),
             "peak_traced_mb": round(peak / 2 ** 20, 1), "chm": chm_info, "years_used": used}
     return tab, info
+
+
+def latvia_blocks(cfg: RiskConfig) -> list[tuple[float, float, float, float]]:
+    """20 km LKS-92 blocks aligned with the pilot block that intersect LVM land (stage 6b)."""
+    import geopandas as gpd
+
+    fc = cfg.features
+    land = LV.load_land(cfg.lvm).to_crs(3059)
+    size = fc.block_size_m
+    x00, y00 = fc.block_3059[0], fc.block_3059[1]
+    x0, y0, x1, y1 = land.total_bounds
+    i0, i1 = int(np.floor((x0 - x00) / size)), int(np.ceil((x1 - x00) / size))
+    j0, j1 = int(np.floor((y0 - y00) / size)), int(np.ceil((y1 - y00) / size))
+    cand = [(x00 + i * size, y00 + j * size, x00 + (i + 1) * size, y00 + (j + 1) * size)
+            for j in range(j0, j1) for i in range(i0, i1)]
+    boxes = gpd.GeoDataFrame({"k": range(len(cand))}, geometry=[box(*b) for b in cand], crs=3059)
+    hit = gpd.sjoin(boxes, land[["geometry"]], predicate="intersects")["k"].unique()
+    return [cand[k] for k in sorted(hit)]
