@@ -28,6 +28,7 @@ dependencies = [
     "cdsapi>=0.7.7",
     "h5netcdf>=1.8",
     "h5py>=3.16",
+    "scikit-learn>=1.5",
 ]
 
 [project.scripts]

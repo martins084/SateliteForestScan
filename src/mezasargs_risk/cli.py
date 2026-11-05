@@ -595,8 +595,10 @@ def _cds_jobs(cfg: RiskConfig, last_day) -> list[dict]:
     from . import cds
 
     c = cfg.climate
-    months = cds.plan_months((c.baseline[0], c.years[1]), c.wb_months, c.years,
-                             (int(c.pheno_start[:2]), int(c.pheno_end[:2])))
+    pm = (int(c.pheno_start[:2]), int(c.pheno_end[:2]))
+    months = cds.plan_months((c.baseline[0], c.years[1]), c.wb_months, c.years, pm)
+    if c.pheno_extra_years:
+        months = sorted(set(months) | set(cds.plan_months(c.pheno_extra_years, pm, c.pheno_extra_years, pm)))
     return cds.month_jobs(months, last_day, c.cds.hourly_vars, c.cds.accum_vars, c.cds.area)
 
 
@@ -719,6 +721,7 @@ def _lv_paths(cfg: RiskConfig):
 
 @app.command("cds-latvia")
 def cds_latvia(config: Path = ConfigArg, step: str = typer.Option("all", help="daily | wb | pheno | all")):
+    # phenology years: `years` plus `pheno_extra_years` (user 2026-11-04); parts/rity2_<y>.csv per year
     """Stage 4, Latvia (user decision 2026-11-04; run on the server, one year in memory): daily ERA5-Land cubes per
     year (cache/rm/cds/daily/), water balance P - ET0 (IV-IX) 1991-2026 with the standardized anomaly vs 1991-2020,
     RITY-2 per 0.1 deg cell 2018-2026 (resumable per year). Results: <run_dir>/latvia/ (NetCDF + tables)."""
@@ -764,7 +767,10 @@ def cds_latvia(config: Path = ConfigArg, step: str = typer.Option("all", help="d
         t.round(3).to_csv(odir / "water_balance_cells.csv", index=False)
         typer.echo(f"water balance: {wb.sizes['year']} years, {int(wb['cwb_z'].notnull().any('year').sum())} cells")
     if step in ("pheno", "all"):
-        for y in range(c.years[0], c.years[1] + 1):
+        pyears = list(range(c.years[0], c.years[1] + 1))
+        if c.pheno_extra_years:
+            pyears = sorted(set(pyears) | set(range(c.pheno_extra_years[0], c.pheno_extra_years[1] + 1)))
+        for y in pyears:
             part = odir / "parts" / f"rity2_{y}.csv"
             if part.exists():
                 continue
@@ -779,7 +785,7 @@ def cds_latvia(config: Path = ConfigArg, step: str = typer.Option("all", help="d
         ph.to_csv(odir / "rity2_cells_long.csv.gz", index=False)
         wide = L.pheno_wide(ph, c.main_scenario)
         wide.to_csv(odir / "rity2_cells.csv", index=False)
-        g = load(c.years[0])
+        g = load(pyears[0])
         cols = [k for k in wide.columns if k not in ("latitude", "longitude", "year", "scenario", "variant",
                                                      "last_date", "swarming_date", "daylength_shift_min")]
         grid = L.to_grid(wide.assign(complete=wide["complete"].astype(float)), cols, g.latitude.values,
@@ -832,6 +838,8 @@ def cds_latvia_report(config: Path = ConfigArg):
     rows = []
     for y, g in pin.groupby("year"):
         r = {"year": y, "incomplete": y in incomplete, "cells": len(g),
+             "swarming_not_reached": int(g["swarming_doy"].isna().sum()),
+             "swarming_not_reached_all_cells": int(ph.loc[ph["year"] == y, "swarming_doy"].isna().sum()),
              "swarming_doy_min": g["swarming_doy"].min(), "swarming_doy_p10": q(g["swarming_doy"], 10),
              "swarming_doy_median": g["swarming_doy"].median(), "swarming_doy_p90": q(g["swarming_doy"], 90),
              "swarming_doy_max": g["swarming_doy"].max(), "infestation_doy_median": g["infestation_doy"].median(),
@@ -847,6 +855,7 @@ def cds_latvia_report(config: Path = ConfigArg):
             r[f"onset_doy_F2_dl{s}_mean_diff"] = float((g[f"onset_doy_F2_dl{s}"] - g["onset_doy_F2"]).mean())
         rows.append(r)
     pd.DataFrame(rows).round(3).to_csv(tdir / "lv_rity2_years.csv", index=False)
+    out["swarming_not_reached"] = {int(r["year"]): [r["swarming_not_reached"], r["cells"]] for r in rows}
     wyears = win.groupby("year").agg(cells=("cwb_z", "count"), precip_mm=("precip_mm", "mean"), et0_mm=("et0_mm", "mean"),
                                      cwb_mm=("cwb_mm", "mean"), cwb_z_mean=("cwb_z", "mean"), cwb_z_min=("cwb_z", "min"),
                                      cwb_z_max=("cwb_z", "max"),
@@ -916,8 +925,9 @@ def cds_latvia_report(config: Path = ConfigArg):
         raise typer.Exit(4)
 
     # maps (cells touching Latvia)
-    mp, mw = ph[ph["touch_lv"]], wb[wb["touch_lv"]]
     yrs = list(range(c.years[0], c.years[1] + 1))
+    mp, mw = (x[x["touch_lv"]].rename(columns={"latitude": "lat", "longitude": "lon"}) for x in (ph, wb))
+    mp = mp[mp["year"].isin(yrs)]                     # maps: `years` only (pheno_extra_years are in the tables)
     kw_ = {"step": 0.1, "marked": tuple(incomplete)}
     figs = {
         "swarming": viz.climate_maps(lv, mp, "swarming_doy", yrs, "RITY-2 izlidošanas diena (DOY), ERA5-Land 0,1°",
@@ -934,8 +944,407 @@ def cds_latvia_report(config: Path = ConfigArg):
         "cwb_z": viz.climate_maps(lv, mw, "cwb_z", sorted(int(y) for y in mw["year"].unique()),
                                   "Standartizēta ūdens bilances anomālija z (P − ET0, IV–IX; bāze 1991–2020)",
                                   fdir / "rm4_lv_era5land_udens_bilance.png", cmap="RdBu", vmin=-2.5, vmax=2.5,
-                                  ncol=6, **kw_),
+                                  ncol=6, step=0.1, marked=()),          # IV-IX 2026 is complete: no '*'
     }
     for n, f in figs.items():
         typer.echo(f"{n}: {f}")
     _metadata(cfg, "cds_latvia_report", {"cells_in_latvia": out["cells_in_latvia"], "incomplete_years": incomplete})
+
+
+@app.command("drought-compare")
+def drought_compare(config: Path = ConfigArg):
+    """Drought comparison after stage 4 (user 2026-11-04; DESCRIPTIVE): national damage series (CSP MEB012, EFDA
+    classes 1 / 3, LVM 620) and the regional LVM 620 panel vs the ERA5-Land water balance anomaly and RITY-2 thermal
+    sums at lags t, t-1, t-2, t-1 + t-2 (Spearman, permutation p, block bootstrap CI, n in every row); event table
+    (2002 / 2006 / 2018 / 2023) and the 2023 eastern drought by region. Reads existing outputs only."""
+    from shapely.geometry import Point as SPoint
+
+    from . import drought as D
+    from . import lvm as LV
+    from . import viz
+    from .describe import read_csp
+    from .efda import country_regions
+
+    cfg = load_config(config)
+    d = cfg.drought
+    if d is None:
+        raise typer.BadParameter("config has no `drought` section")
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fdir.mkdir(parents=True, exist_ok=True)
+    y0, y1 = d.damage_years
+
+    # --- climate features (stage 4) ------------------------------------------------------------------------------
+    wb = pd.read_csv(d.climate_dir / "tables" / "lv_water_balance_years.csv").set_index("year")
+    ry = pd.read_csv(d.climate_dir / "tables" / "lv_rity2_years.csv").set_index("year")
+    nat = pd.DataFrame({"cwb_z": wb["cwb_z_mean"], "tsum_F1": ry["tsum_F1_mean"], "tsum_F2": ry["tsum_F2_mean"]})
+    feats = ["cwb_z", "tsum_F1", "tsum_F2"]
+    regions = country_regions(cfg.boundaries).to_crs(4326)
+    wc = pd.read_csv(d.climate_dir / "latvia" / "water_balance_cells.csv")
+    pc = pd.read_csv(d.climate_dir / "latvia" / "rity2_cells.csv")
+    cells = wc[["latitude", "longitude"]].drop_duplicates().reset_index(drop=True)
+    pts = [SPoint(lo, la) for la, lo in zip(cells["latitude"], cells["longitude"])]
+    cells["region"] = [next((r.NAME_LATN for r in regions.itertuples() if r.geometry.contains(p)), None) for p in pts]
+    cells = cells.dropna(subset=["region"])
+    reg_feat = (wc.merge(cells, on=["latitude", "longitude"]).groupby(["region", "year"])["cwb_z"].mean().to_frame()
+                .join(pc.merge(cells, on=["latitude", "longitude"]).groupby(["region", "year"])[["tsum_F1", "tsum_F2"]]
+                      .mean(), how="left"))
+    reg_feat.reset_index().round(4).to_csv(tdir / "drought_region_features.csv", index=False)
+    nat.round(4).to_csv(tdir / "drought_national_features.csv")
+
+    # --- damage series (existing tables) -------------------------------------------------------------------------
+    meb = read_csp(cfg.stats.meb012, 2)
+    meb = meb[meb["Meža īpašuma forma"] == "Pavisam"]
+
+    def csp(kind, ind):
+        m = meb[(meb["Meža bojājumi"] == kind) & (meb["indicator"] == ind)]
+        return m.set_index("year")["value"].astype(float)
+
+    m3, ha = "Bojājumu rezultātā izcirstais apjoms, tūkst. m³", "Bojā aizgājušās audzes, ha"
+    ef = pd.read_csv(d.efda_counts)
+    ef = ef[(ef["version"] == d.efda_version) & (ef["region_name"] != "outside")]
+    efy = ef.groupby(["agent", "year"])["px"].sum().unstack("agent") * viz.PX_HA
+    la = pd.read_csv(d.lvm_annual).set_index("year")
+    la = la[(la.index >= y0) & (la.index <= y1)]
+    damage = {
+        "CSP MEB012 stumbra kaitēkļi, izcirsts tūkst. m3": csp("..kaitēkļu izraisīti stumbru bojājumi", m3),
+        "CSP MEB012 stumbra kaitēkļi, bojā gājušas audzes ha": csp("..kaitēkļu izraisīti stumbru bojājumi", ha),
+        "CSP MEB012 vējgāzes (kontrole), izcirsts tūkst. m3": csp("Vējgāzes, snieglauzes", m3),
+        "EFDA v3.0 klase 1, ha": efy["wind_bark_beetle"],
+        "EFDA v3.0 klase 3 (cirte), ha": efy["harvest"],
+        "LVM 620, ha": la["lvm_ha"],
+        "LVM 620, poligoni": la["lvm_n"].astype(float),
+    }
+    pd.DataFrame(damage).round(2).to_csv(tdir / "drought_national_damage.csv")
+
+    # --- 1. national lags ----------------------------------------------------------------------------------------
+    lf = D.lagged(nat, feats)
+    lt = D.lag_table(damage, lf, d.n_perm, d.n_boot, d.seed, d.min_n_ci)
+    lt.round(3).to_csv(tdir / "drought_national_lags.csv", index=False)
+
+    # --- 2. regional panel (LVM 620 per 1000 ha LVM land) + 0.1 deg sparsity ----------------------------------------
+    lr = pd.read_csv(d.lvm_regions).set_index("NAME_LATN")
+    yrs = [c for c in lr.columns if c.isdigit() and y0 <= int(c) <= y1]
+    dens = (lr[yrs].div(lr["lvm_land_ha"], axis=0) * 1000).stack().rename("lvm_620_ha_per_1000ha").reset_index()
+    dens.columns = ["region", "year", "lvm_620_ha_per_1000ha"]
+    dens["year"] = dens["year"].astype(int)
+    rl = pd.concat({r: D.lagged(g.droplevel("region"), feats) for r, g in reg_feat.groupby(level="region")},
+                   names=["region", "year"]).reset_index()
+    panel = dens.merge(rl, on=["region", "year"], how="left")
+    panel.round(4).to_csv(tdir / "drought_regional_panel_data.csv", index=False)
+    prow = []
+    for col in [c for c in rl.columns if "|" in c]:
+        s = D.panel_stats(panel, "lvm_620_ha_per_1000ha", col, d.n_perm, d.n_boot, d.seed)
+        f, lag = col.split("|")
+        prow.append({"feature": f, "lag": lag} | {k: v for k, v in s.items() if k != "feature"})
+    pd.DataFrame(prow).round(3).to_csv(tdir / "drought_regional_panel.csv", index=False)
+    sparse = None
+    if d.lvm_cells and cfg.lvm is not None:
+        g = LV.load_damage(cfg.lvm)
+        g = g[(g["subtype"] == cfg.lvm.stem_pest) & ~g["empty"] & g["year"].between(y0, y1)].to_crs(4326)
+        rp = g.geometry.representative_point()
+        key = pd.DataFrame({"year": g["year"].astype(int).to_numpy(),
+                            "latitude": np.round(np.round(rp.y.to_numpy() / 0.1) * 0.1, 1),
+                            "longitude": np.round(np.round(rp.x.to_numpy() / 0.1) * 0.1, 1)})
+        key = key.merge(cells[["latitude", "longitude"]], on=["latitude", "longitude"])
+        per = key.groupby(["year", "latitude", "longitude"]).size()
+        sparse = pd.DataFrame({"polygons": key.groupby("year").size(),
+                               "cells_with_polygon": per.groupby("year").size(),
+                               "cells_in_latvia": len(cells),
+                               "median_polygons_per_nonempty_cell": per.groupby("year").median()})
+        sparse["share_cells_with_polygon"] = (sparse["cells_with_polygon"] / len(cells)).round(3)
+        sparse.to_csv(tdir / "drought_lvm_cells_sparsity.csv")
+
+    # --- 3. events -------------------------------------------------------------------------------------------------
+    ev = D.event_table({**damage, "cwb_z (Latvijas vid.)": nat["cwb_z"]}, d.events)
+    ev.round(3).to_csv(tdir / "drought_events_national.csv", index=False)
+    m11 = read_csp(cfg.stats.meb011_owner, 3)
+    m11 = m11[(m11["Meža bojājumi"] == "..kaitēkļu izraisīti stumbru bojājumi") & (m11["Meža īpašuma forma"] == "Pavisam")
+              & m11["Teritoriālā vienība"].isin(list(LV.MEB011_REGIONS))]
+    m11 = m11.assign(region=m11["Teritoriālā vienība"].map(LV.MEB011_REGIONS))
+    e23 = reg_feat["cwb_z"].unstack("year")[[2022, 2023, 2024]].add_prefix("cwb_z_")
+    e23 = e23.join(dens.pivot(index="region", columns="year", values="lvm_620_ha_per_1000ha")[[2022, 2023, 2024]]
+                   .add_prefix("lvm620_ha_per_1000ha_"))
+    for ind, tag in ((ha, "meb011_dead_ha"), (m3, "meb011_km3")):
+        e23 = e23.join(m11[m11["indicator"] == ind].pivot(index="region", columns="year", values="value")
+                       .add_prefix(f"{tag}_"))
+    e23["lvm620_ratio_2024_2022"] = e23["lvm620_ha_per_1000ha_2024"] / e23["lvm620_ha_per_1000ha_2022"]
+    e23["meb011_dead_ha_ratio_2024_2022"] = e23["meb011_dead_ha_2024"] / e23["meb011_dead_ha_2022"]
+    e23["meb011_dead_ha_ratio_2025_2022"] = e23["meb011_dead_ha_2025"] / e23["meb011_dead_ha_2022"]
+    e23["region_area_ha"] = regions.set_index("NAME_LATN").to_crs(3035).area.reindex(e23.index) / 1e4
+    e23.round(3).to_csv(tdir / "drought_event_2023_regions.csv")
+
+    # --- figures ---------------------------------------------------------------------------------------------------
+    figs = {"series": viz.drought_series(nat, damage, cfg.storms, fdir / "rm4b_sausums_gadi.png"),
+            "regions": viz.drought_regions(reg_feat.reset_index(), dens, (y0, y1), fdir / "rm4b_sausums_regioni.png")}
+    out = {"national_rows": len(lt), "regional_rows": len(prow),
+           "sparsity": None if sparse is None else sparse[["polygons", "cells_with_polygon"]].to_dict()}
+    typer.echo(json.dumps(out, indent=1, default=str, ensure_ascii=False))
+    for n, f in figs.items():
+        typer.echo(f"{n}: {f}")
+    _metadata(cfg, "drought_compare", {"inputs": {k: str(v) for k, v in d.model_dump().items() if "Path" in type(v).__name__},
+                                       "n_perm": d.n_perm, "n_boot": d.n_boot, "seed": d.seed})
+
+
+@app.command("features-pilot")
+def features_pilot(config: Path = ConfigArg):
+    """Stage 6a (user 2026-11-04): pilot block training table (cell x year, LVM 620 labels, features <= t-1),
+    leakage record (years used per feature and year), descriptive statistics (no model), time / memory."""
+    import xarray as xr
+
+    from . import features as F
+    from . import features_io as FIO
+    from . import viz
+
+    cfg = load_config(config)
+    if cfg.features is None:
+        raise typer.BadParameter("config has no `features` section")
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fdir.mkdir(parents=True, exist_ok=True)
+    tab, info = FIO.training_table(cfg)
+    used = info.pop("years_used")
+    lk = pd.DataFrame([{"year": t, "feature": k, "years": " ".join(map(str, v)), "max_offset": max(v) - t,
+                        "min_offset": min(v) - t} for t, fu in used.items() for k, v in fu.items()])
+    lk.to_csv(tdir / "pilot_leakage_years_used.csv", index=False)
+    if (lk["max_offset"] >= 0).any():
+        raise typer.Exit(5)
+    ds = xr.Dataset({c: ("row", tab[c].to_numpy()) for c in tab.columns if c != "source"},
+                    attrs={"source": cfg.features.source, "block_3059": str(cfg.features.block_3059),
+                           "schema": "cell_id (EFDA v3.0 grid row * width + col), year, label, source, confidence"})
+    enc = {c: {"zlib": True, "complevel": 4} for c in ds.data_vars}
+    ds.to_netcdf(tdir / "training_pilot.nc", engine="h5netcdf", encoding=enc)
+    feats = [c for c in tab.columns if c not in ("cell_id", "year", "label", "confidence", "source", "in_set", "hrl_after_t")]
+    py, dist = F.describe(tab, feats)
+    py.to_csv(tdir / "pilot_positives_by_year.csv", index=False)
+    dist.round(4).to_csv(tdir / "pilot_feature_distributions.csv", index=False)
+    byyear = []
+    for t, g in tab[tab["in_set"] == 1].groupby("year"):
+        _, d = F.describe(g, ["p620_dist_t1", "p620_ha2k_t1", "p620_dist_t23", "cut_dist_t13", "cwb_z_t1", "tsum_F1_t1"])
+        byyear.append(d.assign(year=t))
+    pd.concat(byyear).round(4).to_csv(tdir / "pilot_feature_distributions_by_year.csv", index=False)
+    show = [("p620_dist_t1", "LVM 620 t−1: attālums, m", False), ("p620_ha2k_t1", "LVM 620 t−1: ha 2 km", True),
+            ("p620_dist_t23", "LVM 620 t−2..t−3: attālums, m", False), ("p620_ha500_t1", "LVM 620 t−1: ha 500 m", True),
+            ("efda1_dist_t1", "EFDA klase 1 t−1: attālums, m (jutīgums)", False),
+            ("cut_dist_t13", "EFDA cirte t−1..t−3: attālums, m", False),
+            ("hrl_conifer_share_500m", "HRL 2018 skujkoku daļa 500 m", False), ("chm_p90", "CHMv2 p90, m (t ≥ 2020)", False),
+            ("cwb_z_t1", "cwb_z t−1", False), ("cwb_z_t12", "cwb_z t−1 + t−2", False), ("tsum_F1_t1", "Tsum_F1 t−1", False),
+            ("years_since_dist", "gadi kopš EFDA traucējuma (99: nav)", False)]
+    figs = {"overview": viz.pilot_overview(py, fdir / "rm6a_pilots_pozitivie.png"),
+            "features": viz.pilot_features(tab, show, fdir / "rm6a_pilots_pazimes.png")}
+    info |= {"rows": len(tab), "rows_in_set": int(tab["in_set"].sum()), "positives": int(tab["label"].sum()),
+             "positives_in_set": int(tab.loc[tab["in_set"] == 1, "label"].sum()),
+             "file_mb": round((tdir / "training_pilot.nc").stat().st_size / 2 ** 20, 1)}
+    (tdir / "pilot_info.json").write_text(json.dumps(info, indent=1, default=str), encoding="utf-8")
+    typer.echo(json.dumps(info, indent=1, default=str))
+    typer.echo(py.to_string(index=False))
+    for n, f in figs.items():
+        typer.echo(f"{n}: {f}")
+    _metadata(cfg, "features_pilot", {"block_3059": cfg.features.block_3059, "years": cfg.features.years,
+                                      "chm_tiles": info["chm"].get("tiles")})
+
+
+@app.command("picea-fetch")
+def picea_fetch(config: Path = ConfigArg, margin_m: float = typer.Option(6000.0, help="around Latvia (3035)")):
+    """Picea abies probability (Bonannella et al. 2022, Zenodo 6961187 v3, CC BY 4.0), periods of
+    `features.picea_periods`: windows over Latvia + margin read from the Europe-wide COGs (HTTP range, no full
+    file) into `features.picea_dir` (user 2026-11-05: pilot block, all of Latvia only if < 1 GB)."""
+    from . import features_io as FIO
+    from .efda import country_regions
+
+    cfg = load_config(config)
+    x0, y0, x1, y1 = country_regions(cfg.boundaries).total_bounds
+    b = (x0 - margin_m, y0 - margin_m, x1 + margin_m, y1 + margin_m)
+    info = FIO.picea_fetch(cfg, b)
+    tdir = cfg.run_dir / "tables"
+    tdir.mkdir(parents=True, exist_ok=True)
+    (tdir / "picea_fetch.json").write_text(json.dumps({"bounds_3035": b, "files": info}, indent=1), encoding="utf-8")
+    typer.echo(json.dumps(info, indent=1))
+    _metadata(cfg, "picea_fetch", {"bounds_3035": b, "files": info})
+
+
+@app.command("features-latvia")
+def features_latvia(config: Path = ConfigArg, limit: int = typer.Option(0, help="process at most N new blocks")):
+    """Stage 6b (user 2026-11-05; run on the server): feature table for LVM land in all of Latvia, WITHOUT CHMv2.
+    20 km blocks (`FIO.latvia_blocks`), one file per block <run_dir>/blocks/block_<x0>_<y0>.nc with one group per
+    year (y2013 ...); blocks already written are skipped (resume). Log: <run_dir>/logs/features_latvia.jsonl
+    (time, rows, positives, traced peak memory, process max RSS). Exit 5 on any feature reading a year >= t."""
+    import time
+    import tracemalloc
+
+    import xarray as xr
+
+    from . import features_io as FIO
+
+    try:
+        import resource                                     # Linux / server only
+    except ImportError:
+        resource = None
+    cfg = load_config(config)
+    fc = cfg.features
+    if fc.chm:
+        raise typer.BadParameter("features-latvia runs without CHMv2 (user 2026-11-05): set features.chm: false")
+    bdir, ldir, tdir = cfg.run_dir / "blocks", cfg.run_dir / "logs", cfg.run_dir / "tables"
+    for d in (bdir, ldir, tdir):
+        d.mkdir(parents=True, exist_ok=True)
+    blocks = FIO.latvia_blocks(cfg)
+    pd.DataFrame(blocks, columns=["x0", "y0", "x1", "y1"]).to_csv(tdir / "latvia_blocks.csv", index=False)
+    climate = FIO.climate_table(fc.climate_dir)
+    log = ldir / "features_latvia.jsonl"
+    done = 0
+    typer.echo(f"{len(blocks)} blocks; {sum((bdir / f'block_{int(b[0])}_{int(b[1])}.nc').exists() for b in blocks)} done")
+    for k, b in enumerate(blocks):
+        out = bdir / f"block_{int(b[0])}_{int(b[1])}.nc"
+        if out.exists():
+            continue
+        if limit and done >= limit:
+            break
+        t0 = time.time()
+        tracemalloc.start()
+        bc = cfg.model_copy(update={"features": fc.model_copy(update={"block_3059": list(b)})})
+        inp, ctx, chm, _ = FIO.block_context(bc, climate)
+        t_in = time.time() - t0
+        tmp = out.with_suffix(".part")
+        tmp.unlink(missing_ok=True)
+        rows = pos = pos_set = 0
+        max_off = -99
+        for i, t in enumerate(range(fc.years[0], fc.years[1] + 1)):
+            tab, used = FIO.year_rows(bc, inp, ctx, chm, t)
+            max_off = max(max_off, max(max(v) - t for v in used.values()))
+            if max_off >= 0:
+                typer.echo(f"STOP: leakage in block {b}, year {t}: {used}")
+                raise typer.Exit(5)
+            ds = xr.Dataset({c: ("row", tab[c].to_numpy()) for c in tab.columns if c != "source"},
+                            attrs={"source": fc.source, "block_3059": str(list(b)), "year": t})
+            ds.to_netcdf(tmp, group=f"y{t}", mode="w" if i == 0 else "a", engine="h5netcdf",
+                         encoding={c: {"zlib": True, "complevel": 4} for c in ds.data_vars})
+            rows += len(tab)
+            pos += int(tab["label"].sum())
+            pos_set += int(tab.loc[tab["in_set"] == 1, "label"].sum())
+            del tab, ds
+        tmp.replace(out)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        rec = {"time_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"), "k": k, "n_blocks": len(blocks),
+               "block_3059": list(b), "cells": int((inp["inner"] & inp["forest"] & inp["lvm_land"]).sum()),
+               "rows": rows, "positives": pos, "positives_in_set": pos_set, "polygons_620_in_window": inp["n_polygons"],
+               "max_offset": max_off, "seconds_inputs": round(t_in, 1), "seconds_total": round(time.time() - t0, 1),
+               "peak_traced_mb": round(peak / 2 ** 20, 1),
+               "max_rss_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1) if resource else None,
+               "file_mb": round(out.stat().st_size / 2 ** 20, 2)}
+        with log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+        typer.echo(json.dumps(rec))
+        done += 1
+        del inp, ctx
+    n_done = sum((bdir / f"block_{int(b[0])}_{int(b[1])}.nc").exists() for b in blocks)
+    typer.echo(f"blocks done: {n_done} / {len(blocks)}")
+    _metadata(cfg, "features_latvia", {"blocks": len(blocks), "done": n_done, "chm": False, "years": fc.years})
+
+
+@app.command("models-pilot")
+def models_pilot(config: Path = ConfigArg, spatial: bool = typer.Option(True, help="also spatial-tile folds")):
+    """Stage 7a (user 2026-11-05): baselines + HistGradientBoosting variants A / B / B_chm / C on the PILOT block,
+    expanding-window validation in time (test 2020-2024) and spatial tiles, metrics per year for all cells and new
+    foci (> 500 m from LVM 620 t-1), cluster-bootstrap CI, paired differences, permutation importance."""
+    import time
+
+    import xarray as xr
+    from sklearn.inspection import permutation_importance
+
+    from . import models as M
+    from . import viz
+    from .efda import layer
+
+    cfg = load_config(config)
+    mc = cfg.models
+    if mc is None:
+        raise typer.BadParameter("config has no `models` section")
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    tdir.mkdir(parents=True, exist_ok=True)
+    fdir.mkdir(parents=True, exist_ok=True)
+    t_start = time.time()
+    with xr.open_dataset(mc.table, engine="h5netcdf") as ds:
+        d = ds.to_dataframe().reset_index(drop=True)
+    d = d[d["in_set"] == 1].reset_index(drop=True)
+    with rasterio.open(layer(cfg.efda.main, "agent")) as s:
+        d["tile"] = M.tiles(d["cell_id"].to_numpy(), s.transform, s.width, mc.zoom)
+    d["new"] = d["p620_dist_t1"] > mc.new_focus_m
+    folds = M.group_folds(d["tile"].to_numpy(), mc.n_folds, mc.seed)
+    d["fold"] = d["tile"].map(folds)
+    subsets = {"visi": None, "jaunie": "new"}
+    rows, diffs, perm, fold_rows, train_info = [], [], [], [], []
+    pairs = [("dist_t1", "A"), ("dist_t1", "A_mono"), ("dist_t1", "B"), ("dist_t1", "C"), ("A", "B"), ("A", "C"), ("B", "C"), ("B", "B_chm"), ("dist_t23", "A")]
+
+    def ev(scheme, t, model, test, s):
+        for sub, col in subsets.items():
+            m = np.ones(len(test), bool) if col is None else test[col].to_numpy()
+            r = M.evaluate(test["label"].to_numpy()[m], s[m], test["tile"].to_numpy()[m], mc.n_boot, mc.seed + t)
+            rows.append({"scheme": scheme, "year": t, "subset": sub, "model": model} | r)
+
+    for t in range(mc.test_years[0], mc.test_years[1] + 1):
+        t0 = time.time()
+        test = d[d["year"] == t].reset_index(drop=True)
+        pool = d[d["year"] < t]
+        tr = M.subsample(pool, mc.neg_ratio, mc.seed + t)
+        train_info.append({"year": t, "train_years": f"{int(pool['year'].min())}-{t - 1}", "train_rows": len(tr),
+                           "train_pos": int(tr["label"].sum()), "test_rows": len(test), "test_pos": int(test["label"].sum()),
+                           "test_new_rows": int(test["new"].sum()), "test_new_pos": int(test.loc[test["new"], "label"].sum())})
+        scores = {b: M.baseline_score(test, b) for b in M.BASELINES}
+        for b, s in scores.items():
+            ev("laiks", t, b, test, s)
+        for v, feats in M.VARIANTS.items():
+            mdl = M.fit(tr, feats, mc.hgb, mc.seed, M.MONO.get(v))
+            scores[v] = M.score(mdl, test, feats)
+            ev("laiks", t, v, test, scores[v])
+            if v in ("A", "B", "C"):
+                for sub, col in subsets.items():
+                    m = np.ones(len(test), bool) if col is None else test[col].to_numpy()
+                    pi = permutation_importance(mdl, test.loc[m, feats].to_numpy(np.float32), test.loc[m, "label"].to_numpy(),
+                                                scoring="average_precision", n_repeats=mc.perm_repeats,
+                                                random_state=mc.seed, n_jobs=1)
+                    for i, f in enumerate(feats):
+                        perm.append({"year": t, "model": v, "subset": sub, "feature": f,
+                                     "importance_mean": pi.importances_mean[i], "importance_std": pi.importances_std[i]})
+        for a, b in pairs:
+            for sub, col in subsets.items():
+                m = np.ones(len(test), bool) if col is None else test[col].to_numpy()
+                r = M.paired_diff(test["label"].to_numpy()[m], scores[a][m], scores[b][m], test["tile"].to_numpy()[m],
+                                  mc.n_boot, mc.seed + t)
+                diffs.append({"year": t, "subset": sub, "base": a, "model": b} | r)
+        if spatial:
+            for f in range(mc.n_folds):
+                tm = test["fold"] == f
+                fold_rows.append({"year": t, "fold": f, "tiles": int(test.loc[tm, "tile"].nunique()), "test_rows": int(tm.sum()),
+                                  "test_pos": int(test.loc[tm, "label"].sum()),
+                                  "test_new_pos": int(test.loc[tm & test["new"], "label"].sum())})
+            for v, feats in M.VARIANTS.items():
+                s_sp = np.full(len(test), np.nan)
+                for f in range(mc.n_folds):
+                    tm = (test["fold"] == f).to_numpy()
+                    if not tm.any():
+                        continue
+                    trf = M.subsample(pool[pool["fold"] != f], mc.neg_ratio, mc.seed + t * 10 + f)
+                    s_sp[tm] = M.score(M.fit(trf, feats, mc.hgb, mc.seed, M.MONO.get(v)), test[tm], feats)
+                ev("laiks+telpa", t, v, test, s_sp)
+        typer.echo(f"test {t}: {time.time() - t0:.0f} s")
+    met = pd.DataFrame(rows)
+    met.round(5).to_csv(tdir / "rm7a_metrics.csv", index=False)
+    pd.DataFrame(diffs).round(5).to_csv(tdir / "rm7a_paired_differences.csv", index=False)
+    pm = pd.DataFrame(perm)
+    pm.round(6).to_csv(tdir / "rm7a_permutation_importance.csv", index=False)
+    pd.DataFrame(fold_rows).to_csv(tdir / "rm7a_spatial_folds.csv", index=False)
+    pd.DataFrame(train_info).to_csv(tdir / "rm7a_train_test_sizes.csv", index=False)
+    figs = {"metrics": viz.model_metrics(met[met["scheme"] == "laiks"], fdir / "rm7a_metrikas.png"),
+            "importance": viz.model_importance(pm[pm["model"] == "C"], fdir / "rm7a_nozimigums.png")}
+    if spatial:
+        figs["spatial"] = viz.model_metrics(met[met["scheme"] == "laiks+telpa"], fdir / "rm7a_metrikas_telpa.png",
+                                            title_suffix=" (laiks + telpiskie bloki)")
+    info = {"rows_in_set": len(d), "tiles": int(d["tile"].nunique()), "seconds": round(time.time() - t_start, 1),
+            "variants": M.VARIANTS, "baselines": M.BASELINES, "hgb": mc.hgb, "neg_ratio": mc.neg_ratio, "seed": mc.seed,
+            "n_boot": mc.n_boot, "zoom": mc.zoom, "n_folds": mc.n_folds, "new_focus_m": mc.new_focus_m}
+    (tdir / "rm7a_info.json").write_text(json.dumps(info, indent=1, default=str), encoding="utf-8")
+    typer.echo(json.dumps({k: info[k] for k in ("rows_in_set", "tiles", "seconds")}))
+    for n, f in figs.items():
+        typer.echo(f"{n}: {f}")
+    _metadata(cfg, "models_pilot", {"table": str(mc.table), "test_years": mc.test_years})

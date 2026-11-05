@@ -164,6 +164,9 @@ class ClimateConfig(BaseModel):
     points: list[Point] = Field(default_factory=list)      # e.g. Kalsnava (nearest ERA5 node is used)
     grid_buffer_cells: int = 1       # ERA5 nodes whose 0.25 deg cell touches Latvia + this many rings
     years: tuple[int, int] = (2018, 2026)                  # RITY-2 and annual outputs
+    # extra years whose phenology months (pheno_start..pheno_end) are downloaded and run through RITY-2 (user
+    # 2026-11-04: 2011-2017, so that Tsum t-1 / t-2 exists for the LVM 620 labels from 2013)
+    pheno_extra_years: tuple[int, int] | None = None
     baseline: tuple[int, int] = (1991, 2020)               # water balance reference period
     wb_months: tuple[int, int] = (4, 9)                    # P - ET0 summed over these months (incl.)
     pheno_start: str = "01-01"       # weather window per year for phenology (PHENIPS-Clim sums from 1 Jan)
@@ -172,6 +175,62 @@ class ClimateConfig(BaseModel):
     main_scenario: str = "AVG"
     check_date: date | None = None   # sanity check: public flight onset date (Silava, 2023)
     check_source: str = ""
+
+
+class DroughtConfig(BaseModel):
+    """Drought comparison after stage 4 (descriptive; user 2026-11-04). Reads existing outputs only."""
+    climate_dir: Path                # stage 4 run dir (tables/lv_*.csv, latvia/*_cells.csv)
+    efda_counts: Path                # stage 5 efda_annual_counts.csv (EFDA px per year x agent x region)
+    lvm_annual: Path                 # stage 5a lvm_620_vs_csp_meb012.csv
+    lvm_regions: Path                # stage 5a lvm_620_by_region.csv
+    damage_years: tuple[int, int] = (2013, 2024)   # complete CSP / LVM years
+    efda_version: str = "v3.0.0"
+    events: list[int] = Field(default_factory=lambda: [2002, 2006, 2018, 2023])
+    lvm_cells: bool = True           # 0.1 deg sparsity check of the LVM polygons (needs `lvm`)
+    n_perm: int = 9999
+    n_boot: int = 9999
+    seed: int = 20261104
+    min_n_ci: int = 8
+
+
+class FeaturesConfig(BaseModel):
+    """Stage 6a pilot block (user 2026-11-04): feature layers + training table on the EFDA 30 m grid."""
+    block_3059: list[float]          # x0, y0, x1, y1 in LKS-92 (EPSG:3059)
+    margin_m: float = 5000.0         # inputs read this far around the block (distances capped at 5 km)
+    years: tuple[int, int] = (2013, 2024)
+    k_exclude: int = 5               # cells with an EFDA disturbance in t-k..t-1 are out of the training set (2.5)
+    climate_dir: Path                # stage 4 run dir (latvia/water_balance_cells.csv, latvia/rity2_cells.csv)
+    hrl_dlt: Path                    # HRL DLT 2018, 100 m, Latvia (0 no trees, 1 broadleaf, 2 conifer)
+    chm: bool = True
+    chm_url: str = "https://dataforgood-fb-data.s3.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/chm/{qk}.tif"
+    chm_from_year: int = 2020        # L2: CHMv2 (imagery ~2018) only for t >= 2020
+    source: str = "lvm620_wayback20250503"
+    # Picea abies realized distribution, probability 0-100 (Bonannella et al. 2022, Zenodo 6961187 v3, CC BY 4.0);
+    # windows over Latvia (+ margin) cached by `picea-fetch`; for year t the latest period ending <= t-1 is used (2.4)
+    picea_dir: Path | None = None
+    picea_url: str = ("https://zenodo.org/api/records/6961187/files/"
+                      "veg_picea.abies_anv.eml_p_30m_0..0cm_{a}..{b}_eumap_epsg3035_v0.3.tif/content")
+    picea_periods: list[tuple[int, int]] = Field(default_factory=lambda: [(2006, 2010), (2010, 2014), (2014, 2018),
+                                                                         (2018, 2020)])
+    # all of Latvia (stage 6b, user 2026-11-05): 20 km LKS-92 blocks aligned with `block_3059`, kept if they
+    # intersect LVM land; one output file per block (resumable)
+    block_size_m: float = 20000.0
+
+
+class ModelsConfig(BaseModel):
+    """Stage 7a (user 2026-11-05): first models on the pilot block training table."""
+    table: Path                                  # training_pilot.nc (stage 6a)
+    test_years: tuple[int, int] = (2020, 2024)   # expanding window: train <= t-1, test t
+    neg_ratio: float = 10.0                      # L5: negatives 1:10 per training year, weighted
+    seed: int = 20261105
+    n_boot: int = 999                            # cluster bootstrap over spatial tiles of the test year
+    zoom: int = 12                               # Web Mercator tiles for spatial blocks (~5 km at 57 N)
+    n_folds: int = 5
+    new_focus_m: float = 500.0                   # "new foci": > this distance from any LVM 620 t-1 polygon
+    perm_repeats: int = 5
+    hgb: dict = Field(default_factory=lambda: {"learning_rate": 0.05, "max_iter": 300, "max_leaf_nodes": 31,
+                                               "min_samples_leaf": 100, "l2_regularization": 1.0,
+                                               "early_stopping": False})
 
 
 class RiskConfig(BaseModel):
@@ -187,6 +246,9 @@ class RiskConfig(BaseModel):
     kalsnava: KalsnavaConfig | None = None
     lvm: LvmConfig | None = None
     climate: ClimateConfig | None = None
+    drought: DroughtConfig | None = None
+    features: FeaturesConfig | None = None
+    models: ModelsConfig | None = None
 
     @property
     def run_dir(self) -> Path:
