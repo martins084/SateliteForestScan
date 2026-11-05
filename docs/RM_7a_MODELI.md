@@ -273,7 +273,22 @@ Pašreizējais MVR (data.gov.lv, 2026-10-14), nogabals pie šūnas centra:
 
 ## 8. Servera Latvijas pazīmju tabula (bez CHMv2) [P]
 
-(sk. zemāk, aizpildīts pēc pabeigšanas)
+`mezasargs-risk features-latvia configs/rm_6b_latvija.yaml` serverī (2 vCPU, 3,7 GB RAM), tmux, secīgi pa blokiem,
+ar atsākšanu. **PABEIGTS 2026-11-05 12:57 UTC.**
+
+| | |
+|---|---|
+| Bloki | **205 / 205** (20 km LKS-92 režģis ar LVM zemi; tukšu nav; `.part` failu nav) |
+| Šūnas analīzes kopā (meža zeme ∩ LVM) | 17 101 809 (30 m) |
+| Rindas (šūna × gads 2013–2024) | 205 221 708 |
+| Pozitīvās (LVM 620) šūnu-gadi | 570 593, no tām `in_set` 534 663 |
+| Noplūdes pārbaude | `max_offset` = −1 visos blokos (nevienā pazīmē nav gada ≥ t ievaddatu) |
+| Laiks | 1. palaidiens: 6 min 52 s, bloki 0–11, pēc tam kļūda bloka 12 malā (EXIT 1). 2. palaidiens: 1 h 55 min, bloki 12–204, EXIT 0. Bloks 23–52 s |
+| Atmiņa | max RSS 807 MB (`/usr/bin/time`), tracemalloc maksimums 460 MB |
+| Apjoms | 4,7 GB (`output/rm6b_latvija/blocks/block_<x0>_<y0>.nc`, h5netcdf grupas y2013…y2024); diskā brīvi 13 GB |
+| Kods | serverī commits `3060345` (boundless lasīšana). Skaidrā `valid` maska (`c1b426b`) dod to pašu rezultātu, jo ārpus rastra meža maska = 0; pārbaudīts blokiem 12–14 |
+
+Izvade ir **tikai serverī**: uz laptopu nekas nav kopēts, git arī ne. CHMv2 Latvijai nav lasīts.
 
 ## 9. Ierobežojumi un nākamie soļi (lēmumi lietotājam)
 
