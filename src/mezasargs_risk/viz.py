@@ -752,19 +752,30 @@ def model_metrics(met: pd.DataFrame, path: Path, title_suffix: str = "") -> Path
         for j, (col, ptitle) in enumerate(panels):
             ax = axes[i, j]
             k = 100 if col.startswith("hit") else 1
-            top = 0
+            gs = met[met["subset"] == sub]
+            # y range from the point estimates; a CI longer than that (few tiles -> very wide) is cut and marked ^
+            pt = float(np.nanmax(gs[col].to_numpy())) * k if gs[col].notna().any() else 1.0
+            cap = min(float(np.nanmax(gs[f"{col}_hi"].to_numpy())) * k, pt * 1.6) if gs[f"{col}_hi"].notna().any() else pt
+            cut = False
             for o, m in zip(off, models):
-                g = met[(met["subset"] == sub) & (met["model"] == m)].sort_values("year")
+                g = gs[gs["model"] == m].sort_values("year")
                 if g.empty:
                     continue
                 lab, c, ls = MODEL_STYLE[m]
                 yv, lo, hi = g[col] * k, g[f"{col}_lo"] * k, g[f"{col}_hi"] * k
-                top = max(top, float(np.nanmax(hi.to_numpy())) if hi.notna().any() else 0)
-                ax.errorbar(g["year"] + o, yv, yerr=[(yv - lo).clip(lower=0), (hi - yv).clip(lower=0)], color=c, ls=ls,
+                hic = hi.clip(upper=cap)
+                ax.errorbar(g["year"] + o, yv, yerr=[(yv - lo).clip(lower=0), (hic - yv).clip(lower=0)], color=c, ls=ls,
                             lw=1.3, marker="o", ms=3.5, elinewidth=0.8, capsize=0, label=lab)
+                over = (hi > cap).to_numpy()
+                if over.any():
+                    cut = True
+                    ax.plot((g["year"] + o).to_numpy()[over], np.full(over.sum(), cap), "^", ms=3.5, color=c, lw=0)
             if col == "ap_ratio":
                 ax.axhline(1, color=INK2, lw=0.8, ls=":", zorder=0)
-            ax.set_ylim(0, top * 1.08 if top > 0 else 1)
+            ax.set_ylim(0, cap * 1.05 if cap > 0 else 1)
+            if cut:
+                ax.text(0.99, 0.98, "▲ TI augšējā robeža ārpus ass", transform=ax.transAxes, ha="right", va="top",
+                        fontsize=6, color=INK2)
             if i == 0:
                 ax.set_title(ptitle, loc="left", fontsize=8)
             if j == 0:

@@ -125,14 +125,16 @@ def subsample(d: pd.DataFrame, ratio: float, seed: int) -> pd.DataFrame:
 def fit(train: pd.DataFrame, feats: list[str], params: dict, seed: int, mono: dict | None = None):
     from sklearn.ensemble import HistGradientBoostingClassifier
 
+    feats = [f for f in feats if train[f].notna().any()]    # e.g. CHMv2 when every training year is < 2020
     extra = {"monotonic_cst": [mono.get(f, 0) for f in feats]} if mono else {}
     m = HistGradientBoostingClassifier(random_state=seed, **params, **extra)
     m.fit(train[feats].to_numpy(np.float32), train["label"].to_numpy(), sample_weight=train["w"].to_numpy())
+    m.feats_ = feats
     return m
 
 
-def score(model, d: pd.DataFrame, feats: list[str]) -> np.ndarray:
-    return model.predict_proba(d[feats].to_numpy(np.float32))[:, 1]
+def score(model, d: pd.DataFrame, feats: list[str] | None = None) -> np.ndarray:
+    return model.predict_proba(d[model.feats_].to_numpy(np.float32))[:, 1]
 
 
 def baseline_score(d: pd.DataFrame, name: str) -> np.ndarray:

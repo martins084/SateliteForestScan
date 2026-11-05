@@ -200,6 +200,29 @@ Sk. `docs/RM_4b_SAUSUMS.md`.
   305:273–281, doi:10.1016/j.foreco.2013.06.003 [P bibliogrāfija].
   - OpenAlex: slēgta piekļuve → **saturs nav atvērts [N]**.
 
+## 6b / 7a posms — Picea, MVR vēsture (2026-11-05)
+
+**Picea abies varbūtība (Bonannella u. c. 2022; Zenodo 6961187 v3, CC BY 4.0)** [P]
+- URL veidne: `https://zenodo.org/api/records/6961187/files/veg_picea.abies_anv.eml_p_30m_0..0cm_{a}..{b}_eumap_epsg3035_v0.3.tif/content`.
+  Formāts: COG, EPSG:3035, 30 m, deflate, nodata = 0, maksimālā derīgā vērtība 99.
+- `mezasargs-risk picea-fetch` ar `/vsicurl` nolasa tikai Latvijas logu (+6 km rezerve). Logs ir 9 309 × 15 209 px.
+- 4 periodi: 2006–10, 2010–14, 2014–18, 2018–20. Katrs fails 29,6–33,1 MB, kopā ~128 MB.
+  - Saglabāti: `cache/rm/picea/picea_anv_p_{a}_{b}_LV3035.tif` (nav git). Pilnās Eiropas flīzes nav lejupielādētas.
+- Gadam t lieto jaunāko periodu, kas beidzas ≤ t−1. Pazīmes: `picea_p` (šūna) un `picea_p500` (vidējais 500 m).
+- Atsauce: Bonannella u. c. (2022) [N: pilnā bibliogrāfija no Zenodo apraksta vēl jāpārraksta].
+
+**MVR vēsturisko versiju pārbaude (bez lejupielādes)** [P, ja nav norādīts citādi]
+- data.gov.lv "Meža valsts reģistra meža dati" (CC0) izveidota 2022-08-31.
+  - Resursi tiek pārrakstīti vietā. CKAN `package_activity_list` nav pieejams.
+- Wayback 2023-01-23 lapa rāda 11 failus `*_04jan2023.7z`. Tie nav arhivēti un data.gov.lv vairs nav pieejami.
+- Wayback CDX: tikai 2025-05-05…07 kopijas no 5 pašreizējiem arhīviem (84–129 MB katrs, ~508 MB). Nav lejupielādētas.
+- CDX prefiksu meklēšana bija daļēji nepieejama → [N].
+- Detaļas: `RM_7a_MODELI.md` 6. sadaļa.
+
+**Instalētas bibliotēkas (lietotāja atļauja 2026-11-05):** scikit-learn 1.9.1 (BSD-3-Clause), ar atkarībām joblib
+(BSD-3-Clause), threadpoolctl (BSD-3-Clause), narwhals (MIT) [N: atkarību licences no PyPI metadatiem nav atkārtoti
+pārbaudītas].
+
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 
 | Pakotne | Versija (PyPI) | Licence [P] |

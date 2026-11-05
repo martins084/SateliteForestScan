@@ -125,3 +125,26 @@ def test_mean_within_ignores_nan():
     x[10, 10], x[10, 11] = 10.0, 20.0
     m = F.mean_within(x, 100)
     assert m[10, 10] == pytest.approx(15.0, abs=1e-3) and np.isnan(m[0, 0])
+
+
+def test_boundless_edge_cells_are_nodata_and_outside_the_set(tmp_path):
+    import rasterio
+    from rasterio.transform import from_origin
+    from rasterio.windows import Window
+
+    from mezasargs_risk import features_io as FIO
+
+    prof = {"driver": "GTiff", "width": 10, "height": 10, "count": 1, "dtype": "uint8", "crs": "EPSG:3035",
+            "transform": from_origin(0, 300, 30, 30)}
+    with rasterio.open(tmp_path / "forest.tif", "w", nodata=0, **prof) as d:
+        d.write(np.ones((1, 10, 10), np.uint8))           # all forest inside the raster
+    with rasterio.open(tmp_path / "agent.tif", "w", nodata=255, **prof) as d:
+        d.write(np.full((1, 10, 10), 3, np.uint8))        # harvest everywhere inside
+    w = Window(6, -2, 8, 8)                                # crosses the right and top edges
+    with rasterio.open(tmp_path / "forest.tif") as fm, rasterio.open(tmp_path / "agent.tif") as ag:
+        forest = FIO.read_boundless(fm, 1, w) == 1
+        agent = FIO.read_boundless(ag, 1, w)
+        valid = FIO.inside_raster(w, fm.height, fm.width)
+    assert forest.shape == agent.shape == valid.shape == (8, 8)
+    assert valid.sum() == 6 * 4 and (forest == valid).all()          # outside: not forest, not valid
+    assert (agent[~valid] == 255).all() and (agent[valid] == 3).all()  # outside: nodata, not "no disturbance" data

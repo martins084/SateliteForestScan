@@ -607,7 +607,7 @@ Visas pazīmes gadam t — tikai no datiem ≤ t−1 (kodā `features.Ctx.layer`
 | | `years_since_dist` (99 = nav 10 gados); ≤ k = 5 → ārpus apmācības kopas (2.5) | EFDA 1–3 | ≤ t−1 | izslēgšana / pazīme |
 | **Audze** | `hrl_conifer_100m`, `hrl_conifer_share_500m` | HRL DLT 2018 (100 m) | 2018 (karogs `hrl_after_t` t ≤ 2018) | uzņēmība |
 | | `chm_mean`, `chm_p90`, `chm_gt5` | CHMv2 (attēli ~2018) | tikai t ≥ 2020 (L2) | uzņēmība, variants |
-| | egles varbūtība (Picea) | Bonannella u. c. 2022 | — | **pilotā nav** (bloka lejupielāde nav veikta) |
+| | `picea_p`, `picea_p500` egles varbūtība (šūna, 500 m vidējā) | Bonannella u. c. 2022 (Zenodo 6961187 v3) | jaunākais periods, kas beidzas ≤ t−1 (2006–10 / 2010–14 / 2014–18 / 2018–20) | uzņēmība (2026-11-05; piesātināta — lēmums pēc 7a) |
 | | slīpums, TPI | LĢIA DTM 20 m | statisks | **pilotā nav** (7z 399 MB > 200 MB → vajag atļauju un 7-Zip) |
 | **Klimats** (ERA5-Land CDS, tuvākā 0,1° šūna) | `cwb_z_t1`, `cwb_z_t12` (= t−1 + t−2) | 4. posms | t−1; t−1 + t−2 | papildus |
 | | `tsum_F1_t1` (`tsum_F2_t1` — tā pati informācija vidējā līmenī) | RITY-2 (AVG, tieši) | t−1 | papildus |
@@ -615,3 +615,19 @@ Visas pazīmes gadam t — tikai no datiem ≤ t−1 (kodā `features.Ctx.layer`
 
 Netiek lietots: Open-Meteo (tikai Kalsnavas prototips), SPEI, EFDA klase 1 kā etiķete, cwb_z t viena pati (2.4) un
 t−2 viena pati (RM_4b: dati neatbalsta).
+
+## 2.24 MVR sugu sastāvs: maska prognozei, nevis apmācības pazīme (lietotājs, 2026-11-05)
+
+- **Lēmums:** pašreizējais MVR (data.gov.lv, CC0; `s10–s14` suga, `k10–k14` sastāva koeficients desmitdaļās,
+  egle = 3, citas egles = 15) **netiek lietots kā apmācības pazīme**. Tas ir momentuzņēmums (2026-10) pēc
+  bojājumiem un sanitārajām cirtēm, tātad noplūde.
+- **Diagnostika pilota blokā (RM_7a, `mvr-leakage`) [P]:** no 13 860 LVM 620 pozitīvajām šūnām 84 % pēc t ir
+  cirte (pārējām 24 %), 72 % sanitārā cirte 30 / 31 (pārējām 11 %); 42 % tagad ir izcirtums vai audze, kas
+  jaunāka par laiku kopš t (pārējām ~9 %).
+- **Vēsturiskas MVR versijas [P / N]:** data.gov.lv resursi tiek pārrakstīti uz vietas (versiju vēstures nav).
+  Wayback: tikai 2025-05 kopija (5 arhīvi); 2023-01 faili (`*_04jan2023.7z`) nav arhivēti. 2013–2022 stāvokli
+  nevar rekonstruēt no atvērtajiem datiem [N: VMD pēc pieprasījuma nav pārbaudīts].
+- **Lietojums:** pašreizējais MVR derīgs **prognozes kartes maskai** (piem., 2027: risks tikai nogabalos, kuros
+  egle ir sastāvā; izcirtumi / jaunaudzes ārā). Maska ietekmē tikai prognozes attēlošanu, nevis apmācību vai
+  validāciju.
+

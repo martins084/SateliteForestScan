@@ -1296,14 +1296,15 @@ def models_pilot(config: Path = ConfigArg, spatial: bool = typer.Option(True, he
         for v, feats in M.VARIANTS.items():
             mdl = M.fit(tr, feats, mc.hgb, mc.seed, M.MONO.get(v))
             scores[v] = M.score(mdl, test, feats)
+            train_info[-1][f"features_{v}"] = len(mdl.feats_)
             ev("laiks", t, v, test, scores[v])
             if v in ("A", "B", "C"):
                 for sub, col in subsets.items():
                     m = np.ones(len(test), bool) if col is None else test[col].to_numpy()
-                    pi = permutation_importance(mdl, test.loc[m, feats].to_numpy(np.float32), test.loc[m, "label"].to_numpy(),
+                    pi = permutation_importance(mdl, test.loc[m, mdl.feats_].to_numpy(np.float32), test.loc[m, "label"].to_numpy(),
                                                 scoring="average_precision", n_repeats=mc.perm_repeats,
                                                 random_state=mc.seed, n_jobs=1)
-                    for i, f in enumerate(feats):
+                    for i, f in enumerate(mdl.feats_):
                         perm.append({"year": t, "model": v, "subset": sub, "feature": f,
                                      "importance_mean": pi.importances_mean[i], "importance_std": pi.importances_std[i]})
         for a, b in pairs:
@@ -1348,3 +1349,125 @@ def models_pilot(config: Path = ConfigArg, spatial: bool = typer.Option(True, he
     for n, f in figs.items():
         typer.echo(f"{n}: {f}")
     _metadata(cfg, "models_pilot", {"table": str(mc.table), "test_years": mc.test_years})
+
+
+@app.command("mvr-leakage")
+def mvr_leakage(config: Path = ConfigArg,
+                mvr: list[Path] = typer.Option(..., help="MVR nodaļa shapefiles covering the pilot block"),
+                snapshot_year: int = typer.Option(2026, help="year of the MVR snapshot (data.gov.lv 2026-10)")):
+    """Leakage diagnostic (user 2026-11-05; DESCRIPTIVE, pilot block only): current-state MVR stand of every LVM 620
+    positive cell (first label year t) vs other training cells (pseudo-year drawn from the positives' years): share
+    no MVR stand / clear-cut (ZKAT 14) / dead stand (12) / other non-stand / stand younger than the time since t /
+    no spruce in the composition / spruce in the composition; last cut after t (any, sanitary 30 / 31). MVR species
+    composition is NOT a training feature (snapshot after sanitary cuts)."""
+    import geopandas as gpd
+    import xarray as xr
+    from pyproj import Transformer
+
+    from .efda import layer
+
+    cfg = load_config(config)
+    x0, y0, x1, y1 = cfg.features.block_3059
+    cols = ["zkat", "a10", "p_cirp", "p_cirg"] + [f"{a}{i}" for i in range(10, 15) for a in ("s", "k")]
+    g = pd.concat([gpd.read_file(p, bbox=(x0, y0, x1, y1), columns=cols) for p in mvr], ignore_index=True)
+    g = gpd.GeoDataFrame(g, geometry="geometry").set_crs(3059, allow_override=True)   # LKS-2020 TM = LKS-92 TM here (RM_5a)
+    gpath = cfg.cache_dir / "rm" / "mvr_pilot_block.gpkg"
+    gpath.parent.mkdir(parents=True, exist_ok=True)
+    g.to_file(gpath, driver="GPKG")
+    with xr.open_dataset(cfg.models.table, engine="h5netcdf") as ds:
+        d = ds[["cell_id", "year", "label", "in_set"]].to_dataframe()
+    d = d[d["in_set"] == 1]
+    pos = d[d["label"] == 1].groupby("cell_id")["year"].min().rename("t").reset_index()
+    other_ids = np.setdiff1d(d["cell_id"].unique(), d.loc[d["label"] == 1, "cell_id"].unique())
+    rng = np.random.default_rng(cfg.models.seed)
+    oth = pd.DataFrame({"cell_id": rng.choice(other_ids, min(50000, len(other_ids)), replace=False)})
+    oth["t"] = rng.choice(pos["t"].to_numpy(), len(oth))
+    cells = pd.concat([pos.assign(group="pozitīvās (620)"), oth.assign(group="pārējās (izlase)")], ignore_index=True)
+    with rasterio.open(layer(cfg.efda.main, "agent")) as s:
+        row, col = np.divmod(cells["cell_id"].to_numpy(np.int64), s.width)
+        x = s.transform.c + (col + 0.5) * s.transform.a
+        y = s.transform.f + (row + 0.5) * s.transform.e
+    ex, ny = Transformer.from_crs(3035, 3059, always_xy=True).transform(x, y)
+    pts = gpd.GeoDataFrame(cells, geometry=gpd.points_from_xy(ex, ny), crs=3059)
+    j = gpd.sjoin(pts, g, how="left", predicate="within").drop_duplicates("cell_id")
+    num = lambda c: pd.to_numeric(j[c], errors="coerce")  # noqa: E731
+    k = sum(num(f"k{i}").fillna(0) for i in range(10, 15))
+    ke = sum(np.where(num(f"s{i}").isin([3, 15]), num(f"k{i}").fillna(0), 0) for i in range(10, 15))
+    j["spruce_share"] = np.where(k > 0, ke / k, np.nan)
+    z, age, t = num("zkat"), num("a10"), j["t"]
+    j["class"] = np.select(
+        [j["index_right"].isna(), z == 14, z == 12, z != 10, age <= snapshot_year - t, j["spruce_share"] == 0],
+        ["nav MVR nogabala", "izcirtums (14)", "iznīkusi audze (12)", "cita zeme (ne mežaudze)",
+         "audze jaunāka par laiku kopš t", "mežaudze bez egles"], default="mežaudze ar egli sastāvā")
+    pc, pg = num("p_cirp"), num("p_cirg")
+    j["cut_after_t"] = pg >= t
+    j["sanitary_after_t"] = (pg >= t) & pc.isin([30, 31])
+    j["sanitary_clear_after_t"] = (pg >= t) & (pc == 31)
+    j["t_bin"] = pd.cut(j["t"], [2012, 2018, 2022, 2023, 2024], labels=["2013–2018", "2019–2022", "2023", "2024"])
+    rows = []
+    for (grp, tb), h in list(j.groupby(["group", "t_bin"], observed=True)) + [((gname, "visi"), h) for gname, h in j.groupby("group")]:
+        r = {"group": grp, "t": tb, "cells": len(h)}
+        r |= {f"share: {c}": round(float((h["class"] == c).mean()), 4) for c in
+              ["nav MVR nogabala", "izcirtums (14)", "iznīkusi audze (12)", "cita zeme (ne mežaudze)",
+               "audze jaunāka par laiku kopš t", "mežaudze bez egles", "mežaudze ar egli sastāvā"]}
+        r |= {"share: cirte pēc t": round(float(h["cut_after_t"].mean()), 4),
+              "share: sanitārā cirte (30/31) pēc t": round(float(h["sanitary_after_t"].mean()), 4),
+              "share: sanitārā vienlaidus (31) pēc t": round(float(h["sanitary_clear_after_t"].mean()), 4),
+              "spruce_share_median (mežaudzes)": float(h.loc[z.loc[h.index] == 10, "spruce_share"].median())}
+        rows.append(r)
+    out = pd.DataFrame(rows)
+    tdir = cfg.run_dir / "tables"
+    tdir.mkdir(parents=True, exist_ok=True)
+    out.to_csv(tdir / "rm7a_mvr_leakage.csv", index=False)
+    typer.echo(f"MVR stands in block: {len(g)}; cells: {len(cells)}")
+    typer.echo(str(tdir / "rm7a_mvr_leakage.csv"))
+
+
+@app.command("models-diagnose")
+def models_diagnose(config: Path = ConfigArg):
+    """Stage 7a diagnostics (user 2026-11-05: understand why the distance baseline can beat HGB; NO tuning against
+    the test year). (a) per year 2014-2024: positives, share of positives in the same cell as a t-1 polygon / within
+    500 m / beyond 2 km, distance-baseline PR-AUC ratio; (b) per test year: positive rate by distance band in the
+    training years vs the test year, and the mean score of model A (same seed and data as `models-pilot`) by band."""
+    import xarray as xr
+
+    from . import models as M
+
+    cfg = load_config(config)
+    mc = cfg.models
+    with xr.open_dataset(mc.table, engine="h5netcdf") as ds:
+        d = ds.to_dataframe().reset_index(drop=True)
+    d = d[d["in_set"] == 1].reset_index(drop=True)
+    rows = []
+    for t, g in d.groupby("year"):
+        p = g[g["label"] == 1]
+        r1 = M.Ranked(g["label"].to_numpy(), -g["p620_dist_t1"].to_numpy(np.float64)).metrics()
+        r2 = M.Ranked(g["label"].to_numpy(), -g["p620_dist_t23"].to_numpy(np.float64)).metrics()
+        rows.append({"year": t, "cells": len(g), "positives": len(p), "prevalence": len(p) / len(g),
+                     "pos_same_cell_t1": float((p["p620_dist_t1"] == 0).mean()) if len(p) else np.nan,
+                     "pos_within_500m_t1": float((p["p620_dist_t1"] <= 500).mean()) if len(p) else np.nan,
+                     "pos_beyond_2km_t1": float((p["p620_dist_t1"] > 2000).mean()) if len(p) else np.nan,
+                     "cells_within_500m_t1": float((g["p620_dist_t1"] <= 500).mean()),
+                     "ap_ratio_dist_t1": r1["ap_ratio"], "ap_ratio_dist_t23": r2["ap_ratio"]})
+    yt = pd.DataFrame(rows)
+    bands = [-1, 0, 250, 500, 1000, 2000, 4999, 5000]
+    labels = ["0 (tā pati šūna)", "0–250", "250–500", "500–1000", "1–2 km", "2–5 km", "≥ 5 km (nav)"]
+    br = []
+    for t in range(mc.test_years[0], mc.test_years[1] + 1):
+        test, pool = d[d["year"] == t].copy(), d[d["year"] < t].copy()
+        tr = M.subsample(pool, mc.neg_ratio, mc.seed + t)
+        mdl = M.fit(tr, M.VARIANTS["A"], mc.hgb, mc.seed)
+        test["score_A"] = M.score(mdl, test)
+        for x in (test, pool):
+            x["band"] = pd.cut(x["p620_dist_t1"], bands, labels=labels)
+        tr_rate = pool.groupby("band", observed=False)["label"].mean()
+        for b, h in test.groupby("band", observed=False):
+            br.append({"test_year": t, "band": b, "test_cells": len(h), "test_positives": int(h["label"].sum()),
+                       "test_rate": h["label"].mean() if len(h) else np.nan, "train_rate": tr_rate.get(b, np.nan),
+                       "mean_score_A": h["score_A"].mean() if len(h) else np.nan,
+                       "spearman_scoreA_vs_minus_dist": np.nan})
+        br[-1]["spearman_scoreA_vs_minus_dist"] = float(pd.Series(test["score_A"]).corr(-test["p620_dist_t1"], method="spearman"))
+    tdir = cfg.run_dir / "tables"
+    yt.round(5).to_csv(tdir / "rm7a_diag_years.csv", index=False)
+    pd.DataFrame(br).round(5).to_csv(tdir / "rm7a_diag_distance_bands.csv", index=False)
+    typer.echo(str(tdir / "rm7a_diag_years.csv"))

@@ -181,7 +181,8 @@ Visi gadi kopā, apmācības kopa. Mediāna [IQR]; SMD = standartizēta vidējo 
 ## 8. Kas nav izdarīts / vajag lēmumu
 
 - **DTM (slīpums, TPI):** LĢIA DTM 20 m 7z ir 399 MB > 200 MB, un vajag sistēmas 7-Zip → vajag lietotāja atļauju.
-- **Picea varbūtība:** pilotā nav lejupielādēta (Zenodo slānis; apjoms blokam nav novērtēts).
+- ~~Picea varbūtība~~ — pievienota 2026-11-05: `picea_p`, `picea_p500`, Latvijas logi ~128 MB (DATU_AVOTI, 6b/7a).
+  Pilotā piesātināta (mediāna 99), bet 7a nozīmīga (RM_7a 4. sadaļa).
 - ~~Tsum t−1 gadiem 2013–2018~~ — izdarīts 2026-11-05 (9. sadaļa).
 - Literatūra (Kärvemo u. c. 2014; Stadelmann u. c. 2013): DOI un bibliogrāfija pārbaudīta, saturs nav atvērts → [N]
   (`DATU_AVOTI.md`).

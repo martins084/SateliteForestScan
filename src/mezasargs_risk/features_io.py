@@ -22,6 +22,20 @@ from .config import RiskConfig
 from .efda import layer
 
 
+def read_boundless(src, band: int, w: Window) -> np.ndarray:
+    """Window read that may extend past the raster; cells outside get the raster's nodata value."""
+    if src.nodata is None:
+        raise ValueError(f"{src.name}: no nodata value for a boundless read")
+    return src.read(band, window=w, boundless=True, fill_value=src.nodata)
+
+
+def inside_raster(w: Window, height: int, width: int) -> np.ndarray:
+    """True for window cells that lie inside the raster."""
+    r = np.arange(int(w.row_off), int(w.row_off) + int(w.height))
+    c = np.arange(int(w.col_off), int(w.col_off) + int(w.width))
+    return ((r >= 0) & (r < height))[:, None] & ((c >= 0) & (c < width))[None, :]
+
+
 def _bounds_3035(b3059, margin=0.0):
     x0, y0, x1, y1 = b3059
     tr = Transformer.from_crs(3059, 3035, always_xy=True)
@@ -37,10 +51,11 @@ def block_inputs(cfg: RiskConfig, years: tuple[int, int]) -> dict:
         w = Window(int(np.floor(w.col_off)), int(np.floor(w.row_off)), int(np.ceil(w.width)), int(np.ceil(w.height)))
         tf, shape = s.window_transform(w), (int(w.height), int(w.width))
         first, last = v.first_year, v.first_year + s.count - 1
-        # boundless: blocks at the edge of the EFDA raster (outside = no disturbance / not forest)
-        efda = {y: s.read(y - first + 1, window=w, boundless=True, fill_value=255)
-                for y in range(max(first, years[0] - 12), min(last, years[1]) + 1)}
-        forest = fm.read(1, window=w, boundless=True, fill_value=0) == 1
+        # boundless: blocks at the edge of the EFDA raster; outside = each raster's nodata (agent 255, forest mask 0)
+        # and `valid` False, so these cells are never in the analysis set (user check 2026-11-05)
+        efda = {y: read_boundless(s, y - first + 1, w) for y in range(max(first, years[0] - 12), min(last, years[1]) + 1)}
+        forest = read_boundless(fm, 1, w) == 1
+        valid = inside_raster(w, s.height, s.width)
         full_w = s.width
     rows, cols = np.indices(shape)
     xs, ys = rasterio.transform.xy(tf, rows.ravel(), cols.ravel())
@@ -84,7 +99,8 @@ def block_inputs(cfg: RiskConfig, years: tuple[int, int]) -> dict:
               "hrl_conifer_share_500m": con500.astype(np.float32)}
     del k
     picea, picea500 = picea_layers(cfg, tf, shape)
-    return {"tf": tf, "shape": shape, "efda": efda, "forest": forest, "inner": inner, "lvm_land": lvm_land,
+    return {"tf": tf, "shape": shape, "efda": efda, "forest": forest & valid, "valid": valid, "inner": inner,
+            "lvm_land": lvm_land,
             "share": share, "centre": centre, "clim_cell": clim_cell, "cell_id": cell_id, "static": static,
             "picea": picea, "picea500": picea500,
             "window": w, "n_polygons": int(len(g)), "lonlat_centre": (float(np.mean(lon)), float(np.mean(lat)))}
