@@ -1,0 +1,54 @@
+# MežaSargs risk model: drought comparison after stage 4 (plan L7 / 2.15 point 2; user decision 2026-11-04).
+# DESCRIPTIVE only: damage series vs the ERA5-Land water balance anomaly and RITY-2 thermal sums, lags t, t-1, t-2,
+# t-1 + t-2. Reads existing outputs of stages 4, 5, 5a and the CSP tables already in cache; nothing is downloaded.
+# Data: docs/DATU_AVOTI.md. Report: docs/RM_4b_SAUSUMS.md.
+run_name: rm4b_sausums
+output_dir: ../output
+cache_dir: ../cache
+
+efda:                                # schema only (counts are read from the stage 5 table below)
+  main:
+    version: v3.0.0
+    doi: 10.5281/zenodo.21722408
+    archive: Lithuania.zip
+    dir: ../cache/efda/v3.0/Lithuania.zip
+    first_year: 1985
+    agent: disturbance_agent_lithuania_v30.tif
+    agent_aggregated: disturbance_agent_aggregated_lithuania_v30.tif
+    forest: forestlanduse_mask_lithuania_v30.tif
+
+boundaries:
+  path: ../cache/boundaries/NUTS_RG_01M_2024_3035_LEVL_3.geojson   # GISCO NUTS 2024, (c) EuroGeographics
+  country: LV
+  min_cover: 0.95
+  border_buffer_m: 1000
+  control_lonlat: [25.85, 56.69]
+
+stats:
+  meb012: ../cache/rm5_sources/csp_MEB012.csv          # CSP MEB012 (VMD data), 2013-2024
+  meb011_owner: ../cache/rm5_sources/csp_MEB011_owner.csv   # CSP MEB011 regions x owner, 2021-2025
+
+lvm:                                 # only for the 0.1 deg sparsity check of the 620 polygons
+  damage: ../cache/lvm_open/LVM_BOJAJUMI_wayback20250503.zip
+  damage_snapshot: 2025-04-27
+  land_units: ../cache/lvm_open/LVM_ZEMES_VIENIBAS_wayback20250421.zip
+  stem_pest: 620
+  years: [2013, 2024]
+
+climate:
+  years: [2018, 2026]
+  baseline: [1991, 2020]
+  wb_months: [4, 9]
+
+drought:
+  climate_dir: ../output/rm4_klimats
+  efda_counts: ../output/rm5_efda_latvia/tables/efda_annual_counts.csv
+  lvm_annual: ../output/rm5a_lvm/tables/lvm_620_vs_csp_meb012.csv
+  lvm_regions: ../output/rm5a_lvm/tables/lvm_620_by_region.csv
+  damage_years: [2013, 2024]         # 2025 LVM only to 2025-04-27; MEB012 ends 2024
+  efda_version: v3.0.0
+  events: [2002, 2006, 2018, 2023]
+  n_perm: 9999
+  n_boot: 9999
+  seed: 20261104
+  min_n_ci: 8

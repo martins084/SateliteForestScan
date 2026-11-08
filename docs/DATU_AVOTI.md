@@ -138,10 +138,90 @@ Jaunu datu avotu nav. Izmantoti tie paši avoti kā iepriekš:
   Kalsnavai; **pilnā lejupielāde — tikai `reanalysis-era5-land` stundu dati** (lietotāja lēmums 2026-10-30): 252 mēneši
   + 35 `acc00` pieprasījumi, `cache/rm/cds/reanalysis-era5-land/hourly/` (nav git), ~4,8 GB [N novērtējums].
   Kataloga beigas 2026-10-24 00:00 (vaicāts 2026-10-30).
+- **Pilnā lejupielāde pabeigta 2026-11-04 (serverī ubuntu@vps-823ea645, `~/s2-forest-screening`) [P]:**
+  - 287 faili (252 `h_` + 35 `acc00_`), visi 287 darbi `done`, `ls | wc -l` = 287;
+  - `du -sh hourly/` = **4,7 GB** (4 959 MB pēc baitiem; lielākais fails 21 MB, katrs < 200 MB);
+  - iesniegts 2026-10-30 12:44 – 2026-11-04 10:27 UTC;
+  - 2026-10: temperatūra līdz 27.10 23:00 UTC, akumulētie mainīgie līdz 26.10 (katalogs pa to laiku bija pagarināts);
+  - `cds-check-month` serverī: 2023-04 pret pilotu starpība 0,0 visiem mainīgajiem.
+- **Atvasinātie dati (2026-11-04, nav git):**
+  - serverī: dienas kubi `cache/rm/cds/daily/era5land_daily_YYYY.nc` (1991–2026);
+  - serverī un laptopā: `output/rm4_klimats/latvia/` (RITY-2 un ūdens bilance uz 0,1° režģa).
+
+  Uz laptopu kopēti tikai rezultāti, ne izejdati. Sk. RM_4 sadaļu „Latvija”.
+- **Latvijas robeža statistikai un kartēm:** NUTS LV (tas pats avots, kas `country_regions`, sk. augstāk).
 - ERA5-Land mainīgo saraksts (CDS forma, 2026-10-30): 2 m maks. / min. temperatūras mainīgā nav [P].
 - **Open-Meteo stundu dati (ET0 skaidrojumam):** 1 pieprasījums, mezgls 56,75 / 25,75, 2023-04-01 – 2023-05-01,
   `temperature_2m, dew_point_2m, wind_speed_10m, shortwave_radiation, surface_pressure, et0_fao_evapotranspiration,
   precipitation`, `models=era5`, `timezone=GMT`, `wind_speed_unit=ms` (Kalsnavas prototipa apjomā; 2026-10-30).
+
+## Sausuma salīdzinājums pēc 4. posma (2026-11-04)
+
+Jauni dati **nav lejupielādēti**; izmantoti tikai esošie:
+- 4. posma ERA5-Land rezultāti (`output/rm4_klimats/`);
+- 5. posma EFDA gadu skaiti;
+- 5a LVM 620 tabulas un LVM_BOJAJUMI Wayback kopija (0,1° retuma pārbaudei);
+- CSP **MEB012** un **MEB011** no `cache/rm5_sources/` (lejupielādēti 5. un 5a posmā).
+
+Sk. `docs/RM_4b_SAUSUMS.md`.
+
+| Avots | Licence | Izmantots | Atsauce |
+|---|---|---|---|
+| **CSP MEB012** (VMD dati), stumbra kaitēkļi un vējgāzes, visi īpašnieki, 2013–2024 | lietotājs 2026-11-04: publiski, CC BY [N: licences teksts šeit nav atvērts] | `cache/rm5_sources/csp_MEB012.csv` | Centrālā statistikas pārvalde, tabula MEB012 „Meža bojājumi un augtspēju zaudējušās mežaudzes” (VMD dati), data.stat.gov.lv |
+| **CSP MEB011** (VMD dati), stumbra kaitēkļi pa statistiskajiem reģioniem (no 01.01.2024), 2021–2025 | kā MEB012 [N] | `cache/rm5_sources/csp_MEB011_owner.csv` | Centrālā statistikas pārvalde, tabula MEB011 (VMD dati) |
+
+## 6a posms — pazīmes un pilota bloks (2026-11-04)
+
+| Avots | Licence | Izmantots | Atsauce |
+|---|---|---|---|
+| **CHMv2** (`s3://dataforgood-fb-data/forests/v2/global/dinov3_global_chm_v2_ml3/chm/<quadkey>.tif`, z10 quadkey, EPSG:3857, 1,19 m, uint8 m, COG deflate ar pārskatiem) [P: S3 saraksts un faila galvene 2026-11-04] | CC BY 4.0 [P, kā augstāk] | pilota blokam 4 flīzes (`1201222031`, `…033`, `…120`, `…122`; katra 200–300 MB) — **lasīti tikai bloka logi** (`/vsicurl`, COG range), neviena flīze nav saglabāta; atvasinātais 30 m slānis `cache/rm/chmv2_30m/` (nav git). Attēlu datums Kalsnavas flīzē 2018 [P metadati] | kā augstāk |
+| **HRL DLT 2018** 100 m Latvija (`cache/rm/hrl_dlt2018_LV_100m.tif`, 5. posms) | kā augstāk [N] | skujkoku pazīmes 30 m (tuvākais) | Copernicus Land Monitoring Service |
+| **LVM_BOJAJUMI 620** un **LVM_ZEMES_VIENIBAS** (Wayback, 5a) | CC0 [P, 5a] | etiķetes un mizgraužu spiediena pazīmes | LVM |
+| **EFDA v3.0** (5. posms) | CC BY 4.0 | cirtes / traucējumu vēsture, malas, klase 1 jutīgumam | kā augstāk |
+| **ERA5-Land** (4. posms) | CC-BY-4.0 | cwb_z, RITY-2 Tsum t−1 (tuvākā 0,1° šūna) | kā augstāk |
+
+**Papildu CDS lejupielāde (lietotājs 2026-11-04), serverī:** `reanalysis-era5-land` I–III un X 2011–2017.
+- Apjoms: 28 mēneši + 7 `acc00_YYYY_11` pieprasījumi; novērtējums ~0,5 GB pirms sākšanas.
+- Mainīgie tie paši 8 (tikai `t2m` prasītu izmaiņas 4 apstrādes funkcijās).
+- Kataloga beigas 2026-10-29.
+- **Pabeigta 2026-11-05 08:44 UTC** (sākta 2026-11-04 13:15 UTC): 35 / 35 faili, **533 MB** (diskā 509 MiB;
+  `h_2011..2017_01–03, _10`, `acc00_2011..2017_11`); darbi kopā 19,3 h, no tā CDS rindā 13,6 h. Viens
+  `HTTP 502`, ko klients pats atkārtoja; auth / licences kļūdu nav. Dati tikai serverī un `cache/` (nav git).
+- Atvasinātais: RITY-2 2011–2017 `output/rm4_klimats/latvia/` (sk. RM_6a 9. sadaļu).
+
+**Literatūra (pārbaudīta 2026-11-04, Crossref / OpenAlex):**
+- **Kärvemo, S., Van Boeckel, T. P., Gilbert, M., Grégoire, J.-C., Schroeder, M. (2014).** Large-scale risk mapping of
+  an eruptive bark beetle – Importance of forest susceptibility and beetle pressure. *Forest Ecology and Management*
+  318:158–166, doi:10.1016/j.foreco.2014.01.025 [P bibliogrāfija].
+  - OpenAlex: „green OA”, ULB DI-fusion ieraksts 2013/157766. Kopsavilkums un pilnais teksts tur netika atrasti →
+    **saturs nav atvērts [N]**.
+- **Stadelmann, G., Bugmann, H., Meier, F., Wermelinger, B., Bigler, C. (2013).** Effects of salvage logging and
+  sanitation felling on bark beetle (*Ips typographus* L.) infestations. *Forest Ecology and Management*
+  305:273–281, doi:10.1016/j.foreco.2013.06.003 [P bibliogrāfija].
+  - OpenAlex: slēgta piekļuve → **saturs nav atvērts [N]**.
+
+## 6b / 7a posms — Picea, MVR vēsture (2026-11-05)
+
+**Picea abies varbūtība (Bonannella u. c. 2022; Zenodo 6961187 v3, CC BY 4.0)** [P]
+- URL veidne: `https://zenodo.org/api/records/6961187/files/veg_picea.abies_anv.eml_p_30m_0..0cm_{a}..{b}_eumap_epsg3035_v0.3.tif/content`.
+  Formāts: COG, EPSG:3035, 30 m, deflate, nodata = 0, maksimālā derīgā vērtība 99.
+- `mezasargs-risk picea-fetch` ar `/vsicurl` nolasa tikai Latvijas logu (+6 km rezerve). Logs ir 9 309 × 15 209 px.
+- 4 periodi: 2006–10, 2010–14, 2014–18, 2018–20. Katrs fails 29,6–33,1 MB, kopā ~128 MB.
+  - Saglabāti: `cache/rm/picea/picea_anv_p_{a}_{b}_LV3035.tif` (nav git). Pilnās Eiropas flīzes nav lejupielādētas.
+- Gadam t lieto jaunāko periodu, kas beidzas ≤ t−1. Pazīmes: `picea_p` (šūna) un `picea_p500` (vidējais 500 m).
+- Atsauce: Bonannella u. c. (2022) [N: pilnā bibliogrāfija no Zenodo apraksta vēl jāpārraksta].
+
+**MVR vēsturisko versiju pārbaude (bez lejupielādes)** [P, ja nav norādīts citādi]
+- data.gov.lv "Meža valsts reģistra meža dati" (CC0) izveidota 2022-08-31.
+  - Resursi tiek pārrakstīti vietā. CKAN `package_activity_list` nav pieejams.
+- Wayback 2023-01-23 lapa rāda 11 failus `*_04jan2023.7z`. Tie nav arhivēti un data.gov.lv vairs nav pieejami.
+- Wayback CDX: tikai 2025-05-05…07 kopijas no 5 pašreizējiem arhīviem (84–129 MB katrs, ~508 MB). Nav lejupielādētas.
+- CDX prefiksu meklēšana bija daļēji nepieejama → [N].
+- Detaļas: `RM_7a_MODELI.md` 6. sadaļa.
+
+**Instalētas bibliotēkas (lietotāja atļauja 2026-11-05):** scikit-learn 1.9.1 (BSD-3-Clause), ar atkarībām joblib
+(BSD-3-Clause), threadpoolctl (BSD-3-Clause), narwhals (MIT) [N: atkarību licences no PyPI metadatiem nav atkārtoti
+pārbaudītas].
 
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 

@@ -143,6 +143,8 @@ iepriekšējos EFDA gadus un 1985–).
 
 ## 2.6 Pazīmes
 
+> **Atjaunots 2026-11-04 → sadaļa 2.23** (6a posms). Šī tabula paliek kā vēsture.
+
 | Pazīme | Avots | Aprēķins | Laiks | Gaidāmā ietekme | Literatūras pamatojums |
 |---|---|---|---|---|---|
 | Skujkoku daļa šūnā | HRL DLT 2018 [P] | 10 m → 30 m daļa | 2018 | + | [N: avots jāatver] |
@@ -584,3 +586,48 @@ Avots: `docs/RM_5b_S2_VALIDACIJA_LVM.md` (AOI 1 Vidzeme un AOI 3 Rīgas reģions
   ar INCA korekcijām — 1 paaudze (2024: 2) [P, `RM_4`].
 - **Sekundāra pazīme:** paaudžu skaits ar **abiem** variantiem (tiešā ERA5 / ERA5-Land un INCA (1)–(3)).
 - Izlidošanas DOY paliek kā pazīme (t−1) un pavasara sekošanai.
+
+## 2.23 Pazīmes 6. posmam (lietotājs, 2026-11-04; aizstāj 2.6 tabulu)
+
+**Interpretācija pēc RM_4b (lietotājs):** pēc 2018. gada uzliesmojums ir pašuzturošs; sausums ir sākuma faktors, nevis
+gada mainīguma skaidrotājs. Tāpēc galvenās pazīmes ir **mizgraužu spiediens** (iepriekšējo gadu bojājumi tuvumā) un
+**audzes uzņēmība**; klimats — papildus. Literatūra: Kärvemo u. c. (2014) un Stadelmann u. c. (2013) — DOI un
+bibliogrāfija pārbaudīta, saturs nav atvērts (sk. `RM_6a`) → atsauce tikai kā [N].
+
+Vienība: EFDA v3.0 30 m šūna. Analīzes kopa: EFDA meža zemes lietojums ∩ LVM zeme. Etiķete: LVM 620 gadā t (2.16).
+Visas pazīmes gadam t — tikai no datiem ≤ t−1 (kodā `features.Ctx.layer`, pārkāpums = `LeakageError`).
+
+| Grupa | Pazīme (kolonna) | Avots | Laiks | Loma |
+|---|---|---|---|---|
+| **Mizgraužu spiediens** | `p620_dist_t1` attālums līdz tuvākajam LVM 620 poligonam (m, ≤ 5 km); `p620_ha500_t1`, `p620_ha2k_t1` 620 platība 500 m / 2 km | LVM_BOJAJUMI 620 (Wayback) | t−1 | **galvenā** |
+| | `p620_dist_t23`, `p620_ha500_t23`, `p620_ha2k_t23` | tas pats | t−2 … t−3 | galvenā; bez t−1 = L3 jutīgums |
+| | `efda1_dist_t1/t23`, `efda1_ha2k_t1/t23` | EFDA v3.0 klase 1 | t−1; t−2 … t−3 | **tikai jutīgums** |
+| **Malas, vēsture** | `cut_dist_t13`, `cut_dist_t110` attālums līdz EFDA cirtei | EFDA v3.0 klase 3 | t−1 … t−3; t−1 … t−10 | uzņēmība |
+| | `edge_s_sw_w_t13` svaiga mala uz D / DR / R (≤ 60 m) | EFDA klase 3 | t−1 … t−3 | uzņēmība |
+| | `years_since_dist` (99 = nav 10 gados); ≤ k = 5 → ārpus apmācības kopas (2.5) | EFDA 1–3 | ≤ t−1 | izslēgšana / pazīme |
+| **Audze** | `hrl_conifer_100m`, `hrl_conifer_share_500m` | HRL DLT 2018 (100 m) | 2018 (karogs `hrl_after_t` t ≤ 2018) | uzņēmība |
+| | `chm_mean`, `chm_p90`, `chm_gt5` | CHMv2 (attēli ~2018) | tikai t ≥ 2020 (L2) | uzņēmība, variants |
+| | `picea_p`, `picea_p500` egles varbūtība (šūna, 500 m vidējā) | Bonannella u. c. 2022 (Zenodo 6961187 v3) | jaunākais periods, kas beidzas ≤ t−1 (2006–10 / 2010–14 / 2014–18 / 2018–20) | uzņēmība (2026-11-05; piesātināta — lēmums pēc 7a) |
+| | slīpums, TPI | LĢIA DTM 20 m | statisks | **pilotā nav** (7z 399 MB > 200 MB → vajag atļauju un 7-Zip) |
+| **Klimats** (ERA5-Land CDS, tuvākā 0,1° šūna) | `cwb_z_t1`, `cwb_z_t12` (= t−1 + t−2) | 4. posms | t−1; t−1 + t−2 | papildus |
+| | `tsum_F1_t1` (`tsum_F2_t1` — tā pati informācija vidējā līmenī) | RITY-2 (AVG, tieši) | t−1 | papildus |
+| | `swarming_doy_t1`, `n_filial_t1`, `n_filial_inca_t1` | RITY-2 | t−1 | **tikai jutīgums** |
+
+Netiek lietots: Open-Meteo (tikai Kalsnavas prototips), SPEI, EFDA klase 1 kā etiķete, cwb_z t viena pati (2.4) un
+t−2 viena pati (RM_4b: dati neatbalsta).
+
+## 2.24 MVR sugu sastāvs: maska prognozei, nevis apmācības pazīme (lietotājs, 2026-11-05)
+
+- **Lēmums:** pašreizējais MVR (data.gov.lv, CC0; `s10–s14` suga, `k10–k14` sastāva koeficients desmitdaļās,
+  egle = 3, citas egles = 15) **netiek lietots kā apmācības pazīme**. Tas ir momentuzņēmums (2026-10) pēc
+  bojājumiem un sanitārajām cirtēm, tātad noplūde.
+- **Diagnostika pilota blokā (RM_7a, `mvr-leakage`) [P]:** no 13 860 LVM 620 pozitīvajām šūnām 84 % pēc t ir
+  cirte (pārējām 24 %), 72 % sanitārā cirte 30 / 31 (pārējām 11 %); 42 % tagad ir izcirtums vai audze, kas
+  jaunāka par laiku kopš t (pārējām ~9 %).
+- **Vēsturiskas MVR versijas [P / N]:** data.gov.lv resursi tiek pārrakstīti uz vietas (versiju vēstures nav).
+  Wayback: tikai 2025-05 kopija (5 arhīvi); 2023-01 faili (`*_04jan2023.7z`) nav arhivēti. 2013–2022 stāvokli
+  nevar rekonstruēt no atvērtajiem datiem [N: VMD pēc pieprasījuma nav pārbaudīts].
+- **Lietojums:** pašreizējais MVR derīgs **prognozes kartes maskai** (piem., 2027: risks tikai nogabalos, kuros
+  egle ir sastāvā; izcirtumi / jaunaudzes ārā). Maska ietekmē tikai prognozes attēlošanu, nevis apmācību vai
+  validāciju.
+

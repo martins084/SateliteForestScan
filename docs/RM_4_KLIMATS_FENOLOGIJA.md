@@ -5,9 +5,9 @@
 > noteikumi). Galvenais laikapstākļu avots būs Copernicus CDS ERA5-Land (plāns 2.21); riska modeļa fenoloģijas
 > galvenā pazīme — relatīvā termālā summa (plāns 2.22).
 
-Statuss (2026-10-29): **Kalsnava pabeigta; Latvijas režģis NAV lejupielādēts.** Open-Meteo bezmaksas limitu dēļ visa
-Latvija aizņemtu ~18 dienas (sk. „Latvija”), tāpēc apjoms jāizlemj lietotājam. **[P]** = aprēķināts no datiem vai
-nolasīts avotā, **[N]** = pieņēmums vai interpretācija.
+Statuss (2026-11-04): **Kalsnava (Open-Meteo prototips) pabeigta; Latvija aprēķināta ar CDS ERA5-Land 0,1°** — sk.
+sadaļu „Latvija: ERA5-Land 0,1° (2026-11-04)” dokumenta beigās. Sausuma salīdzinājums un 6. posms vēl nav sākti.
+**[P]** = aprēķināts no datiem vai nolasīts avotā, **[N]** = pieņēmums vai interpretācija.
 
 Reproducēšana:
 
@@ -127,7 +127,10 @@ CWB = Σ(P − ET0) IV–IX; **standartizēta klimatiskās ūdens bilances anom�
 - Silava datums ir slazdu monitorings visā Latvijā (vietas nav norādītas), Kalsnava ir viens ERA5 mezgls; tieši
   salīdzināmi tie nav [N]. Kalibrācijai vajag Silava slazdu datus (atvērti nav atrasti, 1. posms).
 
-## Latvija — NAV izdarīts (lēmums vajadzīgs) [P]
+## Latvija ar Open-Meteo — NETIKA izmantots (vēsturiska piezīme) [P]
+
+Lietotāja lēmums 2026-10-29: Latvijai Open-Meteo neizmanto; Latvija aprēķināta ar CDS ERA5-Land (sk. dokumenta beigas).
+Zemāk — toreizējais Open-Meteo apjoma novērtējums.
 
 | Apjoms | Mezgli | Svērti izsaukumi | Dienas pie 9 000 / dienā |
 |---|---|---|---|
@@ -168,7 +171,7 @@ CWB = Σ(P − ET0) IV–IX; **standartizēta klimatiskās ūdens bilances anom�
 
 ## Kas NAV izdarīts
 
-- Latvijas režģis (294 mezgli) nav lejupielādēts — gaida lēmumu (sk. „Latvija”).
+- ~~Latvijas režģis (294 mezgli) nav lejupielādēts~~ — Latvija aprēķināta ar ERA5-Land 2026-11-04 (dokumenta beigās).
 - Nav kalibrācijas pret Latvijas slazdu datiem (nav atvērtu datu).
 - PHENIPS oriģinālie sliekšņi (60,5 / 140,3 dd no 1. aprīļa, 16,5 °C; sekundāri Ogris 2020) nav izmantoti — uzdevumā
   jutīgumam paredzēti tikai PHENIPS-Clim parametri.
@@ -232,7 +235,7 @@ Kods: `src/mezasargs_risk/cds.py`, CLI `cds-pilot`, `cds-download`, `cds-check-m
   failu.
 - Kalsnava: ET0 64,174 = pilota 64,174 mm (maks. dienas starpība 1·10⁻⁷); P 32,067 = 32,067 mm.
 
-### Pilnā lejupielāde (sākta 2026-10-30, fonā)
+### Pilnā lejupielāde (sākta 2026-10-30, fonā; pabeigta 2026-11-04 — rezultāts sadaļā „Latvija”)
 
 - Datu kopas beigas (katalogs) 2026-10-24 00:00 → pēdējā pilnā UTC diena 2026-10-23.
 - **287 pieprasījumi:** 252 mēneši (IV–IX 1991–2026; I–III un X 2018–2026; 2026-10 līdz 23.10) + 35 `acc00`
@@ -278,3 +281,180 @@ Ievaddatu daļa, aizstājot pa vienai grupai (vidējais no abiem virzieniem; sum
 - Ietekme: N ≥ 14,5 h Latvijā no ~21.–24.04 līdz ~18.–21.08 (55,7–57,9° Z); ±16 min nobīda abas robežas par ±3–4
   dienām [P aprēķins]. Augusta robeža nosaka, vai pēc tās vēl var sākties F2 / F3 / māsu perējums.
 - Ieviešana Latvijas fenoloģijas aprēķinā (pēc lejupielādes, ar apstāšanos pirms tā).
+
+## Latvija: ERA5-Land 0,1° (2026-11-04)
+
+Lietotāja lēmums 2026-11-04: aprēķins notiek **serverī** (tmux, RAM 3,7 GB, atmiņā viens gads). Uz laptopu kopēti tikai
+rezultāti; dati ir ārpus git. Kods: `src/mezasargs_risk/lvclimate.py`, CLI `cds-latvia` (serverī) un
+`cds-latvia-report` (laptopā), commits f8426f7 un šīs sadaļas commits. Abas mašīnas izmanto vienu un to pašu
+GitHub commitu f8426f7 (pārbaudīts ar `git rev-parse`).
+
+```
+mezasargs-risk cds-latvia configs/rm_4_klimats.yaml --step all     # serverī: dienas kubi, ūdens bilance, RITY-2
+mezasargs-risk cds-latvia-report configs/rm_4_klimats.yaml         # laptopā: Latvijas maska, pārbaudes, tabulas, kartes
+```
+
+Izvade (nav git):
+- **serverī:** `cache/rm/cds/daily/era5land_daily_YYYY.nc`;
+- **`output/rm4_klimats/latvia/`:**
+  - rastri uz ERA5-Land 0,1° režģa (gads × platums × garums): `water_balance_latvia.nc`, `rity2_latvia.nc`;
+  - tabulas: `water_balance_cells.csv`, `rity2_cells.csv`, `rity2_cells_long.csv.gz` (visi scenāriji, varianti un
+    ±16 min), `data_coverage.csv`;
+- **laptopā:** `tables/lv_*.csv`, `tables/lv_checks.json`, `figures/rm4_lv_era5land_*.png`.
+
+### Dati [P]
+
+- **Lejupielāde (serverī):**
+  - 287 faili (252 `h_YYYY_MM` un 35 `acc00`), statuss `done` visiem 287.
+  - **4,7 GB** diskā (4 959 MB pēc baitiem; lielākais fails 21 MB).
+  - Iesniegts no 2026-10-30 12:44 līdz 2026-11-04 10:27 UTC.
+  - Mēneša pieprasījums: mediāna 1 268 s (no tām rindā 480 s), maks. 5 829 s.
+  - 22 pirmie darbi (1991-04 – 1994-04) serverī iesniegti otrreiz, jo lejupielāde sākās pirms stāvokļa faila kopēšanas
+    (sk. iepriekš).
+- **Pārbaudes mēnesis 2023-04 serverī** (`cds-check-month`; pilota faili nokopēti ar scp):
+  - starpība 0,0 visām 52 830 vērtībām × 10 mainīgajiem;
+  - Kalsnava: ET0 64,174 = 64,174 mm, P 32,067 = 32,067 mm — tāpat kā laptopā.
+- **Pārklājums (`data_coverage.csv`):**
+  - 1991–2017: 1.04–30.09 (183 dienas); 2018–2025: 1.01–31.10.
+  - **2026 nepilns:** temperatūra līdz 27.10, akumulētie mainīgie (P, R_s, ET0) līdz 26.10 (kataloga beigas
+    2026-11-04).
+  - 2026 tabulās un kartēs atzīmēts ar `*`; 2026. gada RITY-2 Tsum ir 27.10 vērtība. Ūdens bilances periods IV–IX
+    2026. gadā ir pilns.
+- **Režģis:** aprēķinā ir 1 761 sauszemes šūna. Statistikā izmantotas **946 šūnas, kuru centrs ir Latvijā**
+  (NUTS LV); kartēs — 1 037 šūnas, kas skar Latviju.
+- **Izpildes laiks serverī:**
+  - dienas kubi: 8–10 s gadā (IV–IX) un 13–14 s gadā (I–X);
+  - **RITY-2: 63–69 s gadā, kopā 589 s (9,8 min).** Tas ir 1 761 šūnai × 9 gadiem × 10 palaišanām
+    (3 scenāriji × 2 varianti, plus AVG × 2 varianti × ±16 min);
+  - viss `--step all`: 16 min 11 s, maks. RAM 303 MB.
+
+### RITY-2 fenoloģija 2018–2026 (946 šūnas Latvijā; AVG, ERA5-Land tieši, Eq. 34) [P]
+
+| Gads | Izlidošana DOY p10 / med. / p90 (min–maks.) | Nav sasniegta | Tsum_F1 vid. | Tsum_F2 vid. (min–maks.) | 3 paaudzes AVG | 2 paaudzes INCA | ZA − DR, d |
+|---|---|---|---|---|---|---|---|
+| 2018 | 104 / 105 / 106 (103–130) | 0 | 2,56 | 1,57 (1,31–1,83) | 31 % | 98 % | 0,0 |
+| 2019 | 108 / 112 / 112 (107–138) | 0 | 2,13 | 1,14 (0,84–1,46) | 0 | 1 % | +0,6 |
+| 2020 | 114 / 122 / 127 (113–151) | 0 | 2,09 | 1,10 (0,83–1,30) | 0 | 0 | +0,4 |
+| 2021 | 109 / 130 / 130 (108–153) | 0 | 2,09 | 1,10 (0,86–1,32) | 0 | 0 | +2,2 |
+| 2022 | 111 / 126 / 127 (111–144) | 0 | 1,92 | 0,93 (0,68–1,19) | 0 | 0 | +3,2 |
+| 2023 | 101 / 103 / 113 (101–133) | 0 | 2,31 | 1,32 (1,02–1,53) | 0 | 35 % | −1,3 |
+| 2024 | 93 / 100 / 100 (92–136) | 0 | 2,55 | 1,56 (1,29–1,77) | 0 | 98 % | −0,1 |
+| 2025 | 93 / 104 / 105 (93–145) | 0 | 1,91 | 0,92 (0,72–1,14) | 0 | 0 | +2,7 |
+| 2026* | 105 / 105 / 121 (88–143) | 0 | 2,08 | 1,09 (0,85–1,31) | 0 | 0 | −5,2 |
+
+- **Izlidošana sasniegta visās šūnās visos gados.** NaN nav nevienā no 946 šūnām un arī nevienā no visām
+  1 761 aprēķina šūnām.
+- **Paaudžu skaits:**
+  - **AVG:** 2 paaudzes visās šūnās visos gados, izņemot 2018. gadu, kad 31 % šūnu ir 3 paaudzes (centrālajā joslā —
+    Zemgalē un ap Rīgu);
+  - **INCA (1)–(3):** parasti 1; 2 paaudzes 2018. gadā (98 % šūnu), 2024. gadā (98 %) un 2023. gadā (35 %);
+  - **MIN:** pārsvarā 1; **MAX:** pārsvarā 3 (54–100 % šūnu).
+- Paaudžu skaits joprojām vairāk atkarīgs no temperatūras pārveidojuma nekā no gada vai vietas. Tāpēc galvenā pazīme
+  paliek **relatīvā termālā summa** (plāns 2.22): Tsum_F2 gadu vidējie 0,92–1,57, telpiskā amplitūda gada ietvaros
+  ~0,5.
+- **Pēc Tsum** siltākie gadi ir 2018 un 2024 (Tsum_F1 ≈ 2,55), vēsākie — 2022 un 2025 (≈ 1,91).
+- **Dienas garums ±16 min:**
+  - F2 sākums un Tsum_F2 nemainās nevienā šūnā, jo F1 pabeidz attīstību, kamēr diena vēl ir ≥ 14,5 h.
+  - Paaudžu skaits mainās tikai caur F3: 2018. gadā −16 min maina 18,9 % šūnu, +16 min — 4,4 %; 2024. gadā +16 min
+    maina 12,8 % šūnu; citos gados 0. INCA variantā izmaiņu nav.
+- **Izlidošanas sadalījumam ir divas virsotnes.** Piemēram, 2021. gadā p10 ir 109, bet mediāna 130, un starp tām ir
+  aukstuma periods [P likums, N: tas ir sliekšņa efekts, nevis klimata gradients]:
+  - izlidošanas diena ir pirmā diena ar I_max ≥ 14,5 °C pēc tam, kad sasniegti 53 dd;
+  - ja 53 dd sasniedz tieši pirms aukstuma perioda, izlidošanas diena pārlec par 2–3 nedēļām.
+
+  Tāpēc izlidošanas DOY kā pazīme ir nestabila, bet termālā summa mainās gludi.
+
+![Izlidošana](rm_figures/rm4_lv_era5land_izlidosana.png)
+![Tsum_F1](rm_figures/rm4_lv_era5land_tsum_f1.png)
+![Tsum_F2](rm_figures/rm4_lv_era5land_tsum_f2.png)
+![Paaudzes AVG](rm_figures/rm4_lv_era5land_paaudzes.png)
+![Paaudzes INCA](rm_figures/rm4_lv_era5land_paaudzes_inca.png)
+
+### Ūdens bilance P − ET0 (IV–IX) 1991–2026, anomālija pret 1991–2020 (nav SPEI) [P]
+
+- **2018. gada pārbaude izpildīta:** z < 0 visās 946 šūnās (100 %), vidējais z −1,88, z < −1 arī visās šūnās.
+- **Sausākie gadi** (Latvijas vidējais z): 2002 (−1,95), **2018 (−1,88)**, 2006 (−1,31), 1999 (−1,19),
+  1992 (−1,12), 2023 (−1,12), 2019 (−1,01).
+- **Mitrākie gadi:** 1998 (2,06), 2025 (1,58), 2017 (1,37), 2026* (1,23), 2010 (1,03).
+- **2018–2026 pa gadiem:**
+
+  | | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026* |
+  |---|---|---|---|---|---|---|---|---|---|
+  | vidējais z | −1,88 | −1,01 | −0,28 | 0,41 | −0,16 | −1,12 | −0,31 | 1,58 | 1,23 |
+  | negatīvo šūnu daļa | 100 % | 99 % | 77 % | 10 % | 75 % | 94 % | 80 % | 2 % | 0 % |
+- **Latvijas vidējā CWB 1991–2026:** no −279 mm (2002) līdz +128 mm (1998); ET0 IV–IX 449–586 mm, P 299–577 mm.
+- **Telpiski:** 2023. gadā sausums bija austrumos (Latgalē, Vidzemē), bet rietumos tuvu normai. 2002. gadā sausākais
+  bija austrumos (Latgalē) un Kurzemē.
+
+![Ūdens bilance](rm_figures/rm4_lv_era5land_udens_bilance.png)
+
+### Pārbaude: Kalsnava — ERA5-Land šūna (56,7 / 25,9) pret Open-Meteo prototipu (ERA5 0,25°, 56,75 / 25,75) [P]
+
+| Gads | Izlidošana DOY ERA5-Land / OM (starpība) | Tsum_F1 E / OM | Tsum_F2 E / OM | Paaudzes AVG E / OM | INCA E / OM | z E / OM |
+|---|---|---|---|---|---|---|
+| 2018 | 105 / 104 (+1) | 2,55 / 2,33 | 1,56 / 1,34 | 2 / 2 | 2 / 1 | −2,03 / −2,11 |
+| 2019 | 109 / 108 (+1) | 2,09 / 1,89 | 1,09 / 0,90 | 2 / 2 | 1 / 1 | −1,08 / −1,05 |
+| 2020 | 119 / 119 (0) | 2,09 / 1,87 | 1,10 / 0,88 | 2 / 2 | 1 / 1 | −0,41 / −0,26 |
+| 2021 | **130 / 109 (+21)** | 2,06 / 1,91 | 1,07 / 0,91 | 2 / 2 | 1 / 1 | 0,82 / 0,80 |
+| 2022 | 113 / 111 (+2) | 1,89 / 1,74 | 0,90 / 0,74 | 2 / 2 | 1 / 1 | −0,03 / 0,17 |
+| 2023 | 103 / 103 (0) | 2,34 / 2,10 | 1,35 / 1,11 | 2 / 2 | 1 / 1 | −1,57 / −1,30 |
+| 2024 | 93 / 93 (0) | 2,58 / 2,41 | 1,58 / 1,42 | 2 / 2 | 2 / 2 | −0,42 / −0,44 |
+| 2025 | **104 / 93 (+11)** | 1,88 / 1,74 | 0,90 / 0,76 | 2 / 2 | 1 / 1 | 2,00 / 2,24 |
+| 2026* | 105 / 105 (0) | 2,06 / 1,88 | 1,09 / 0,88 | 2 / 2 | 1 / 1 | 0,92 / 1,21 |
+
+- **Izlidošana:** 7 gados starpība ir 0–2 dienas; **2021. gadā +21, 2025. gadā +11 dienas** (vidēji +4,0).
+  - Abos gados ERA5-Land šūnā Open-Meteo izlidošanas dienās arī bija I_max ≥ 14,5 °C (2021: 17.–19.04, DOY 107–109;
+    2025: 1.–3.04, DOY 91–93).
+  - Pēc tām sekoja aukstuma periods: I_max < 14,5 °C līdz DOY 130 (2021) un DOY 104 (2025).
+  - Tātad atšķirība rodas no tā, kad tieši pirms aukstuma tiek sasniegti 53 dd, nevis no citas siltas dienas
+    [P dienas t°, N: šūnas dd summa pa dienām nav izvadīta].
+- **Termālā summa:** ERA5-Land Tsum_F1 un Tsum_F2 ir sistemātiski lielāki par **+0,13 … +0,24** (vidēji +0,19).
+- **Paaudzes:** AVG sakrīt visos gados; INCA atšķiras 2018. gadā (2 pret 1).
+- **Ūdens bilance:**
+  - ERA5-Land CWB ir par +8 … +51 mm mitrāka (zemāks ET0, sk. ET0 sadalījumu);
+  - z starpība −0,29 … +0,08;
+  - sausuma gadu secība nemainās.
+
+### Pārbaude: Silava 20.04.2023 (DOY 110) [P]
+
+- **Kalsnavas šūna:** izlidošana 13.04 (DOY 103), **−7 dienas**, tāpat kā Open-Meteo prototipā; PHENIPS-Clim DOY 115.
+- **Latvija 2023:**
+  - izlidošana p10 / mediāna / p90 = 101 / 103 / 113;
+  - **līdz 20.04 izlidošana sasniegta 68,4 % šūnu** (647 no 946);
+  - vēlākās šūnas ir Kurzemes un Rīgas līča piekrastē.
+- Tas ir viens publisks datums visai Latvijai, un vietas nav zināmas. Tāpēc tā ir saprāta pārbaude, nevis
+  kalibrācija [N].
+
+### Pārbaude: dienvidrietumi pret ziemeļaustrumiem (tikai ziņots) [P]
+
+Šūnas sadalītas trīs daļās pa DR → ZA diagonāli. Tabulā: ZA trešdaļas vidējā izlidošanas diena mīnus DR trešdaļas
+vidējā (dienās), slīpums un korelācijas.
+
+| | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026* |
+|---|---|---|---|---|---|---|---|---|---|
+| ZA − DR, dienas | 0,0 | +0,6 | +0,4 | +2,2 | +3,2 | −1,3 | −0,1 | +2,7 | −5,2 |
+| d / 100 km uz ZA | +0,2 | +0,3 | +0,1 | +0,9 | +1,5 | −0,7 | −0,1 | +1,1 | −2,7 |
+| korelācija ar platumu | 0,38 | 0,55 | 0,56 | 0,73 | 0,36 | 0,51 | 0,51 | 0,41 | 0,20 |
+| korelācija ar garumu | −0,12 | −0,14 | −0,24 | −0,26 | 0,01 | −0,37 | −0,26 | −0,01 | −0,49 |
+
+- **Gaidītais „DR agrāk nekā ZA” konsekventi neparādās:** starpība ir −5 … +3 dienas, un zīme mainās pa gadiem.
+- **Kas parādās konsekventi:**
+  - izlidošana ir vēlāka ziemeļos (korelācija ar platumu 0,2–0,73);
+  - izlidošana ir vēlāka piekrastē (Kurzemes rietumu krastā, Rīgas līča krastā) un agrāka Zemgales iekšzemē;
+  - korelācija ar garumu ir vāja vai negatīva, t. i., austrumos izlidošana drīzāk ir agrāka.
+- Kurzemes DR daļā ir piekrastes šūnas, tāpēc DR trešdaļa nav agrāka [N: jūras pavasara vēsuma efekts, nav
+  pārbaudīts]. Nekas nav labots.
+
+### Ierobežojumi (Latvija)
+
+- RITY-2 nav kalibrēts Latvijai (sk. iepriekš). ERA5-Land 0,1° šūna (~6 × 11 km) dod gaisa temperatūru 2 m augstumā,
+  nevis mežaudzes vai mizas mikroklimatu [N].
+- Izlidošanas DOY ir sliekšņa pazīme ar lēcieniem (2021, 2025). Riska modelim piemērotāka ir gluda Tsum [N].
+- 2026. gads ir nepilns (temperatūra līdz 27.10, akumulētie līdz 26.10); ūdens bilanci tas neietekmē, jo IV–IX ir
+  pilns.
+- Sausuma salīdzinājums: `docs/RM_4b_SAUSUMS.md` (2026-11-04). 6. posms nav sākts.
+- 2026-11-05: RITY-2 arī 2011–2017 (papildu I–III, X lejupielāde; `pheno_extra_years`). Gadu tabulā
+  `lv_rity2_years.csv` ir 2011–2026; kartes paliek 2018–2026. Rezultāti un Kalsnavas temperatūru pārbaude:
+  `docs/RM_6a_PAZIMES.md` 9. sadaļa.
+- 4. posms pieņemts (lietotājs 2026-11-04). Piekrastes vēlākā izlidošana — [N] jūras pavasara vēsums (lietotāja
+  piezīme: fizikāli loģiski); „DR agrāk” bija pieņēmums, nevis prasība.

@@ -557,12 +557,16 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
                  ncol: int = 3, marked: tuple = ()) -> Path:
     """Stage 4: one small map per year of a grid value (cells of `step` deg around lon / lat, EPSG:4326);
     years in `marked` get a `*` (incomplete)."""
+    from matplotlib.collections import PatchCollection
     from matplotlib.colors import BoundaryNorm, ListedColormap
     from matplotlib.patches import Rectangle
 
     n = len(years)
     nrow = int(np.ceil(n / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(10 * ncol / 3, 2.7 * nrow + 0.6), dpi=200, squeeze=False)
+    # panel ~3.0 x 2.15 in (Latvia extent 8 x 2.9 deg at 57 N); constrained layout, room at the bottom for the note
+    fig, axes = plt.subplots(nrow, ncol, figsize=(3.0 * ncol + 0.9, 2.15 * nrow + 0.5), dpi=200, squeeze=False,
+                             layout="constrained")
+    fig.get_layout_engine().set(rect=(0, 0.035 * 3 / max(nrow, 3), 1, 1 - 0.035 * 3 / max(nrow, 3)), w_pad=0.02, h_pad=0.02)
     if discrete is not None:
         cm = ListedColormap([plt.get_cmap(cmap)(i / max(len(discrete) - 1, 1)) for i in range(len(discrete))])
         norm = BoundaryNorm(np.arange(len(discrete) + 1) - 0.5 + discrete[0], cm.N)
@@ -571,10 +575,13 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
         norm = plt.Normalize(vmin if vmin is not None else cells[col].min(), vmax if vmax is not None else cells[col].max())
     for ax, y in zip(axes.flat, years):
         d = cells[cells["year"] == y]
-        for lo, la, v in zip(d["lon"], d["lat"], d[col]):
-            ax.add_patch(Rectangle((lo - step / 2, la - step / 2), step, step, lw=0,
-                                   color=cm(norm(v)) if np.isfinite(v) else "#ffffff"))
+        v = d[col].to_numpy(dtype=float)
+        rects = [Rectangle((lo - step / 2, la - step / 2), step, step) for lo, la in zip(d["lon"], d["lat"])]
+        ax.add_collection(PatchCollection(rects, lw=0, facecolors=[cm(norm(x)) if np.isfinite(x) else "#ffffff"
+                                                                   for x in v]))
         country.boundary.plot(ax=ax, color=INK, lw=0.5)
+        ax.set_xlabel("")
+        ax.set_ylabel("")
         ax.set_xlim(20.6, 28.6)
         ax.set_ylim(55.4, 58.3)
         ax.set_aspect(1 / np.cos(np.radians(57)))
@@ -582,6 +589,8 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
         ax.set_xticks([])
         ax.set_yticks([])
         ax.grid(False)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
     for ax in list(axes.flat)[n:]:
         ax.axis("off")
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cm)
@@ -589,6 +598,215 @@ def climate_maps(country, cells: pd.DataFrame, col: str, years: list[int], title
     if discrete is not None:
         cb.set_ticks(discrete)
     fig.suptitle(title, fontweight="bold")
-    fig.savefig(path, bbox_inches="tight")
+    note = "Robežas: © EuroGeographics for the administrative boundaries (GISCO NUTS 2024)"
+    if any(y in marked for y in years):
+        note += "; * nepilns gads"
+    fig.text(0.01, 0.005, note, fontsize=7, color=INK2, va="bottom")
+    fig.savefig(path, bbox_inches="tight", pad_inches=0.05)
+    plt.close(fig)
+    return path
+
+
+# --- drought comparison (after stage 4) ------------------------------------------------------------------------------
+
+DRY, WET = "#c4452f", "#2a78d6"          # diverging pair for the water balance anomaly (dry / wet)
+EVENT_YEARS = (2018, 2023)
+
+
+def _events(ax, years=EVENT_YEARS):
+    for y in years:
+        ax.axvspan(y - 0.5, y + 0.5, color=GRID, alpha=0.7, lw=0, zorder=0)
+
+
+def drought_series(nat: pd.DataFrame, damage: dict, storms, path: Path) -> Path:
+    """Annual series in one figure: drought on top (cwb_z bars, RITY-2 Tsum), damage below (one unit per panel)."""
+    panels = [("CSP MEB012: izcirstais apjoms, tūkst. m³ (visi īpašnieki)",
+               [("CSP MEB012 stumbra kaitēkļi, izcirsts tūkst. m3", S2, "stumbra kaitēkļi"),
+                ("CSP MEB012 vējgāzes (kontrole), izcirsts tūkst. m3", INK2, "vējgāzes, snieglauzes (kontrole)")]),
+              ("LVM 620 (stumbra kaitēkļi), ha pēc reģistrācijas gada", [("LVM 620, ha", S2, None)]),
+              ("EFDA v3.0 klase 1 (vējš / mizgrauži, nav tīra mizgraužu etiķete), ha", [("EFDA v3.0 klase 1, ha", S3, None)]),
+              ("EFDA v3.0 klase 3 (cirte), ha", [("EFDA v3.0 klase 3 (cirte), ha", INK2, None)])]
+    fig, axes = plt.subplots(2 + len(panels), 1, figsize=(9, 2.0 * (2 + len(panels))), dpi=200, sharex=True,
+                             layout="constrained")
+    ax = axes[0]
+    z = nat["cwb_z"].dropna()
+    ax.bar(z.index, z.values, width=0.75, color=[DRY if v < 0 else WET for v in z.values], lw=0)
+    ax.axhline(0, color=AXIS, lw=0.8)
+    ax.set_title("Ūdens bilances anomālija z (P − ET0, IV–IX, Latvijas vidējais; bāze 1991–2020; < 0 = sausāks)",
+                 loc="left")
+    ax = axes[1]
+    for col, c, lab in (("tsum_F1", S2, "Tsum_F1"), ("tsum_F2", S1, "Tsum_F2")):
+        s = nat[col].dropna()
+        ax.plot(s.index, s.values, color=c, marker="o", ms=3, label=lab)
+        ax.annotate(lab, (s.index[-1], s.values[-1]), xytext=(4, 0), textcoords="offset points", fontsize=7,
+                    color=INK2, va="center")
+    ax.set_title("RITY-2 relatīvā termālā summa (AVG, Latvijas vidējais; tikai 2018–2026, 2026* līdz 27.10)",
+                 loc="left")
+    ax.legend(loc="upper left", fontsize=7, ncol=2)
+    for ax, (title, series) in zip(axes[2:], panels):
+        for key, c, lab in series:
+            s = damage[key].dropna()
+            ax.plot(s.index, s.values, color=c, marker="o", ms=3, label=lab, ls="-" if c != INK2 or lab is None else "--")
+        if any(lab for _, _, lab in series):
+            ax.legend(loc="upper left", fontsize=7)
+        ax.set_title(title, loc="left")
+        ax.set_ylim(0, None)
+    _storms(axes[4], storms)
+    for ax in axes:
+        _events(ax)
+    for y in EVENT_YEARS:
+        axes[-1].annotate(str(y), (y, 0.03), xycoords=("data", "axes fraction"), ha="center", va="bottom", fontsize=7,
+                          color=INK2)
+    axes[-1].set_xlim(1984.5, 2026.5)
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def drought_regions(feat: pd.DataFrame, dens: pd.DataFrame, years: tuple[int, int], path: Path) -> Path:
+    """Per NUTS 2024 region: water balance anomaly (top row) and LVM 620 ha per 1000 ha LVM land (bottom row)."""
+    regs = sorted(dens["region"].unique())
+    fig, axes = plt.subplots(2, len(regs), figsize=(2.2 * len(regs), 4.6), dpi=200, sharex=True, sharey="row",
+                             layout="constrained")
+    fig.get_layout_engine().set(rect=(0, 0.05, 1, 0.95))
+    top = float(dens["lvm_620_ha_per_1000ha"].max()) * 1.05
+    for j, r in enumerate(regs):
+        f = feat[(feat["region"] == r) & feat["year"].between(years[0] - 2, years[1])]
+        ax = axes[0, j]
+        ax.bar(f["year"], f["cwb_z"], width=0.75, color=[DRY if v < 0 else WET for v in f["cwb_z"]], lw=0)
+        ax.axhline(0, color=AXIS, lw=0.8)
+        ax.set_title(r, loc="left")
+        g = dens[dens["region"] == r]
+        ax = axes[1, j]
+        ax.plot(g["year"], g["lvm_620_ha_per_1000ha"], color=S2, marker="o", ms=3)
+        ax.set_ylim(0, top)
+        for a in axes[:, j]:
+            _events(a)
+            a.set_xticks([years[0] - 2, 2018, 2023])
+    axes[0, 0].set_ylabel("cwb_z")
+    axes[1, 0].set_ylabel("LVM 620, ha / 1000 ha")
+    fig.suptitle("Reģioni (NUTS 2024): ūdens bilances anomālija un LVM 620 bojājumu blīvums", fontweight="bold")
+    fig.text(0.01, 0.005, "Reģionu robežas: © EuroGeographics for the administrative boundaries (GISCO NUTS 2024)",
+             fontsize=6, color=INK2, va="bottom")
+    fig.savefig(path, bbox_inches="tight", pad_inches=0.08)
+    plt.close(fig)
+    return path
+
+
+# --- stage 6a pilot -------------------------------------------------------------------------------------------------
+
+def pilot_overview(py: pd.DataFrame, path: Path) -> Path:
+    """Positives (LVM 620 cells) per year in the pilot block and their share of the training cells."""
+    fig, axes = plt.subplots(2, 1, figsize=(8, 4.6), dpi=200, sharex=True, layout="constrained")
+    axes[0].bar(py["year"], py["positives"], color=S2, width=0.7, lw=0)
+    axes[0].set_title("Pozitīvās šūnas (LVM 620 pēc reģistrācijas gada), skaits", loc="left")
+    axes[1].bar(py["year"], py["share_pos"] * 100, color=S2, width=0.7, lw=0)
+    axes[1].set_title("Pozitīvo daļa apmācības kopā, %", loc="left")
+    axes[1].set_xticks(py["year"])
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def pilot_features(tab: pd.DataFrame, feats: list[tuple[str, str, bool]], path: Path) -> Path:
+    """ECDF of each feature: positives vs other training cells (no model). feats: (column, title, log x)."""
+    d = tab[tab["in_set"] == 1]
+    n = len(feats)
+    ncol = 4
+    nrow = int(np.ceil(n / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(11, 2.4 * nrow), dpi=200, layout="constrained", squeeze=False)
+    for ax, (c, title, logx) in zip(axes.flat, feats):
+        for lab, col, name in ((0, INK2, "pārējās"), (1, S2, "pozitīvās")):
+            x = np.sort(d.loc[d["label"] == lab, c].dropna().to_numpy())
+            if len(x):
+                ax.plot(x, np.arange(1, len(x) + 1) / len(x), color=col, lw=1.6, label=f"{name} (n={len(x):,})")
+        if logx:
+            ax.set_xscale("symlog", linthresh=1)
+        ax.set_title(title, loc="left", fontsize=8)
+        ax.set_ylim(0, 1)
+        ax.legend(fontsize=6, loc="best")
+    for ax in list(axes.flat)[n:]:
+        ax.axis("off")
+    fig.suptitle("Pilota bloks: pazīmju sadalījums (ECDF), pozitīvās pret pārējām šūnām, 2013–2024", fontweight="bold")
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+MODEL_STYLE = {"random": ("nejaušs", "#9a9890", ":"), "dist_t1": ("tikai 620 t−1 attālums", INK2, "--"),
+               "dist_t23": ("tikai 620 t−2..t−3 (L3)", "#a3a29a", "-."), "A": ("A spiediens", S1, "-"),
+               "A_mono": ("A monotons (jutīgums)", "#86b6ef", "--"),
+               "B": ("B + audze", S3, "-"), "B_chm": ("B + CHMv2", "#8a5cd1", "-"), "C": ("C + klimats", S2, "-")}
+
+
+def model_metrics(met: pd.DataFrame, path: Path, title_suffix: str = "") -> Path:
+    """Per test year: PR-AUC / share of positives, hit share in the top 5 % and 10 % of the area; all cells (top row)
+    and new foci (bottom row); 95 % cluster-bootstrap CI as error bars."""
+    panels = [("ap_ratio", "PR-AUC / pozitīvo daļa (1 = nejaušs)"), ("hit5", "Trāpījumi augšējos 5 % platības, %"),
+              ("hit10", "Trāpījumi augšējos 10 % platības, %")]
+    subs = [("visi", "VISAS ŠŪNAS"), ("jaunie", "JAUNIE PERĒKĻI\n(> 500 m no 620 t−1)")]
+    models = [m for m in MODEL_STYLE if m in set(met["model"])]
+    fig, axes = plt.subplots(2, 3, figsize=(11, 6.4), dpi=200, layout="constrained", sharex=True)
+    off = np.linspace(-0.3, 0.3, len(models))
+    for i, (sub, sname) in enumerate(subs):
+        for j, (col, ptitle) in enumerate(panels):
+            ax = axes[i, j]
+            k = 100 if col.startswith("hit") else 1
+            gs = met[met["subset"] == sub]
+            # y range from the point estimates; a CI longer than that (few tiles -> very wide) is cut and marked ^
+            pt = float(np.nanmax(gs[col].to_numpy())) * k if gs[col].notna().any() else 1.0
+            cap = min(float(np.nanmax(gs[f"{col}_hi"].to_numpy())) * k, pt * 1.6) if gs[f"{col}_hi"].notna().any() else pt
+            cut = False
+            for o, m in zip(off, models):
+                g = gs[gs["model"] == m].sort_values("year")
+                if g.empty:
+                    continue
+                lab, c, ls = MODEL_STYLE[m]
+                yv, lo, hi = g[col] * k, g[f"{col}_lo"] * k, g[f"{col}_hi"] * k
+                hic = hi.clip(upper=cap)
+                ax.errorbar(g["year"] + o, yv, yerr=[(yv - lo).clip(lower=0), (hic - yv).clip(lower=0)], color=c, ls=ls,
+                            lw=1.3, marker="o", ms=3.5, elinewidth=0.8, capsize=0, label=lab)
+                over = (hi > cap).to_numpy()
+                if over.any():
+                    cut = True
+                    ax.plot((g["year"] + o).to_numpy()[over], np.full(over.sum(), cap), "^", ms=3.5, color=c, lw=0)
+            if col == "ap_ratio":
+                ax.axhline(1, color=INK2, lw=0.8, ls=":", zorder=0)
+            ax.set_ylim(0, cap * 1.05 if cap > 0 else 1)
+            if cut:
+                ax.text(0.99, 0.98, "▲ TI augšējā robeža ārpus ass", transform=ax.transAxes, ha="right", va="top",
+                        fontsize=6, color=INK2)
+            if i == 0:
+                ax.set_title(ptitle, loc="left", fontsize=8)
+            if j == 0:
+                ax.set_ylabel(sname, fontsize=8, fontweight="bold")
+            ax.set_xticks(sorted(met["year"].unique()))
+    h, lab = axes[0, 0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="outside lower center", ncol=len(lab), fontsize=7, frameon=False)
+    fig.suptitle("7a pilots: tests gadā t, apmācība ≤ t−1" + title_suffix + "; 95 % TI — bootstrap pa ~5 km blokiem",
+                 fontsize=10, x=0.01, ha="left")
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def model_importance(pm: pd.DataFrame, path: Path) -> Path:
+    """Permutation importance (drop in average precision on the test year) of model C: bar = mean over test years,
+    dots = single years; all cells and new foci."""
+    subs = [("visi", "visas šūnas"), ("jaunie", "jaunie perēkļi")]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.2), dpi=200, layout="constrained", sharey=True)
+    order = pm[pm["subset"] == "visi"].groupby("feature")["importance_mean"].mean().sort_values().index.tolist()
+    for ax, (sub, sname) in zip(axes, subs):
+        g = pm[pm["subset"] == sub]
+        mean = g.groupby("feature")["importance_mean"].mean().reindex(order)
+        ax.barh(range(len(order)), mean.to_numpy(), color=S2, height=0.6, lw=0)
+        for k, f in enumerate(order):
+            v = g.loc[g["feature"] == f, "importance_mean"].to_numpy()
+            ax.plot(v, np.full(len(v), k), "o", ms=2.5, color=INK, alpha=0.6, lw=0)
+        ax.axvline(0, color=AXIS, lw=0.8)
+        ax.set_yticks(range(len(order)), order, fontsize=7)
+        ax.set_title(f"C modelis: PR-AUC kritums, permutējot pazīmi — {sname}", loc="left", fontsize=8)
+        ax.set_xlabel("PR-AUC kritums (stabiņš: vidēji 2020–2024; punkti: gadi)", fontsize=7)
+    fig.savefig(path)
     plt.close(fig)
     return path
