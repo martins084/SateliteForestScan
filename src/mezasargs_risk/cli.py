@@ -1381,7 +1381,8 @@ def models_latvia(config: Path = ConfigArg,
                   part: str = typer.Option("main", help="main (time, labels, sensitivities, regions) | spatial | bchm"),
                   n_jobs: int = typer.Option(6, help="parallel bootstrap evaluations"),
                   years: str = typer.Option("", help="subset of test years, e.g. 2024 (smoke test)"),
-                  n_boot: int = typer.Option(0, help="override n_boot (smoke test only)")):
+                  n_boot: int = typer.Option(0, help="override n_boot (smoke test only)"),
+                  resume: bool = typer.Option(False, help="keep finished (labels, year) from the saved tables and skip them")):
     """Stage 7b (user 2026-11-09; PLANS 2.25, pre-registered): Latvia model on the weighted sample (latvia-sample).
     part=main: baselines (random, -distance t-1, -distance t-2..3, strong LR), HGB A_mono / B_mono / C_mono with
     monotone pressure constraints, sensitivities (equal year weight, relative pressure, C + phenology; labels without
@@ -1433,7 +1434,19 @@ def models_latvia(config: Path = ConfigArg,
     def save():
         for k, v in acc.items():
             if v:
-                pd.DataFrame(v).round(6).to_csv(tdir / f"rm7b_{k}{tag}.csv", index=False)
+                out = tdir / f"rm7b_{k}{tag}.csv"
+                pd.DataFrame(v).round(6).to_csv(out.with_suffix(".part"), index=False)
+                out.with_suffix(".part").replace(out)                       # atomic: a kill never leaves half a table
+
+    done = set()
+    if resume and (tdir / f"rm7b_sizes{tag}.csv").exists():
+        # sizes rows are saved together with all results of a finished year (save() runs once per year)
+        for k in acc:
+            f = tdir / f"rm7b_{k}{tag}.csv"
+            if f.exists() and k != "regions":
+                acc[k] = pd.read_csv(f).to_dict("records")
+        done = {(r["labels"], int(r["year"])) for r in acc["sizes"]}
+        typer.echo(f"resume: {sorted(done)} already done")
 
     def fit_score(v, pool, test):
         """Fit model v on `pool`, return (scores on test, fitted model, feats)."""
@@ -1470,6 +1483,8 @@ def models_latvia(config: Path = ConfigArg,
         else:
             models = ["B_mono", "B_chm_mono"]
         for t in test_years:
+            if (lv, t) in done:
+                continue
             t0 = time.time()
             test = dl[dl["year"] == t].reset_index(drop=True)
             pool = dl[dl["year"] < t]
