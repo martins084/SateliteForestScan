@@ -631,3 +631,64 @@ t−2 viena pati (RM_4b: dati neatbalsta).
   egle ir sastāvā; izcirtumi / jaunaudzes ārā). Maska ietekmē tikai prognozes attēlošanu, nevis apmācību vai
   validāciju.
 
+
+## 2.25 7b Latvijas modelis — iepriekšēja reģistrācija (lietotājs, 2026-11-09)
+
+Ierakstīts un iekomitēts **pirms** jebkura 7b modeļa palaišanas. Pēc tam neko nepievieno un neizvēlas pēc testa
+rezultātiem; RM_7b ziņo **visus** šeit uzskaitītos variantus. Hiperparametri un sēkla kā 7a (2026-11-05), nekas
+netiek pielāgots.
+
+**Dati.** Laptopa kopija `C:\Users\varna\server_backup\s2-forest-screening\output\rm6b_latvija\blocks` (205
+bloki, tikai lasīšanai; SHA-256 = servera). Analīzes kopa gadā t: `in_set` = 1 (EFDA traucējums t−5…t−1 ārā).
+
+**Etiķetes.**
+- Galvenais: šūnas ar LVM 620 poligonu **tajā pašā šūnā gadā t−1** (`p620_dist_t1` = 0, t. i., t−1 poligona
+  pārklājums šūnā > 0 pēc 3 × 3 apakššūnām) gadā t ir **ārpus kopas** (ne pozitīvas, ne negatīvas).
+- Jutīgums: bez izslēgšanas (kā 7a).
+- Ziņo izslēgto pozitīvo skaitu pa gadiem (visa Latvija, ne izlase).
+
+**Izlase.** Katrā blokā × gadā × slānī (`p620_dist_t1` = 0 / > 0): visas pozitīvās; negatīvās
+n = min(N, max(10 × pozitīvās, 200)), svars = N / n; sēkla 20261105. Minimums 200 [N, mans papildinājums] —
+lai bloki bez pozitīvajām nedotu dažus negatīvos ar milzu svariem. Tā pati izlase kalpo apmācībai un testam
+(metrikas ar svariem). Galvenais variants izmet slāni `p620_dist_t1` = 0; jutīgums to patur.
+
+**Pazīmes.**
+- A (spiediens): `p620_dist_t1`, `p620_ha500_t1`, `p620_ha2k_t1`, `p620_dist_t23`, `p620_ha500_t23`, `p620_ha2k_t23`.
+- B = A + `hrl_conifer_100m`, `hrl_conifer_share_500m`, `picea_p`, `cut_dist_t13`, `cut_dist_t110`,
+  `edge_s_sw_w_t13`, `years_since_dist` (**bez** `picea_p500`, lēmums 1).
+- C = B + `cwb_z_t1`, `cwb_z_t12`, `tsum_F1_t1`.
+- Jutīgums C_fen = C + `swarming_doy_t1`, `n_filial_t1` (izlidošanas DOY, paaudzes RITY-2 tiešās).
+- B_chm = B + `chm_mean`, `chm_p90`, `chm_gt5` (t ≥ 2020) — tikai pēc CHMv2 pabeigšanas serverī (`chm-latvia`,
+  tikai 30 m agregāti); līdz tam nav ziņots.
+
+**Modeļi.**
+- Bāzlīnijas: nejaušs; −`p620_dist_t1`; −`p620_dist_t23`; **stiprā bāzlīnija LR** = loģistiskā regresija ar
+  log(`p620_dist_t1` + 30) un log(`p620_dist_t23` + 30) (+30 m = 1 šūna, jo attālums var būt 0; attālums
+  ierobežots 5 km), standartizēta, `LogisticRegression(C=1.0, max_iter=1000)`, ar izlases svariem.
+- HGB ar monotoniem ierobežojumiem spiediena pazīmēm (attālums −1, platība +1, pārējās 0): **A_mono, B_mono,
+  C_mono**; parametri kā 7a (lr 0,05, 300 iterācijas, 31 lapa, min 100 lapā, l2 1,0, bez agrās apstāšanās).
+- Jutīgums (i) **vienāds gadu svars**: katra apmācības gada pozitīvo kopējais svars vienāds (negatīvie tajā gadā
+  pārsvaroti ar to pašu koeficientu, tātad izplatība gadā nemainās) — A_mono_yw, C_mono_yw.
+- Jutīgums (ii) **relatīvais spiediens**: `p620_ha*_t1` / Latvijas LVM 620 kopplatība gadā t−1, `p620_ha*_t23` /
+  kopplatība t−2 + t−3 (ha no `LVM_BOJAJUMI` 620, tā pati Wayback kopija); attālumi nemainīti — A_mono_rel,
+  C_mono_rel.
+- Jutīgums (iii) **etiķetes bez izslēgšanas**: visas bāzlīnijas + A_mono, B_mono, C_mono.
+- Jutīgums (iv) C_fen_mono.
+
+**Validācija.**
+- Laikā: apmācība ≤ t−1, tests t, t = 2019…2024 (paplašināms logs).
+- Laiks + telpa: 205 bloki nejauši 5 grupās (sēkla 20261105); šūna testā tikai ar modeli, kas mācīts uz gadiem
+  < t un **citām** grupām. Tikai galvenie modeļi (bāzlīnijas, LR, A_mono, B_mono, C_mono).
+- 95 % CI: klasteru bootstrap pa 20 km blokiem (999 atkārtojumi); pārī salīdzinājumi uz tiem pašiem atkārtojumiem.
+
+**Metrikas (katram gadam).** PR-AUC / pozitīvo daļa; trāpījumi un lift augšējos 5 % un 10 % platības (svari =
+platība). **Galvenā:** tās pašas metrikas jaunajiem perēkļiem (`p620_dist_t1` > 500 m).
+- Pārī: A_mono, B_mono, C_mono − LR; C_mono − B_mono (klimata ieguvums); B_mono − A_mono.
+- Reģioni (aprakstoši): NUTS 2024 3. līmenis; **Rīga (LV006) apvienota ar Pierīgu (LV007)** → 5 reģioni
+  (Rīgas pilsētā LVM meža nav būtiski [N, pārbaudīs skaitā]). Metrikas LR un C_mono pa reģioniem × gadiem.
+- Nozīmīgums: permutācija testa gadā (PR-AUC kritums ar svariem, 5 atkārtojumi), C_mono, visas un jaunie; klimata
+  pazīmēm atsevišķi — vai Latvijas mērogā kritums > 0 (gadu skaits ar > 0 un vidējais).
+
+**Aprēķins.** Izlase un modeļi laptopā no kopijas. Ja izlase > 8 GB RAM vai > 2 GB diskā — apstājas un jautā.
+CHMv2 serverī fonā (tmux `cds`, viens savienojums palaišanai, pārbaude ne biežāk kā reizi 10 min; ≥ 5 GB brīvi;
+atsākšana pa blokiem; tikai 30 m agregāti).

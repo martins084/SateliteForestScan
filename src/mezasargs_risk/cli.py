@@ -1242,6 +1242,67 @@ def features_latvia(config: Path = ConfigArg, limit: int = typer.Option(0, help=
     _metadata(cfg, "features_latvia", {"blocks": len(blocks), "done": n_done, "chm": False, "years": fc.years})
 
 
+@app.command("chm-latvia")
+def chm_latvia(config: Path = ConfigArg, limit: int = typer.Option(0, help="process at most N new blocks"),
+               min_free_gb: float = typer.Option(5.0, help="stop when less disk is free")):
+    """Stage 7b (user 2026-11-09; run on the server in tmux): CHMv2 30 m aggregates (mean, p90, share > 5 m) for the
+    analysis-set cells (inner block AND EFDA forest AND LVM land) of every 20 km Latvia block. Only the 30 m values
+    are kept (<run_dir>/chm/chm_<x0>_<y0>.nc: cell_id, chm_mean, chm_p90, chm_gt5); CHMv2 tiles are read as COG
+    windows and never stored. Resumable per block; log <run_dir>/logs/chm_latvia.jsonl. Stops when free disk
+    < `min_free_gb`."""
+    import shutil
+    import time
+
+    import xarray as xr
+
+    from . import features_io as FIO
+
+    cfg = load_config(config)
+    fc = cfg.features
+    cdir, ldir = cfg.run_dir / "chm", cfg.run_dir / "logs"
+    for d in (cdir, ldir):
+        d.mkdir(parents=True, exist_ok=True)
+    blocks = FIO.latvia_blocks(cfg)
+    log = ldir / "chm_latvia.jsonl"
+    done = 0
+    typer.echo(f"{len(blocks)} blocks; {sum((cdir / f'chm_{int(b[0])}_{int(b[1])}.nc').exists() for b in blocks)} done")
+    for k, b in enumerate(blocks):
+        out = cdir / f"chm_{int(b[0])}_{int(b[1])}.nc"
+        if out.exists():
+            continue
+        if limit and done >= limit:
+            break
+        free = shutil.disk_usage(cdir).free / 2 ** 30
+        if free < min_free_gb:
+            typer.echo(f"STOP: free disk {free:.1f} GB < {min_free_gb} GB")
+            raise typer.Exit(6)
+        t0 = time.time()
+        bc = cfg.model_copy(update={"features": fc.model_copy(update={"block_3059": list(b)})})
+        inp = FIO.block_inputs(bc, tuple(fc.years))
+        idx = np.nonzero(inp["inner"] & inp["forest"] & inp["lvm_land"])
+        agg, info = FIO.chm_layers(bc, inp)
+        ds = xr.Dataset({"cell_id": ("row", inp["cell_id"][idx])} | {c: ("row", v[idx]) for c, v in agg.items()},
+                        attrs={"block_3059": str(list(b)), "tiles": ",".join(info["tiles"]), "source": "CHMv2 (Meta/WRI)"})
+        tmp = out.with_suffix(".part")
+        tmp.unlink(missing_ok=True)
+        ds.to_netcdf(tmp, engine="h5netcdf", encoding={c: {"zlib": True, "complevel": 4} for c in ds.data_vars})
+        tmp.replace(out)
+        v = agg["chm_mean"][idx]
+        rec = {"time_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"), "k": k, "n_blocks": len(blocks),
+               "block_3059": list(b), "cells": int(len(idx[0])), "cells_chm_nan": int(np.isnan(v).sum()),
+               "tiles": info["tiles"], "coverage_bbox": round(info["coverage"], 4), "seconds_read": info["seconds"],
+               "seconds_total": round(time.time() - t0, 1), "file_mb": round(out.stat().st_size / 2 ** 20, 2),
+               "free_gb": round(free, 1)}
+        with log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+        typer.echo(json.dumps(rec))
+        done += 1
+        del inp, agg, ds
+    n_done = sum((cdir / f"chm_{int(b[0])}_{int(b[1])}.nc").exists() for b in blocks)
+    typer.echo(f"blocks done: {n_done} / {len(blocks)}")
+    _metadata(cfg, "chm_latvia", {"blocks": len(blocks), "done": n_done})
+
+
 @app.command("models-pilot")
 def models_pilot(config: Path = ConfigArg, spatial: bool = typer.Option(True, help="also spatial-tile folds")):
     """Stage 7a (user 2026-11-05): baselines + HistGradientBoosting variants A / B / B_chm / C on the PILOT block,
