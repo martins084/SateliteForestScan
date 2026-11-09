@@ -684,8 +684,10 @@ lai bloki bez pozitīvajām nedotu dažus negatīvos ar milzu svariem. Tā pati 
 **Metrikas (katram gadam).** PR-AUC / pozitīvo daļa; trāpījumi un lift augšējos 5 % un 10 % platības (svari =
 platība). **Galvenā:** tās pašas metrikas jaunajiem perēkļiem (`p620_dist_t1` > 500 m).
 - Pārī: A_mono, B_mono, C_mono − LR; C_mono − B_mono (klimata ieguvums); B_mono − A_mono.
-- Reģioni (aprakstoši): NUTS 2024 3. līmenis; **Rīga (LV006) apvienota ar Pierīgu (LV007)** → 5 reģioni
-  (Rīgas pilsētā LVM meža nav būtiski [N, pārbaudīs skaitā]). Metrikas LR un C_mono pa reģioniem × gadiem.
+- Reģioni (aprakstoši): NUTS 2024 3. līmenis = 5 statistiskie reģioni (LV005 Latgale, LV009 Zemgale, LV00A Rīga,
+  LV00B Kurzeme, LV00C Vidzeme; `NUTS_RG_01M_2024_3035_LEVL_3`), šūnas centrs. Metrikas LR un C_mono pa reģioniem ×
+  gadiem. *(Labojums 2026-11-09 pirms jebkura modeļa: sākotnējais teksts kļūdaini minēja LV006/LV007 apvienošanu;
+  NUTS 2024 Latvijā jau ir 5 reģioni [P].)*
 - Nozīmīgums: permutācija testa gadā (PR-AUC kritums ar svariem, 5 atkārtojumi), C_mono, visas un jaunie; klimata
   pazīmēm atsevišķi — vai Latvijas mērogā kritums > 0 (gadu skaits ar > 0 un vidējais).
 
