@@ -219,7 +219,7 @@ class FeaturesConfig(BaseModel):
 
 class ModelsConfig(BaseModel):
     """Stage 7a (user 2026-11-05): first models on the pilot block training table."""
-    table: Path                                  # training_pilot.nc (stage 6a)
+    table: Path | None = None                    # training_pilot.nc (stage 6a); 7b: not used
     test_years: tuple[int, int] = (2020, 2024)   # expanding window: train <= t-1, test t
     neg_ratio: float = 10.0                      # L5: negatives 1:10 per training year, weighted
     seed: int = 20261105
@@ -228,6 +228,10 @@ class ModelsConfig(BaseModel):
     n_folds: int = 5
     new_focus_m: float = 500.0                   # "new foci": > this distance from any LVM 620 t-1 polygon
     perm_repeats: int = 5
+    # stage 7b (user 2026-11-09; PLANS 2.25): Latvia model from the read-only laptop copy of the 6b blocks
+    blocks_dir: Path | None = None               # .../rm6b_latvija/blocks (READ ONLY)
+    neg_floor: int = 200                         # min negatives per block x year x stratum
+    chm_dir: Path | None = None                  # CHMv2 30 m aggregates per block (chm-latvia), B_chm only
     hgb: dict = Field(default_factory=lambda: {"learning_rate": 0.05, "max_iter": 300, "max_leaf_nodes": 31,
                                                "min_samples_leaf": 100, "l2_regularization": 1.0,
                                                "early_stopping": False})

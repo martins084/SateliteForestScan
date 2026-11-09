@@ -1303,6 +1303,261 @@ def chm_latvia(config: Path = ConfigArg, limit: int = typer.Option(0, help="proc
     _metadata(cfg, "chm_latvia", {"blocks": len(blocks), "done": n_done})
 
 
+@app.command("latvia-sample")
+def latvia_sample(config: Path = ConfigArg):
+    """Stage 7b (user 2026-11-09; PLANS 2.25): weighted sample of the 6b Latvia feature table, read from the READ-ONLY
+    copy `models.blocks_dir`. Per block x year x stratum (LVM 620 polygon in the same cell in t-1: p620_dist_t1 = 0
+    / > 0), analysis set in_set = 1: all positives + min(N, max(ratio x positives, floor)) negatives, weight N / n.
+    Adds block index k (FIO.latvia_blocks order) and NUTS 2024 region. Writes <run_dir>/tables/sample_7b.nc,
+    rm7b_sample_counts.csv (block x year) and rm7b_excluded_positives.csv (year)."""
+    import time
+    import tracemalloc
+
+    import xarray as xr
+
+    from . import features_io as FIO
+    from . import models as M
+    from .efda import country_regions, layer, region_raster
+
+    cfg = load_config(config)
+    mc = cfg.models
+    tdir = cfg.run_dir / "tables"
+    tdir.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    tracemalloc.start()
+    blocks = FIO.latvia_blocks(cfg)
+    regions = country_regions(cfg.boundaries)
+    with rasterio.open(layer(cfg.efda.main, "agent")) as src:
+        reg = region_raster(regions, src).ravel()
+    reg_names = dict(enumerate(["-"] + regions["NAME_LATN"].tolist()))
+    cols = (["cell_id", "year", "label", "in_set"] + M.PRESSURE + M.STAND7B + M.CLIMATE + M.PHENO7B)
+    rng = np.random.default_rng(mc.seed)
+    parts, counts = [], []
+    for k, b in enumerate(blocks):
+        f = Path(mc.blocks_dir) / f"block_{int(b[0])}_{int(b[1])}.nc"
+        for t in range(cfg.features.years[0], cfg.features.years[1] + 1):
+            with xr.open_dataset(f, group=f"y{t}", engine="h5netcdf") as ds:
+                g = ds[cols].to_dataframe().reset_index(drop=True)
+            g = g[g["in_set"] == 1].drop(columns="in_set")
+            g["same_t1"] = (g["p620_dist_t1"] == 0).astype(np.uint8)
+            rec = {"k": k, "year": t, "cells_in_set": len(g), "pos_in_set": int(g["label"].sum()),
+                   "cells_same_t1": int(g["same_t1"].sum()), "pos_same_t1": int(g.loc[g["same_t1"] == 1, "label"].sum())}
+            for st, gs in g.groupby("same_t1"):
+                smp = M.sample_stratum(gs, mc.neg_ratio, mc.neg_floor, rng)
+                smp["block"] = np.int16(k)
+                smp["region"] = reg[smp["cell_id"].to_numpy(np.int64)].astype(np.uint8)
+                parts.append(smp)
+                rec[f"sampled_s{st}"] = len(smp)
+            counts.append(rec)
+        if k % 20 == 0:
+            typer.echo(f"block {k}/{len(blocks)}: {sum(len(x) for x in parts):,} rows, {time.time() - t0:.0f} s")
+    d = pd.concat(parts, ignore_index=True)
+    del parts
+    for c in d.columns:
+        if d[c].dtype == np.float64:
+            d[c] = d[c].astype(np.float32)
+    out = tdir / "sample_7b.nc"
+    ds = xr.Dataset({c: ("row", d[c].to_numpy()) for c in d.columns},
+                    attrs={"source": str(mc.blocks_dir), "neg_ratio": mc.neg_ratio, "neg_floor": mc.neg_floor,
+                           "seed": mc.seed, "regions": json.dumps(reg_names, ensure_ascii=False)})
+    ds.to_netcdf(out, engine="h5netcdf", encoding={c: {"zlib": True, "complevel": 4} for c in ds.data_vars})
+    cnt = pd.DataFrame(counts)
+    cnt.to_csv(tdir / "rm7b_sample_counts.csv", index=False)
+    ex = cnt.groupby("year")[["cells_in_set", "pos_in_set", "cells_same_t1", "pos_same_t1"]].sum().reset_index()
+    ex["pos_excluded_share"] = (ex["pos_same_t1"] / ex["pos_in_set"]).round(4)
+    ex.to_csv(tdir / "rm7b_excluded_positives.csv", index=False)
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    info = {"rows": len(d), "positives": int(d["label"].sum()), "mem_df_mb": round(d.memory_usage(deep=True).sum() / 2 ** 20),
+            "peak_traced_mb": round(peak / 2 ** 20), "file_mb": round(out.stat().st_size / 2 ** 20, 1),
+            "seconds": round(time.time() - t0)}
+    typer.echo(json.dumps(info))
+    typer.echo(ex.to_string(index=False))
+    _metadata(cfg, "latvia_sample", info)
+
+
+@app.command("models-latvia")
+def models_latvia(config: Path = ConfigArg,
+                  part: str = typer.Option("main", help="main (time, labels, sensitivities, regions) | spatial | bchm"),
+                  n_jobs: int = typer.Option(6, help="parallel bootstrap evaluations"),
+                  years: str = typer.Option("", help="subset of test years, e.g. 2024 (smoke test)"),
+                  n_boot: int = typer.Option(0, help="override n_boot (smoke test only)")):
+    """Stage 7b (user 2026-11-09; PLANS 2.25, pre-registered): Latvia model on the weighted sample (latvia-sample).
+    part=main: baselines (random, -distance t-1, -distance t-2..3, strong LR), HGB A_mono / B_mono / C_mono with
+    monotone pressure constraints, sensitivities (equal year weight, relative pressure, C + phenology; labels without
+    the same-cell exclusion), expanding window t = 2019..2024, per-year metrics for all cells and new foci with
+    cluster-bootstrap CI over the 20 km blocks, paired differences, permutation importance (C_mono), regions.
+    part=spatial: the main models with 205 blocks in 5 random groups (model from other groups only).
+    part=bchm: B_mono vs B_chm_mono once CHMv2 (chm-latvia) is finished. Tables are rewritten after every test year."""
+    import time
+
+    import xarray as xr
+    from joblib import Parallel, delayed
+    from sklearn.inspection import permutation_importance
+
+    from . import lvm as LV
+    from . import models as M
+    from . import viz
+
+    cfg = load_config(config)
+    mc = cfg.models
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    fdir.mkdir(parents=True, exist_ok=True)
+    nb = n_boot or mc.n_boot
+    t_start = time.time()
+    with xr.open_dataset(tdir / "sample_7b.nc", engine="h5netcdf") as ds:
+        d = ds.to_dataframe().reset_index(drop=True)
+        reg_names = {int(k): v for k, v in json.loads(ds.attrs["regions"]).items()}
+    d["new"] = d["p620_dist_t1"] > mc.new_focus_m
+    folds = M.group_folds(d["block"].to_numpy(), mc.n_folds, mc.seed)
+    d["fold"] = d["block"].map(folds)
+    ann = LV.annual(LV.load_damage(cfg.lvm), cfg.lvm)
+    totals = {int(k): float(v) for k, v in ann[ann["subtype"] == cfg.lvm.stem_pest].set_index("year")["ha"].items()}
+    test_years = [int(y) for y in years.split(",")] if years else list(range(mc.test_years[0], mc.test_years[1] + 1))
+    subsets = {"visi": None, "jaunie": "new"}
+    tag = {"main": "", "spatial": "_telpa", "bchm": "_bchm"}[part]
+    acc = {k: [] for k in ("metrics", "paired", "perm", "regions", "sizes")}
+    main_pairs = [("LR", "A_mono"), ("LR", "B_mono"), ("LR", "C_mono"), ("B_mono", "C_mono"), ("A_mono", "B_mono")]
+
+    def mask(test, col):
+        return np.ones(len(test), bool) if col is None else test[col].to_numpy()
+
+    def run_evals(tasks, t):
+        """tasks: (keys dict, kind, payload); kind 'ev' -> M.evaluate, 'pd' -> M.paired_diff; run in parallel."""
+        def one(kind, y, a, b, g, w):
+            return M.evaluate(y, a, g, nb, mc.seed + t, w) if kind == "ev" else M.paired_diff(y, a, b, g, nb, mc.seed + t, w=w)
+        res = Parallel(n_jobs=n_jobs)(delayed(one)(k, *p) for _, k, p in tasks)
+        for (keys, kind, _), r in zip(tasks, res):
+            acc["metrics" if kind == "ev" else "paired"].append(keys | r)
+
+    def save():
+        for k, v in acc.items():
+            if v:
+                pd.DataFrame(v).round(6).to_csv(tdir / f"rm7b_{k}{tag}.csv", index=False)
+
+    def fit_score(v, pool, test):
+        """Fit model v on `pool`, return (scores on test, fitted model, feats)."""
+        if v == "LR":
+            m = M.fit_lr(pool)
+            return M.score_lr(m, test), m
+        base = v.replace("_yw", "").replace("_rel", "")
+        feats = M.VARIANTS7B[base]
+        if v.endswith("_rel"):
+            pool, test = M.relative_pressure(pool, totals), M.relative_pressure(test, totals)
+        if v.endswith("_yw"):
+            pool = pool.assign(w_yw=M.equal_year_weight(pool))
+            m = M.fit_w(pool, feats, mc.hgb, mc.seed, M.MONO7B, w="w_yw")
+        else:
+            m = M.fit(pool, feats, mc.hgb, mc.seed, M.MONO7B)
+        return M.score(m, test), m
+
+    if part == "bchm":
+        if mc.chm_dir is None:
+            raise typer.BadParameter("models.chm_dir is not set (CHMv2 not finished / not copied)")
+        chm = pd.concat([xr.open_dataset(f, engine="h5netcdf").to_dataframe() for f in sorted(Path(mc.chm_dir).glob("chm_*.nc"))])
+        d = d.merge(chm.drop_duplicates("cell_id"), on="cell_id", how="left")
+        for c in M.CHM:
+            d.loc[d["year"] < cfg.features.chm_from_year, c] = np.nan
+        test_years = [t for t in test_years if t > cfg.features.chm_from_year]
+
+    label_sets = {"main": [("izsl", True), ("bez", False)], "spatial": [("izsl", True)], "bchm": [("izsl", True)]}[part]
+    for lv, exclude in label_sets:
+        dl = d[d["same_t1"] == 0] if exclude else d
+        if part == "main":
+            models = ["LR", "A_mono", "B_mono", "C_mono"] + (["C_fen_mono", "A_mono_yw", "C_mono_yw", "A_mono_rel", "C_mono_rel"] if exclude else [])
+        elif part == "spatial":
+            models = ["LR", "A_mono", "B_mono", "C_mono"]
+        else:
+            models = ["B_mono", "B_chm_mono"]
+        for t in test_years:
+            t0 = time.time()
+            test = dl[dl["year"] == t].reset_index(drop=True)
+            pool = dl[dl["year"] < t]
+            y, g, w = test["label"].to_numpy(), test["block"].to_numpy(), test["w"].to_numpy(np.float64)
+            acc["sizes"].append({"labels": lv, "year": t, "train_rows": len(pool), "train_pos": int(pool["label"].sum()),
+                                 "train_w": float(pool["w"].sum()), "test_rows": len(test), "test_pos": int(y.sum()),
+                                 "test_w": float(w.sum()), "test_new_pos": int(test.loc[test["new"], "label"].sum()),
+                                 "test_new_w": float(test.loc[test["new"], "w"].sum()), "blocks": int(test["block"].nunique())})
+            scores, fitted = {}, {}
+            if part != "bchm":
+                scores |= {b: M.baseline_score(test, b) for b in M.BASELINES}
+            for v in models:
+                if part == "spatial":
+                    s_sp = np.full(len(test), np.nan)
+                    for f in range(mc.n_folds):
+                        tm = (test["fold"] == f).to_numpy()
+                        if tm.any():
+                            s_sp[tm], _ = fit_score(v, pool[pool["fold"] != f], test[tm])
+                    scores[v] = s_sp
+                else:
+                    scores[v], fitted[v] = fit_score(v, pool, test)
+            t_fit = time.time() - t0
+            scheme = {"main": "laiks", "spatial": "laiks+telpa", "bchm": "laiks"}[part]
+            tasks = []
+            for v, s in scores.items():
+                for sub, col in subsets.items():
+                    m = mask(test, col)
+                    tasks.append(({"scheme": scheme, "labels": lv, "year": t, "subset": sub, "model": v}, "ev",
+                                  (y[m], s[m], None, g[m], w[m])))
+            pairs = main_pairs if part != "bchm" else [("B_mono", "B_chm_mono")]
+            for a, b in pairs:
+                for sub, col in subsets.items():
+                    m = mask(test, col)
+                    tasks.append(({"scheme": scheme, "labels": lv, "year": t, "subset": sub, "base": a, "model": b}, "pd",
+                                  (y[m], scores[a][m], scores[b][m], g[m], w[m])))
+            if part == "main" and exclude:                     # regions: descriptive, LR and C_mono
+                for rc, rn in reg_names.items():
+                    if rc == 0:
+                        continue
+                    for sub, col in subsets.items():
+                        m = mask(test, col) & (test["region"].to_numpy() == rc)
+                        if m.sum() and y[m].sum():
+                            for v in ("LR", "C_mono"):
+                                tasks.append(({"scheme": "regions", "labels": lv, "year": t, "subset": sub, "model": v,
+                                               "region": rn}, "ev", (y[m], scores[v][m], None, g[m], w[m])))
+            run_evals(tasks, t)
+            if part == "main" and exclude:                     # permutation importance, C_mono
+                mdl = fitted["C_mono"]
+                for sub, col in subsets.items():
+                    m = mask(test, col)
+                    pi = permutation_importance(mdl, test.loc[m, mdl.feats_].to_numpy(np.float32), y[m],
+                                                scoring="average_precision", n_repeats=mc.perm_repeats,
+                                                random_state=mc.seed, n_jobs=1, sample_weight=w[m])
+                    for i, f in enumerate(mdl.feats_):
+                        acc["perm"].append({"labels": lv, "year": t, "model": "C_mono", "subset": sub, "feature": f,
+                                            "importance_mean": pi.importances_mean[i], "importance_std": pi.importances_std[i]})
+            save()
+            typer.echo(f"{part} {lv} test {t}: fit {t_fit:.0f} s, total {time.time() - t0:.0f} s")
+    met = pd.DataFrame(acc["metrics"])
+    if part == "main":
+        reg = met[met["scheme"] == "regions"].copy()
+        reg.round(6).to_csv(tdir / "rm7b_regions.csv", index=False)
+        met = met[met["scheme"] != "regions"]
+        met.round(6).to_csv(tdir / "rm7b_metrics.csv", index=False)
+        figs = {"metrics": viz.model_metrics(met[met["labels"] == "izsl"], fdir / "rm7b_metrikas.png", style=viz.MODEL_STYLE_7B,
+                                             title="7b Latvija", ci_unit="20 km blokiem"),
+                "labels": viz.model_metrics(met[met["labels"] == "bez"], fdir / "rm7b_metrikas_bez_izsl.png", style=viz.MODEL_STYLE_7B,
+                                            title="7b Latvija", title_suffix=" (etiķetes bez izslēgšanas)", ci_unit="20 km blokiem"),
+                "sensitivity": viz.model_metrics(met[met["labels"] == "izsl"], fdir / "rm7b_jutigums.png", style=viz.SENS_STYLE_7B,
+                                                 title="7b Latvija, jutīgums", ci_unit="20 km blokiem"),
+                "importance": viz.model_importance(pd.DataFrame(acc["perm"]), fdir / "rm7b_nozimigums.png", name="C_mono"),
+                "regions": viz.region_metrics(reg, fdir / "rm7b_regioni.png")}
+    elif part == "spatial":
+        figs = {"spatial": viz.model_metrics(met, fdir / "rm7b_metrikas_telpa.png", style=viz.MODEL_STYLE_7B, title="7b Latvija",
+                                             title_suffix=" (laiks + 5 bloku grupas)", ci_unit="20 km blokiem")}
+    else:
+        figs = {"bchm": viz.model_metrics(met, fdir / "rm7b_metrikas_bchm.png", style=viz.MODEL_STYLE_7B, title="7b Latvija",
+                                          title_suffix=" (B pret B + CHMv2)", ci_unit="20 km blokiem")}
+    info = {"part": part, "rows": len(d), "blocks": int(d["block"].nunique()), "test_years": test_years, "n_boot": nb,
+            "seconds": round(time.time() - t_start, 1), "variants": M.VARIANTS7B, "mono": M.MONO7B, "hgb": mc.hgb,
+            "seed": mc.seed, "n_folds": mc.n_folds, "new_focus_m": mc.new_focus_m, "totals_620_ha": totals}
+    (tdir / f"rm7b_info{tag}.json").write_text(json.dumps(info, indent=1, default=str), encoding="utf-8")
+    typer.echo(json.dumps({k: info[k] for k in ("part", "rows", "blocks", "seconds")}))
+    for n, f in figs.items():
+        typer.echo(f"{n}: {f}")
+    _metadata(cfg, f"models_latvia_{part}", {"test_years": test_years, "n_boot": nb})
+
+
 @app.command("models-pilot")
 def models_pilot(config: Path = ConfigArg, spatial: bool = typer.Option(True, help="also spatial-tile folds")):
     """Stage 7a (user 2026-11-05): baselines + HistGradientBoosting variants A / B / B_chm / C on the PILOT block,

@@ -739,13 +739,25 @@ MODEL_STYLE = {"random": ("nejaušs", "#9a9890", ":"), "dist_t1": ("tikai 620 t�
                "B": ("B + audze", S3, "-"), "B_chm": ("B + CHMv2", "#8a5cd1", "-"), "C": ("C + klimats", S2, "-")}
 
 
-def model_metrics(met: pd.DataFrame, path: Path, title_suffix: str = "") -> Path:
+MODEL_STYLE_7B = {"random": ("nejaušs", "#9a9890", ":"), "dist_t1": ("tikai 620 t−1 attālums", INK2, "--"),
+                  "dist_t23": ("tikai 620 t−2..t−3", "#a3a29a", "-."), "LR": ("stiprā bāzlīnija (LR)", INK, "-"),
+                  "A_mono": ("A spiediens", S1, "-"), "B_mono": ("B + audze", S3, "-"),
+                  "B_chm_mono": ("B + CHMv2", "#8a5cd1", "-"), "C_mono": ("C + klimats", S2, "-")}
+SENS_STYLE_7B = {"LR": ("stiprā bāzlīnija (LR)", INK, "-"), "A_mono": ("A", S1, "-"),
+                 "A_mono_yw": ("A, vienāds gadu svars", "#86b6ef", "--"), "A_mono_rel": ("A, relatīvais spiediens", "#86b6ef", ":"),
+                 "C_mono": ("C", S2, "-"), "C_mono_yw": ("C, vienāds gadu svars", "#f3a27f", "--"),
+                 "C_mono_rel": ("C, relatīvais spiediens", "#f3a27f", ":"), "C_fen_mono": ("C + izlidošana, paaudzes", "#b4451c", "-.")}
+
+
+def model_metrics(met: pd.DataFrame, path: Path, title_suffix: str = "", style: dict | None = None,
+                  title: str = "7a pilots", ci_unit: str = "~5 km blokiem") -> Path:
     """Per test year: PR-AUC / share of positives, hit share in the top 5 % and 10 % of the area; all cells (top row)
     and new foci (bottom row); 95 % cluster-bootstrap CI as error bars."""
     panels = [("ap_ratio", "PR-AUC / pozitīvo daļa (1 = nejaušs)"), ("hit5", "Trāpījumi augšējos 5 % platības, %"),
               ("hit10", "Trāpījumi augšējos 10 % platības, %")]
     subs = [("visi", "VISAS ŠŪNAS"), ("jaunie", "JAUNIE PERĒKĻI\n(> 500 m no 620 t−1)")]
-    models = [m for m in MODEL_STYLE if m in set(met["model"])]
+    style = style or MODEL_STYLE
+    models = [m for m in style if m in set(met["model"])]
     fig, axes = plt.subplots(2, 3, figsize=(11, 6.4), dpi=200, layout="constrained", sharex=True)
     off = np.linspace(-0.3, 0.3, len(models))
     for i, (sub, sname) in enumerate(subs):
@@ -761,7 +773,7 @@ def model_metrics(met: pd.DataFrame, path: Path, title_suffix: str = "") -> Path
                 g = gs[gs["model"] == m].sort_values("year")
                 if g.empty:
                     continue
-                lab, c, ls = MODEL_STYLE[m]
+                lab, c, ls = style[m]
                 yv, lo, hi = g[col] * k, g[f"{col}_lo"] * k, g[f"{col}_hi"] * k
                 hic = hi.clip(upper=cap)
                 ax.errorbar(g["year"] + o, yv, yerr=[(yv - lo).clip(lower=0), (hic - yv).clip(lower=0)], color=c, ls=ls,
@@ -783,14 +795,14 @@ def model_metrics(met: pd.DataFrame, path: Path, title_suffix: str = "") -> Path
             ax.set_xticks(sorted(met["year"].unique()))
     h, lab = axes[0, 0].get_legend_handles_labels()
     fig.legend(h, lab, loc="outside lower center", ncol=len(lab), fontsize=7, frameon=False)
-    fig.suptitle("7a pilots: tests gadā t, apmācība ≤ t−1" + title_suffix + "; 95 % TI — bootstrap pa ~5 km blokiem",
+    fig.suptitle(f"{title}: tests gadā t, apmācība ≤ t−1" + title_suffix + f"; 95 % TI — bootstrap pa {ci_unit}",
                  fontsize=10, x=0.01, ha="left")
     fig.savefig(path)
     plt.close(fig)
     return path
 
 
-def model_importance(pm: pd.DataFrame, path: Path) -> Path:
+def model_importance(pm: pd.DataFrame, path: Path, name: str = "C modelis") -> Path:
     """Permutation importance (drop in average precision on the test year) of model C: bar = mean over test years,
     dots = single years; all cells and new foci."""
     subs = [("visi", "visas šūnas"), ("jaunie", "jaunie perēkļi")]
@@ -805,8 +817,39 @@ def model_importance(pm: pd.DataFrame, path: Path) -> Path:
             ax.plot(v, np.full(len(v), k), "o", ms=2.5, color=INK, alpha=0.6, lw=0)
         ax.axvline(0, color=AXIS, lw=0.8)
         ax.set_yticks(range(len(order)), order, fontsize=7)
-        ax.set_title(f"C modelis: PR-AUC kritums, permutējot pazīmi — {sname}", loc="left", fontsize=8)
+        ax.set_title(f"{name}: PR-AUC kritums, permutējot pazīmi — {sname}", loc="left", fontsize=8)
         ax.set_xlabel("PR-AUC kritums (stabiņš: vidēji 2020–2024; punkti: gadi)", fontsize=7)
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def region_metrics(reg: pd.DataFrame, path: Path) -> Path:
+    """7b: PR-AUC / share of positives per NUTS 2024 region x test year (LR and C_mono), all cells and new foci;
+    95 % cluster-bootstrap CI over the 20 km blocks of the region."""
+    subs = [("visi", "visas šūnas"), ("jaunie", "jaunie perēkļi (> 500 m no 620 t−1)")]
+    names = sorted(reg["region"].unique())
+    fig, axes = plt.subplots(2, len(names), figsize=(12, 5.6), dpi=200, layout="constrained", sharex=True, sharey="row")
+    for i, (sub, sname) in enumerate(subs):
+        for j, rn in enumerate(names):
+            ax = axes[i, j]
+            for o, m in zip((-0.12, 0.12), ("LR", "C_mono")):
+                g = reg[(reg["subset"] == sub) & (reg["region"] == rn) & (reg["model"] == m)].sort_values("year")
+                lab, c, ls = MODEL_STYLE_7B[m]
+                yv, lo, hi = g["ap_ratio"], g["ap_ratio_lo"], g["ap_ratio_hi"]
+                ax.errorbar(g["year"] + o, yv, yerr=[(yv - lo).clip(lower=0), (hi - yv).clip(lower=0)], color=c, ls=ls,
+                            lw=1.3, marker="o", ms=3.5, elinewidth=0.8, capsize=0, label=lab)
+            ax.axhline(1, color=INK2, lw=0.8, ls=":", zorder=0)
+            if i == 0:
+                ax.set_title(rn, loc="left", fontsize=8, fontweight="bold")
+            if j == 0:
+                ax.set_ylabel("PR-AUC / pozitīvo daļa\n" + sname, fontsize=7)
+            ax.set_xticks(sorted(reg["year"].unique()))
+            ax.tick_params(axis="x", labelsize=6)
+    h, lab = axes[0, 0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="outside lower center", ncol=len(lab), fontsize=7, frameon=False)
+    fig.suptitle("7b Latvija pa NUTS 2024 reģioniem (aprakstoši); 95 % TI — bootstrap pa 20 km blokiem reģionā",
+                 fontsize=10, x=0.01, ha="left")
     fig.savefig(path)
     plt.close(fig)
     return path
