@@ -1290,7 +1290,7 @@ def chm_latvia(config: Path = ConfigArg, limit: int = typer.Option(0, help="proc
         v = agg["chm_mean"][idx]
         rec = {"time_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"), "k": k, "n_blocks": len(blocks),
                "block_3059": list(b), "cells": int(len(idx[0])), "cells_chm_nan": int(np.isnan(v).sum()),
-               "tiles": info["tiles"], "coverage_bbox": round(info["coverage"], 4), "seconds_read": info["seconds"],
+               "tiles": info["tiles"], "missing_tiles": info.get("missing_tiles", []), "coverage_bbox": round(info["coverage"], 4), "seconds_read": info["seconds"],
                "seconds_total": round(time.time() - t0, 1), "file_mb": round(out.stat().st_size / 2 ** 20, 2),
                "free_gb": round(free, 1)}
         with log.open("a", encoding="utf-8") as f:

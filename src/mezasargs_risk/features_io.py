@@ -183,7 +183,16 @@ def chm_layers(cfg: RiskConfig, inp: dict) -> tuple[dict, dict]:
                       GDAL_HTTP_MAX_RETRY="3", GDAL_HTTP_RETRY_DELAY="5"):
         for qk in qks:
             tmp = np.full(out.shape, 255, dtype=np.uint8)
-            with rasterio.open("/vsicurl/" + fc.chm_url.format(qk=qk)) as s:
+            try:
+                s = rasterio.open("/vsicurl/" + fc.chm_url.format(qk=qk))
+            except rasterio.errors.RasterioIOError as e:
+                # CHMv2 has no tile for some z10 quadkeys (e.g. open sea): HTTP 404 -> cells stay NaN, tile is logged.
+                # Any other error (network, 403, ...) is still raised.
+                if "404" not in str(e):
+                    raise
+                info.setdefault("missing_tiles", []).append(qk)
+                continue
+            with s:
                 reproject(rasterio.band(s, 1), tmp, src_nodata=None, dst_transform=tf3, dst_crs="EPSG:3035",
                           dst_nodata=255, resampling=Resampling.nearest)
             m = tmp != 255

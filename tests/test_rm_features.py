@@ -148,3 +148,30 @@ def test_boundless_edge_cells_are_nodata_and_outside_the_set(tmp_path):
     assert forest.shape == agent.shape == valid.shape == (8, 8)
     assert valid.sum() == 6 * 4 and (forest == valid).all()          # outside: not forest, not valid
     assert (agent[~valid] == 255).all() and (agent[valid] == 3).all()  # outside: nodata, not "no disturbance" data
+
+
+def test_chm_layers_skips_missing_tiles_but_raises_other_errors(monkeypatch):
+    """CHMv2 has no tile for some quadkeys (HTTP 404, e.g. open sea): cells stay NaN, tile is logged."""
+    from types import SimpleNamespace
+
+    import rasterio
+    from rasterio.errors import RasterioIOError
+
+    from mezasargs_risk import features_io as FIO
+
+    cfg = SimpleNamespace(features=SimpleNamespace(chm_url="https://example.invalid/{qk}.tif"))
+    inner = np.zeros((20, 20), bool)
+    inner[5:15, 5:15] = True
+    inp = {"inner": inner, "shape": inner.shape, "tf": rasterio.Affine(30, 0, 5_200_000, 0, -30, 3_900_000)}
+
+    def missing(path, *a, **k):
+        raise RasterioIOError("HTTP response code: 404")
+    monkeypatch.setattr(FIO.rasterio, "open", missing)
+    agg, info = FIO.chm_layers(cfg, inp)
+    assert info["missing_tiles"] == info["tiles"] and np.isnan(agg["chm_mean"]).all() and info["coverage"] == 0
+
+    def forbidden(path, *a, **k):
+        raise RasterioIOError("HTTP response code: 403")
+    monkeypatch.setattr(FIO.rasterio, "open", forbidden)
+    with pytest.raises(RasterioIOError):
+        FIO.chm_layers(cfg, inp)
