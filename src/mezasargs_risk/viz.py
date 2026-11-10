@@ -818,7 +818,7 @@ def model_importance(pm: pd.DataFrame, path: Path, name: str = "C modelis") -> P
         ax.axvline(0, color=AXIS, lw=0.8)
         ax.set_yticks(range(len(order)), order, fontsize=7)
         ax.set_title(f"{name}: PR-AUC kritums, permutējot pazīmi — {sname}", loc="left", fontsize=8)
-        ax.set_xlabel("PR-AUC kritums (stabiņš: vidēji 2020–2024; punkti: gadi)", fontsize=7)
+        ax.set_xlabel(f"PR-AUC kritums (stabiņš: vidēji {pm['year'].min()}–{pm['year'].max()}; punkti: gadi)", fontsize=7)
     fig.savefig(path)
     plt.close(fig)
     return path
@@ -831,15 +831,26 @@ def region_metrics(reg: pd.DataFrame, path: Path) -> Path:
     names = sorted(reg["region"].unique())
     fig, axes = plt.subplots(2, len(names), figsize=(12, 5.6), dpi=200, layout="constrained", sharex=True, sharey="row")
     for i, (sub, sname) in enumerate(subs):
+        gs = reg[reg["subset"] == sub]
+        # same rule as model_metrics: y range from the point estimates, CI longer than 1.6 x max point is cut (^)
+        cap = min(float(gs["ap_ratio_hi"].max()), float(gs["ap_ratio"].max()) * 1.6)
         for j, rn in enumerate(names):
             ax = axes[i, j]
+            cut = False
             for o, m in zip((-0.12, 0.12), ("LR", "C_mono")):
-                g = reg[(reg["subset"] == sub) & (reg["region"] == rn) & (reg["model"] == m)].sort_values("year")
+                g = gs[(gs["region"] == rn) & (gs["model"] == m)].sort_values("year")
                 lab, c, ls = MODEL_STYLE_7B[m]
                 yv, lo, hi = g["ap_ratio"], g["ap_ratio_lo"], g["ap_ratio_hi"]
-                ax.errorbar(g["year"] + o, yv, yerr=[(yv - lo).clip(lower=0), (hi - yv).clip(lower=0)], color=c, ls=ls,
-                            lw=1.3, marker="o", ms=3.5, elinewidth=0.8, capsize=0, label=lab)
+                ax.errorbar(g["year"] + o, yv, yerr=[(yv - lo).clip(lower=0), (hi.clip(upper=cap) - yv).clip(lower=0)],
+                            color=c, ls=ls, lw=1.3, marker="o", ms=3.5, elinewidth=0.8, capsize=0, label=lab)
+                over = (hi > cap).to_numpy()
+                if over.any():
+                    cut = True
+                    ax.plot((g["year"] + o).to_numpy()[over], np.full(over.sum(), cap), "^", ms=3.5, color=c, lw=0)
             ax.axhline(1, color=INK2, lw=0.8, ls=":", zorder=0)
+            ax.set_ylim(0, cap * 1.05)
+            if cut:
+                ax.text(0.99, 0.98, "▲ TI ārpus ass", transform=ax.transAxes, ha="right", va="top", fontsize=6, color=INK2)
             if i == 0:
                 ax.set_title(rn, loc="left", fontsize=8, fontweight="bold")
             if j == 0:
