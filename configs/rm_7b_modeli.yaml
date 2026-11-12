@@ -43,7 +43,7 @@ features:
 
 models:
   blocks_dir: C:/Users/varna/server_backup/s2-forest-screening/output/rm6b_latvija/blocks   # READ ONLY copy
-  chm_dir: null                    # set to the copied chm-latvia output when CHMv2 is finished (B_chm only)
+  chm_dir: C:/Users/varna/projects/s2-forest-screening/output/rm7b_chm/chm     # CHMv2 30 m aggregates (chm-latvia, copied from server 2026-11-12; not in git)
   test_years: [2019, 2024]
   neg_ratio: 10
   neg_floor: 200

@@ -223,6 +223,22 @@ Sk. `docs/RM_4b_SAUSUMS.md`.
 (BSD-3-Clause), threadpoolctl (BSD-3-Clause), narwhals (MIT) [N: atkarību licences no PyPI metadatiem nav atkārtoti
 pārbaudītas].
 
+## 7b posms — Latvijas modelis, CHMv2 Latvijai (2026-11-09 … 2026-11-12)
+
+- **CHMv2 (Meta / WRI), visa Latvija** — tas pats avots un licence kā 6a (CC BY 4.0, norāde augstāk).
+  - Serverī `chm-latvia configs/rm_7b_chm.yaml`: 205 bloki, z10 flīžu logi lasīti caur `/vsicurl`; **neviena
+    izejas flīze nav saglabāta**, saglabāti tikai 30 m agregāti (`chm_mean`, `chm_p90`, `chm_gt5`) iekšējām meža
+    šūnām.
+  - Rezultāts: 205 faili, 104 MB, 17 101 809 šūnas, no tām 84 823 (0,5 %) bez CHM vērtības.
+  - 9 z10 flīzes CHMv2 krātuvē neeksistē (HTTP 404) [P, žurnāls `chm_latvia.jsonl`, lauks `missing_tiles`]. Tās
+    izlaistas, šūnas paliek NaN.
+  - Aprēķins divreiz apturēts ar diska aizsardzību (brīvā vieta uz laiku < 5 GB; cēlonis nav noskaidrots) un
+    atsākts pa blokiem. Kopā ~5 h.
+  - Kopija laptopā: `output/rm7b_chm/chm` (nav git). Modelī lietots tikai t ≥ 2020 (attēli ~2018).
+- **GISCO NUTS 2024, 3. līmenis** (tas pats fails un licence kā augstāk) — 5 statistiskie reģioni 7b aprakstošajām
+  metrikām, šūnas centrs.
+- **LVM 620 kopplatības pa gadiem** (no tās pašas `LVM_BOJAJUMI` Wayback kopijas) — relatīvā spiediena jutīgumam.
+
 ## Bibliotēkas (tikai pārbaudīta licence, NAV instalētas)
 
 | Pakotne | Versija (PyPI) | Licence [P] |

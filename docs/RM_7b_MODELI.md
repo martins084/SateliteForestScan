@@ -1,9 +1,9 @@
-# RM 7b — Latvijas modelis (2026-11-10)
+# RM 7b — Latvijas modelis (2026-11-10; B_chm pievienots 2026-11-12)
 
 Visi varianti un metrikas ir iepriekš reģistrēti PLANS 2.25 (commit `570ff77`, reģionu labojums `52a8829`). Abi
 commiti ir veikti pirms jebkura 7b modeļa palaišanas. Šeit ziņoti **visi** reģistrētie varianti, nekas nav pievienots
-vai izvēlēts pēc testa rezultātiem. Vienīgais izņēmums ir **B_chm**: tas nav aprēķināts, jo serveris nav pieejams
-(sk. §8).
+vai izvēlēts pēc testa rezultātiem. **B_chm** aprēķināts 2026-11-12, kad CHMv2 Latvijai bija pabeigts (§8); pārējie
+rezultāti ir no 2026-11-10 un nav mainīti.
 
 Skaitļi ir no `output/rm7b_modeli/tables` (nav git). Formāts: vērtība [95 % TI]. TI aprēķināts ar klasteru
 bootstrap pa 20 km blokiem, 999 atkārtojumi. Pāru starpībām lietoti tie paši atkārtojumi; **trekns** = TI neietver 0.
@@ -23,6 +23,11 @@ Daļēji, un tas ir tikai **B_mono** (spiediens + audze).
   pārējos gados TI ietver 0. [P]
 - Tātad stiprā bāzlīnija (divi log-attālumi) jaunajos perēkļos ir grūti pārspējama. Audzes pazīmes uzlabo
   augšējo 10 % trāpījumus konsekventi, bet visas ranžēšanas kvalitāti (PR-AUC) tikai dažos gados. [N]
+
+**B_chm (pievienots 2026-11-12, §8).** B + CHMv2 augstums ir labāks par B_mono visos 4 testa gados (2021–2024).
+Jaunajos perēkļos PR-AUC / pozitīvo daļa pieaug par +0,34…+0,88, un TI neietver 0 nevienā gadā. [P] Pāris
+B_chm − LR nebija reģistrēts, tāpēc tas nav testēts. Pirms šo izmantot, jāpārbauda CHMv2 attēlu datumi (noplūdes
+risks, §8). [N]
 
 **(b) Vai klimats Latvijas mērogā kaut ko dod?** Nē, out-of-time testā klimats pasliktina rezultātu.
 - **C_mono − B_mono** ir negatīvs **visos 6 gados**.
@@ -369,16 +374,54 @@ cut_dist_t13              5.9 -22.5   3.3  -0.1   3.4  -0.7   4.6 -15.2   1.8   
 
 Sk. §0 (d). Izlases skaiti pa blokiem × gadiem × slāņiem ir `rm7b_sample_counts.csv`.
 
-## 8. Kas nav izdarīts
+## 8. B_chm — B + CHMv2 augstums (2026-11-12)
 
-- **B_chm_mono pret B_mono nav aprēķināts.**
-  - CHMv2 Latvijai (`chm-latvia`, tikai 30 m agregāti) palaists serverī tmux `cds`/`chm7b` 2026-11-09. Paredzētais
-    ilgums ~6 h, ~1,8 min uz bloku.
-  - 2026-11-09 18:53 SSH atbildēja `Permission denied (publickey,password)`, lai gan lokālā atslēga ir ielādēta.
-    Pēc noteikuma tālāk nemēģināju un servera konfigurācijā neko nemainīju.
-  - Kad piekļuve būs atjaunota: ar vienu savienojumu nokopēt `output/rm7b_chm/chm`, iestatīt `models.chm_dir` un
-    palaist `models-latvia --part bchm`. Variants jau ir reģistrēts PLANS 2.25.
-- DTM paliek atlikts (lietotāja lēmums).
+![7b B_chm](rm_figures/rm7b_metrikas_bchm.png)
+
+**CHMv2 Latvijai** (`chm-latvia`, serverī, tikai 30 m agregāti `chm_mean`, `chm_p90`, `chm_gt5`): [P]
+- 205 bloki, 17 101 809 šūnas, 104 MB; bez CHM vērtības 84 823 šūnas (0,5 %).
+- 9 z10 flīzes CHMv2 krātuvē neeksistē (HTTP 404). Tās izlaistas un reģistrētas (`missing_tiles`), šūnas paliek
+  NaN (commit `ce7c1bd`).
+- Aprēķins divreiz apstājās ar diska aizsardzību: brīvā vieta uz laiku nokritās līdz 2,2 GB un 3,3 GB (robeža
+  5 GB). Cēlonis nav noskaidrots; trešajā palaidienā zemākais līmenis bija 12,4 GB. Atsākts pa blokiem, kopā ~5 h.
+- Kopija laptopā `output/rm7b_chm/chm` (nav git).
+
+**Salīdzinājums** (`models-latvia --part bchm`, 21 min): tie paši parametri, sēkla un izlase; CHM pazīmes ir NaN
+gadiem < 2020, tāpēc testa gadi ir 2021–2024. B_mono skaitļi sakrīt ar §2. [P]
+
+Jaunie perēkļi:
+
+| | 2021 | 2022 | 2023 | 2024 |
+|---|---|---|---|---|
+| B_mono, PR-AUC / poz. daļa | 2.73 [2.18–3.54] | 2.51 [2.09–3.05] | 2.36 [2.14–2.58] | 3.09 [2.78–3.52] |
+| B_chm_mono, PR-AUC / poz. daļa | 3.09 [2.50–3.84] | 2.85 [2.43–3.34] | 2.97 [2.71–3.23] | 3.97 [3.53–4.55] |
+| **B_chm − B**, PR-AUC / poz. daļa | **+0.35 [0.13–0.55]** | **+0.34 [0.19–0.47]** | **+0.61 [0.49–0.74]** | **+0.88 [0.67–1.10]** |
+| B_mono, top 10 %, % | 31.2 [25.4–37.1] | 28.0 [23.2–32.6] | 27.5 [25.3–29.7] | 32.5 [30.1–35.4] |
+| B_chm_mono, top 10 %, % | 34.5 [28.5–40.6] | 29.9 [25.9–33.6] | 32.6 [30.3–34.8] | 39.1 [36.3–42.0] |
+| **B_chm − B**, top 10 %, pp | **+3.3 [1.7–4.9]** | **+1.9 [0.1–3.6]** | **+5.1 [3.9–6.5]** | **+6.6 [5.4–7.7]** |
+| **B_chm − B**, top 5 %, pp | **+2.7 [1.1–4.2]** | +0.9 [−0.2–2.1] | **+3.0 [2.1–4.0]** | **+4.2 [3.2–5.3]** |
+
+Visas šūnas:
+
+| | 2021 | 2022 | 2023 | 2024 |
+|---|---|---|---|---|
+| B_mono, PR-AUC / poz. daļa | 3.32 [2.50–4.49] | 3.04 [2.41–3.83] | 2.73 [2.45–3.02] | 2.95 [2.69–3.27] |
+| B_chm_mono, PR-AUC / poz. daļa | 3.65 [2.83–4.74] | 3.40 [2.78–4.28] | 3.26 [2.92–3.61] | 3.73 [3.42–4.14] |
+| **B_chm − B**, PR-AUC / poz. daļa | +0.33 [−0.01–0.64] | **+0.37 [0.14–0.65]** | **+0.53 [0.41–0.66]** | **+0.79 [0.67–0.93]** |
+| **B_chm − B**, top 10 %, pp | **+2.8 [1.3–4.5]** | **+2.0 [0.6–3.3]** | **+3.6 [2.6–4.8]** | **+6.6 [5.6–7.7]** |
+
+[P] B_chm ir labāks par B visos 4 gados abās kopās; jaunajos perēkļos PR-AUC starpības TI neietver 0 nevienā gadā.
+
+[N] Piesardzība pirms šo uzskatīt par īstu ieguvumu:
+- **CHMv2 attēlu datums pārbaudīts tikai Kalsnavas flīzei (2018).** Citur Latvijā attēli var būt jaunāki. Ja attēls
+  ir uzņemts pēc bojājuma vai sanitārās cirtes, augstums satur informāciju par etiķeti (noplūde). Tas jāpārbauda pa
+  flīzēm, pirms B_chm lieto tālāk.
+- Ieguvums aug pa gadiem (+0,35 → +0,88). Tas saskan ar garāku apmācību ar CHM (2021. gada testam CHM ir tikai
+  2020. gada apmācībā), bet tāpat izskatītos arī noplūde, kas pieaug ar bojājumu apjomu. Šie dati abus nenošķir.
+- Punktveidā B_chm jaunajos perēkļos ir virs LR visos 4 gados (LR: 2,93; 2,65; 2,07; 2,91), bet pāris B_chm − LR
+  nebija reģistrēts PLANS 2.25 un nav testēts.
+
+**Nav izdarīts:** DTM paliek atlikts (lietotāja lēmums).
 
 ## 9. Ierobežojumi [N]
 
