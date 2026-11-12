@@ -204,6 +204,8 @@ class FeaturesConfig(BaseModel):
     chm: bool = True
     chm_url: str = "https://dataforgood-fb-data.s3.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/chm/{qk}.tif"
     chm_from_year: int = 2020        # L2: CHMv2 (imagery ~2018) only for t >= 2020
+    # stage 7c: per-tile polygons with `acq_date` (observation date of the input imagery)
+    chm_meta_url: str = "https://dataforgood-fb-data.s3.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/metadata/{qk}.geojson"
     source: str = "lvm620_wayback20250503"
     # Picea abies realized distribution, probability 0-100 (Bonannella et al. 2022, Zenodo 6961187 v3, CC BY 4.0);
     # windows over Latvia (+ margin) cached by `picea-fetch`; for year t the latest period ending <= t-1 is used (2.4)
@@ -232,6 +234,9 @@ class ModelsConfig(BaseModel):
     blocks_dir: Path | None = None               # .../rm6b_latvija/blocks (READ ONLY)
     neg_floor: int = 200                         # min negatives per block x year x stratum
     chm_dir: Path | None = None                  # CHMv2 30 m aggregates per block (chm-latvia), B_chm only
+    # stage 7c (user 2026-11-12; PLANS 2.26): CHMv2 imagery dates per cell (chm-dates) and the 7b sample
+    chm_dates_dir: Path | None = None
+    sample: Path | None = None                   # default <run_dir>/tables/sample_7b.nc
     hgb: dict = Field(default_factory=lambda: {"learning_rate": 0.05, "max_iter": 300, "max_leaf_nodes": 31,
                                                "min_samples_leaf": 100, "l2_regularization": 1.0,
                                                "early_stopping": False})

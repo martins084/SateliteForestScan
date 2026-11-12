@@ -182,6 +182,9 @@ STAND7B = ["hrl_conifer_100m", "hrl_conifer_share_500m", "picea_p", "cut_dist_t1
 PHENO7B = ["swarming_doy_t1", "n_filial_t1"]
 VARIANTS7B = {"A_mono": PRESSURE, "B_mono": PRESSURE + STAND7B, "C_mono": PRESSURE + STAND7B + CLIMATE,
               "C_fen_mono": PRESSURE + STAND7B + CLIMATE + PHENO7B, "B_chm_mono": PRESSURE + STAND7B + CHM}
+# stage 7c (user 2026-11-12; PLANS 2.26): CHMv2 only where the latest image date of the cell is in a year < row year
+CHM_CLEAN = [c + "_clean" for c in CHM]
+VARIANTS7B["B_chm_clean_mono"] = PRESSURE + STAND7B + CHM_CLEAN
 MONO7B = {f: (-1 if "_dist_" in f else 1) for f in PRESSURE}           # risk falls with distance, rises with area
 LR_FEATS = ["p620_dist_t1", "p620_dist_t23"]
 

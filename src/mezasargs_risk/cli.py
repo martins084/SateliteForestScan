@@ -1378,7 +1378,7 @@ def latvia_sample(config: Path = ConfigArg):
 
 @app.command("models-latvia")
 def models_latvia(config: Path = ConfigArg,
-                  part: str = typer.Option("main", help="main (time, labels, sensitivities, regions) | spatial | bchm"),
+                  part: str = typer.Option("main", help="main (time, labels, sensitivities, regions) | spatial | bchm | bchm_clean"),
                   n_jobs: int = typer.Option(6, help="parallel bootstrap evaluations"),
                   years: str = typer.Option("", help="subset of test years, e.g. 2024 (smoke test)"),
                   n_boot: int = typer.Option(0, help="override n_boot (smoke test only)"),
@@ -1389,13 +1389,16 @@ def models_latvia(config: Path = ConfigArg,
     the same-cell exclusion), expanding window t = 2019..2024, per-year metrics for all cells and new foci with
     cluster-bootstrap CI over the 20 km blocks, paired differences, permutation importance (C_mono), regions.
     part=spatial: the main models with 205 blocks in 5 random groups (model from other groups only).
-    part=bchm: B_mono vs B_chm_mono once CHMv2 (chm-latvia) is finished. Tables are rewritten after every test year."""
+    part=bchm: B_mono vs B_chm_mono once CHMv2 (chm-latvia) is finished. Tables are rewritten after every test year.
+    part=bchm_clean (stage 7c, PLANS 2.26): LR, B_mono, B_chm_mono (7b reference) and B_chm_clean_mono = B + CHMv2
+    only in rows where the latest image date of the cell (chm-dates) is in a year < row year; tables rm7c_*."""
     import time
 
     import xarray as xr
     from joblib import Parallel, delayed
     from sklearn.inspection import permutation_importance
 
+    from . import chm_dates as CD
     from . import lvm as LV
     from . import models as M
     from . import viz
@@ -1406,7 +1409,8 @@ def models_latvia(config: Path = ConfigArg,
     fdir.mkdir(parents=True, exist_ok=True)
     nb = n_boot or mc.n_boot
     t_start = time.time()
-    with xr.open_dataset(tdir / "sample_7b.nc", engine="h5netcdf") as ds:
+    tdir.mkdir(parents=True, exist_ok=True)
+    with xr.open_dataset(mc.sample or tdir / "sample_7b.nc", engine="h5netcdf") as ds:
         d = ds.to_dataframe().reset_index(drop=True)
         reg_names = {int(k): v for k, v in json.loads(ds.attrs["regions"]).items()}
     d["new"] = d["p620_dist_t1"] > mc.new_focus_m
@@ -1416,7 +1420,8 @@ def models_latvia(config: Path = ConfigArg,
     totals = {int(k): float(v) for k, v in ann[ann["subtype"] == cfg.lvm.stem_pest].set_index("year")["ha"].items()}
     test_years = [int(y) for y in years.split(",")] if years else list(range(mc.test_years[0], mc.test_years[1] + 1))
     subsets = {"visi": None, "jaunie": "new"}
-    tag = {"main": "", "spatial": "_telpa", "bchm": "_bchm"}[part]
+    tag = {"main": "", "spatial": "_telpa", "bchm": "_bchm", "bchm_clean": "_bchm_clean"}[part]
+    pre = "rm7c" if part == "bchm_clean" else "rm7b"
     acc = {k: [] for k in ("metrics", "paired", "perm", "regions", "sizes")}
     main_pairs = [("LR", "A_mono"), ("LR", "B_mono"), ("LR", "C_mono"), ("B_mono", "C_mono"), ("A_mono", "B_mono")]
 
@@ -1434,15 +1439,15 @@ def models_latvia(config: Path = ConfigArg,
     def save():
         for k, v in acc.items():
             if v:
-                out = tdir / f"rm7b_{k}{tag}.csv"
+                out = tdir / f"{pre}_{k}{tag}.csv"
                 pd.DataFrame(v).round(6).to_csv(out.with_suffix(".part"), index=False)
                 out.with_suffix(".part").replace(out)                       # atomic: a kill never leaves half a table
 
     done = set()
-    if resume and (tdir / f"rm7b_sizes{tag}.csv").exists():
+    if resume and (tdir / f"{pre}_sizes{tag}.csv").exists():
         # sizes rows are saved together with all results of a finished year (save() runs once per year)
         for k in acc:
-            f = tdir / f"rm7b_{k}{tag}.csv"
+            f = tdir / f"{pre}_{k}{tag}.csv"
             if f.exists() and k != "regions":
                 acc[k] = pd.read_csv(f).to_dict("records")
         done = {(r["labels"], int(r["year"])) for r in acc["sizes"]}
@@ -1464,7 +1469,7 @@ def models_latvia(config: Path = ConfigArg,
             m = M.fit(pool, feats, mc.hgb, mc.seed, M.MONO7B)
         return M.score(m, test), m
 
-    if part == "bchm":
+    if part in ("bchm", "bchm_clean"):
         if mc.chm_dir is None:
             raise typer.BadParameter("models.chm_dir is not set (CHMv2 not finished / not copied)")
         chm = pd.concat([xr.open_dataset(f, engine="h5netcdf").to_dataframe() for f in sorted(Path(mc.chm_dir).glob("chm_*.nc"))])
@@ -1472,16 +1477,25 @@ def models_latvia(config: Path = ConfigArg,
         for c in M.CHM:
             d.loc[d["year"] < cfg.features.chm_from_year, c] = np.nan
         test_years = [t for t in test_years if t > cfg.features.chm_from_year]
+    if part == "bchm_clean":
+        # PLANS 2.26: the 7b CHM columns (NaN before chm_from_year) are additionally NaN where the image year >= row year
+        d = d.merge(_chm_years(mc)[["cell_id", "chm_year"]], on="cell_id", how="left")
+        ok = CD.allowed(d["chm_year"].fillna(0).to_numpy(np.int64) * 10000, d["year"].to_numpy())
+        for c in M.CHM:
+            d[c + "_clean"] = d[c].where(ok)
 
-    label_sets = {"main": [("izsl", True), ("bez", False)], "spatial": [("izsl", True)], "bchm": [("izsl", True)]}[part]
+    label_sets = {"main": [("izsl", True), ("bez", False)], "spatial": [("izsl", True)], "bchm": [("izsl", True)],
+                  "bchm_clean": [("izsl", True)]}[part]
     for lv, exclude in label_sets:
         dl = d[d["same_t1"] == 0] if exclude else d
         if part == "main":
             models = ["LR", "A_mono", "B_mono", "C_mono"] + (["C_fen_mono", "A_mono_yw", "C_mono_yw", "A_mono_rel", "C_mono_rel"] if exclude else [])
         elif part == "spatial":
             models = ["LR", "A_mono", "B_mono", "C_mono"]
-        else:
+        elif part == "bchm":
             models = ["B_mono", "B_chm_mono"]
+        else:
+            models = ["LR", "B_mono", "B_chm_mono", "B_chm_clean_mono"]
         for t in test_years:
             if (lv, t) in done:
                 continue
@@ -1494,7 +1508,7 @@ def models_latvia(config: Path = ConfigArg,
                                  "test_w": float(w.sum()), "test_new_pos": int(test.loc[test["new"], "label"].sum()),
                                  "test_new_w": float(test.loc[test["new"], "w"].sum()), "blocks": int(test["block"].nunique())})
             scores, fitted = {}, {}
-            if part != "bchm":
+            if part in ("main", "spatial"):
                 scores |= {b: M.baseline_score(test, b) for b in M.BASELINES}
             for v in models:
                 if part == "spatial":
@@ -1507,14 +1521,15 @@ def models_latvia(config: Path = ConfigArg,
                 else:
                     scores[v], fitted[v] = fit_score(v, pool, test)
             t_fit = time.time() - t0
-            scheme = {"main": "laiks", "spatial": "laiks+telpa", "bchm": "laiks"}[part]
+            scheme = "laiks+telpa" if part == "spatial" else "laiks"
             tasks = []
             for v, s in scores.items():
                 for sub, col in subsets.items():
                     m = mask(test, col)
                     tasks.append(({"scheme": scheme, "labels": lv, "year": t, "subset": sub, "model": v}, "ev",
                                   (y[m], s[m], None, g[m], w[m])))
-            pairs = main_pairs if part != "bchm" else [("B_mono", "B_chm_mono")]
+            pairs = {"bchm": [("B_mono", "B_chm_mono")],
+                     "bchm_clean": [("LR", "B_chm_clean_mono"), ("B_mono", "B_chm_clean_mono")]}.get(part, main_pairs)
             for a, b in pairs:
                 for sub, col in subsets.items():
                     m = mask(test, col)
@@ -1560,17 +1575,291 @@ def models_latvia(config: Path = ConfigArg,
     elif part == "spatial":
         figs = {"spatial": viz.model_metrics(met, fdir / "rm7b_metrikas_telpa.png", style=viz.MODEL_STYLE_7B, title="7b Latvija",
                                              title_suffix=" (laiks + 5 bloku grupas)", ci_unit="20 km blokiem")}
-    else:
+    elif part == "bchm":
         figs = {"bchm": viz.model_metrics(met, fdir / "rm7b_metrikas_bchm.png", style=viz.MODEL_STYLE_7B, title="7b Latvija",
                                           title_suffix=" (B pret B + CHMv2)", ci_unit="20 km blokiem")}
+    else:
+        figs = {"bchm_clean": viz.model_metrics(met, fdir / "rm7c_metrikas_bchm_clean.png", style=viz.MODEL_STYLE_7C,
+                                                title="7c Latvija", title_suffix=" (CHMv2 bez noplūdes)", ci_unit="20 km blokiem")}
     info = {"part": part, "rows": len(d), "blocks": int(d["block"].nunique()), "test_years": test_years, "n_boot": nb,
             "seconds": round(time.time() - t_start, 1), "variants": M.VARIANTS7B, "mono": M.MONO7B, "hgb": mc.hgb,
             "seed": mc.seed, "n_folds": mc.n_folds, "new_focus_m": mc.new_focus_m, "totals_620_ha": totals}
-    (tdir / f"rm7b_info{tag}.json").write_text(json.dumps(info, indent=1, default=str), encoding="utf-8")
+    (tdir / f"{pre}_info{tag}.json").write_text(json.dumps(info, indent=1, default=str), encoding="utf-8")
     typer.echo(json.dumps({k: info[k] for k in ("part", "rows", "blocks", "seconds")}))
     for n, f in figs.items():
         typer.echo(f"{n}: {f}")
     _metadata(cfg, f"models_latvia_{part}", {"test_years": test_years, "n_boot": nb})
+
+
+@app.command("chm-dates")
+def chm_dates_cmd(config: Path = ConfigArg, limit: int = typer.Option(0, help="process at most N new blocks"),
+                  n: int = typer.Option(4096, help="raster size of one z10 tile (4096 = ~5 m at 57 N)"),
+                  max_mb: float = typer.Option(200.0, help="refuse a metadata file larger than this")):
+    """Stage 7c (user 2026-11-12): CHMv2 imagery date per analysis cell. For every block file of `models.chm_dir`
+    the cell centre and 8 points +-10 m around it are looked up in the per-tile metadata polygons (`acq_date`);
+    output <run_dir>/dates/date_<x0>_<y0>.nc: cell_id, d_c (centre), d_min, d_max (int32 yyyymmdd, 0 = no polygon),
+    n_unknown (points without a polygon), tile (tx * 4096 + ty of the centre). Metadata GeoJSON files are downloaded
+    one by one, rasterised and DELETED; only the tile rasters are cached (<cache>/rm/chm_dates). Resumable per block
+    and per tile. Then the tile table (tile x date -> cells) and the per-tile summary."""
+    import time
+    from collections import OrderedDict
+
+    import requests
+    import xarray as xr
+    from pyproj import Transformer
+
+    from . import chm_dates as CD
+    from .efda import layer
+
+    cfg = load_config(config)
+    mc = cfg.models
+    if mc.chm_dir is None:
+        raise typer.BadParameter("models.chm_dir is not set")
+    ddir, tdir, ldir = cfg.run_dir / "dates", cfg.run_dir / "tables", cfg.run_dir / "logs"
+    rdir = cfg.cache_dir / "rm" / "chm_dates"
+    for d in (ddir, tdir, ldir, rdir):
+        d.mkdir(parents=True, exist_ok=True)
+    log = ldir / "chm_dates.jsonl"
+    with rasterio.open(layer(cfg.efda.main, "agent")) as s:
+        tf, width = s.transform, s.width
+    to_ll = Transformer.from_crs(3035, 4326, always_xy=True)
+    sess = requests.Session()
+    lru: OrderedDict = OrderedDict()
+
+    def tile_raster(tx: int, ty: int):
+        """Cached tile raster or None when the tile has no metadata file (HTTP 404)."""
+        key = (tx, ty)
+        if key in lru:
+            lru.move_to_end(key)
+            return lru[key]
+        qk = CD.quadkey_of(tx, ty)
+        f = rdir / f"{qk}.npz"
+        if not f.exists():
+            t0 = time.time()
+            tmp = rdir / f"{qk}.geojson.part"
+            for attempt in range(5):                                  # network errors / 5xx only; 4xx is never retried
+                try:
+                    r = sess.get(cfg.features.chm_meta_url.format(qk=qk), timeout=120, stream=True)
+                    if r.status_code >= 500:
+                        raise requests.ConnectionError(f"HTTP {r.status_code}")
+                    size = int(r.headers.get("Content-Length", 0))
+                    if r.status_code == 200:
+                        if size > max_mb * 2 ** 20:
+                            raise typer.BadParameter(f"{qk}: metadata file {size / 2 ** 20:.0f} MB > {max_mb} MB")
+                        with tmp.open("wb") as o:
+                            for chunk in r.iter_content(1 << 20):
+                                o.write(chunk)
+                    break
+                except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError):
+                    if attempt == 4:
+                        raise
+                    time.sleep(10 * (attempt + 1))
+            rec = {"time_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"), "tile": qk, "http": r.status_code}
+            if r.status_code == 404:
+                np.savez_compressed(f, missing=np.array(True))
+            else:
+                r.raise_for_status()
+                fc_ = json.loads(tmp.read_text(encoding="utf-8"))
+                tmp.unlink()                                             # the source file is never kept
+                props = {k for ft in fc_["features"] for k in ft["properties"]}
+                ras, info = CD.rasterize_dates(fc_["features"], CD.tile_bounds(tx, ty), n)
+                part = rdir / f"{qk}.part.npz"
+                np.savez_compressed(part, raster=ras, missing=np.array(False))
+                part.replace(f)
+                rec |= {"bytes": size, "properties": sorted(props), **info}
+                del fc_
+            rec["seconds"] = round(time.time() - t0, 1)
+            with log.open("a", encoding="utf-8") as o:
+                o.write(json.dumps(rec) + "\n")
+            typer.echo(json.dumps({k: v for k, v in rec.items() if k != "dates"} | {"n_dates": len(rec.get("dates", []))}))
+        with np.load(f) as z:
+            ras = None if bool(z["missing"]) else z["raster"]
+        lru[key] = ras
+        while len(lru) > 8:
+            lru.popitem(last=False)
+        return ras
+
+    files = sorted(Path(mc.chm_dir).glob("chm_*.nc"))
+    done = 0
+    typer.echo(f"{len(files)} block files; {sum((ddir / f.name.replace('chm_', 'date_')).exists() for f in files)} done")
+    big = np.iinfo(np.int32).max
+    for f in files:
+        out = ddir / f.name.replace("chm_", "date_")
+        if out.exists():
+            continue
+        if limit and done >= limit:
+            break
+        with xr.open_dataset(f, engine="h5netcdf") as ds:
+            ids = ds["cell_id"].to_numpy().astype(np.int64)
+        row, col = np.divmod(ids, width)
+        x, y = tf.c + (col + 0.5) * tf.a, tf.f + (row + 0.5) * tf.e
+        vals = np.zeros((len(CD.OFFSETS_M), len(ids)), np.int32)
+        tile_c = np.zeros(len(ids), np.int32)
+        for k, (dx, dy) in enumerate(CD.OFFSETS_M):
+            lon, lat = to_ll.transform(x + dx, y + dy)
+            tx, ty = CD.tile_xy(lon, lat)
+            key = tx * 4096 + ty
+            if (dx, dy) == (0.0, 0.0):
+                tile_c = key.astype(np.int32)
+            for kk in np.unique(key):
+                m = key == kk
+                ras = tile_raster(int(kk) // 4096, int(kk) % 4096)
+                if ras is not None:
+                    vals[k, m] = CD.sample(ras, CD.tile_bounds(int(kk) // 4096, int(kk) % 4096), lon[m], lat[m])
+        d_min = np.where(vals > 0, vals, big).min(axis=0)
+        d_min[d_min == big] = 0
+        res = xr.Dataset({"cell_id": ("row", ids), "d_c": ("row", vals[4]), "d_min": ("row", d_min),
+                          "d_max": ("row", vals.max(axis=0)), "n_unknown": ("row", (vals == 0).sum(axis=0).astype(np.int8)),
+                          "tile": ("row", tile_c)},
+                         attrs={"source": "CHMv2 metadata acq_date (Meta/WRI)", "offsets_m": str(CD.OFFSETS_M)})
+        tmp = out.with_suffix(".part")
+        tmp.unlink(missing_ok=True)
+        res.to_netcdf(tmp, engine="h5netcdf", encoding={c: {"zlib": True, "complevel": 4} for c in res.data_vars})
+        tmp.replace(out)
+        done += 1
+        typer.echo(f"{out.name}: {len(ids)} cells, unknown centre {(vals[4] == 0).mean():.4f}, "
+                   f"mixed {(d_min != vals.max(axis=0)).mean():.4f}")
+    outs = sorted(ddir.glob("date_*.nc"))
+    if len(outs) < len(files):
+        typer.echo(f"blocks done: {len(outs)} / {len(files)}")
+        return
+    al = pd.concat([xr.open_dataset(o, engine="h5netcdf").to_dataframe() for o in outs], ignore_index=True).drop_duplicates("cell_id")
+    al["tile_qk"] = al["tile"].map({k: CD.quadkey_of(int(k) // 4096, int(k) % 4096) for k in al["tile"].unique()})
+    al["year_max"] = CD.year(al["d_max"].to_numpy())
+    al.loc[al["n_unknown"] > 0, "year_max"] = 0                     # any point without a polygon -> unknown
+    td = al.groupby(["tile_qk", "d_c"]).size().rename("cells").reset_index()
+    td["acq_date"] = td["d_c"].map(lambda v: "nav" if v == 0 else f"{v // 10000}-{v // 100 % 100:02d}-{v % 100:02d}")
+    td[["tile_qk", "acq_date", "cells"]].to_csv(tdir / "rm7c_tile_dates.csv", index=False)
+    g = al.groupby("tile_qk")
+    ts = pd.DataFrame({"cells": g.size(), "cells_no_date": g["d_c"].apply(lambda v: int((v == 0).sum())),
+                       "cells_mixed": (al["d_min"] != al["d_max"]).groupby(al["tile_qk"]).sum().astype(int),
+                       "n_dates": g["d_c"].apply(lambda v: int(v[v > 0].nunique())),
+                       "date_first": g["d_c"].apply(lambda v: int(v[v > 0].min()) if (v > 0).any() else 0),
+                       "date_last": g["d_c"].max()})
+    for yv in sorted(int(v) for v in al["year_max"].unique() if v > 0):
+        ts[f"y{yv}"] = al[al["year_max"] == yv].groupby("tile_qk").size().reindex(ts.index).fillna(0).astype(int)
+    ts.reset_index().to_csv(tdir / "rm7c_tiles.csv", index=False)
+    ysum = al.groupby("year_max").size().rename("cells").reset_index()
+    ysum["share"] = ysum["cells"] / len(al)
+    ysum.to_csv(tdir / "rm7c_cells_by_year.csv", index=False)
+    info = {"cells": int(len(al)), "tiles": int(al["tile_qk"].nunique()), "unknown_centre": int((al["d_c"] == 0).sum()),
+            "unknown_any": int((al["n_unknown"] > 0).sum()), "mixed": int((al["d_min"] != al["d_max"]).sum()),
+            "by_year_max": {int(r.year_max): int(r.cells) for r in ysum.itertuples()}}
+    (tdir / "rm7c_dates_info.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
+    typer.echo(json.dumps(info))
+    _metadata(cfg, "chm_dates", info)
+
+
+def _chm_years(mc) -> pd.DataFrame:
+    """cell_id -> chm_year (year of the LATEST CHMv2 image date in the cell; 0 = unknown: no polygon at the centre or
+    at any of the 8 points +-10 m around it) and the dates d_c, d_min, d_max (chm-dates output)."""
+    import xarray as xr
+
+    from . import chm_dates as CD
+
+    if mc.chm_dates_dir is None:
+        raise typer.BadParameter("models.chm_dates_dir is not set (run chm-dates first)")
+    files = sorted(Path(mc.chm_dates_dir).glob("date_*.nc"))
+    dt = pd.concat([xr.open_dataset(f, engine="h5netcdf").to_dataframe() for f in files]).drop_duplicates("cell_id")
+    dt["chm_year"] = np.where(dt["n_unknown"] > 0, 0, CD.year(dt["d_max"].to_numpy())).astype(np.int16)
+    return dt[["cell_id", "chm_year", "d_c", "d_min", "d_max"]].reset_index(drop=True)
+
+
+def _chm_sample(cfg, with_dates: bool = True) -> pd.DataFrame:
+    """7b sample + CHMv2 aggregates (+ imagery dates): one row per sampled cell x year. `chm_year` = year of the
+    latest image date in the cell, 0 = unknown (no polygon at the centre or at any of the 8 points around it)."""
+    import xarray as xr
+
+    mc = cfg.models
+    with xr.open_dataset(mc.sample or cfg.run_dir / "tables" / "sample_7b.nc", engine="h5netcdf") as ds:
+        d = ds.to_dataframe().reset_index(drop=True)
+    chm = pd.concat([xr.open_dataset(f, engine="h5netcdf").to_dataframe() for f in sorted(Path(mc.chm_dir).glob("chm_*.nc"))])
+    d = d.merge(chm.drop_duplicates("cell_id"), on="cell_id", how="left")
+    if with_dates:
+        d = d.merge(_chm_years(mc), on="cell_id", how="left")
+        d["chm_year"] = d["chm_year"].fillna(0).astype(np.int16)
+    return d
+
+
+@app.command("chm-leak")
+def chm_leak(config: Path = ConfigArg, low_gt5: float = typer.Option(0.2, help="'open' cell: share of the cell above 5 m below this"),
+             low_p90: float = typer.Option(5.0, help="'low' cell: 90th percentile of height below this, m")):
+    """Stage 7c (user 2026-11-12; DESCRIPTIVE, no model): CHMv2 leakage check on the 7b weighted sample (main label
+    set: cells with a 620 polygon in the same cell in t-1 are out). (1) per year y: share of cells / positives /
+    new-focus positives whose CHM image is from a year >= y (not allowed by the leakage rule), unknown date, no CHM
+    value. (2) CHM height of positives vs other cells per year, all and split by image year < y / >= y: weighted
+    mean, median p90, share of low cells."""
+    from . import chm_dates as CD
+    from . import viz
+
+    cfg = load_config(config)
+    mc = cfg.models
+    tdir, fdir = cfg.run_dir / "tables", cfg.run_dir / "figures"
+    for p in (tdir, fdir):
+        p.mkdir(parents=True, exist_ok=True)
+    d = _chm_sample(cfg)
+    d = d[d["same_t1"] == 0].copy()
+    d["new"] = d["p620_dist_t1"] > mc.new_focus_m
+    d["has_chm"] = d["chm_mean"].notna()
+    d["after"] = d["chm_year"] >= d["year"]                      # includes the image of year y itself
+    d["unknown"] = d["chm_year"] == 0
+    d["ok"] = CD.allowed(d["chm_year"].to_numpy(np.int64) * 10000, d["year"].to_numpy())   # int64: int16 * 10000 overflows
+
+    def wshare(m, w):
+        return float((w * m).sum() / w.sum()) if w.sum() > 0 else np.nan
+
+    def wquant(v, w, q):
+        k = np.isfinite(v)
+        v, w = v[k], w[k]
+        if not len(v):
+            return np.nan
+        o = np.argsort(v)
+        c = np.cumsum(w[o])
+        return float(v[o][np.searchsorted(c, q * c[-1])])
+
+    rule, diag = [], []
+    for y, dy in d.groupby("year"):
+        w = dy["w"].to_numpy(np.float64)
+        groups = {"visas šūnas": np.ones(len(dy), bool), "pozitīvās": (dy["label"] == 1).to_numpy(),
+                  "pozitīvās, jaunie perēkļi": ((dy["label"] == 1) & dy["new"]).to_numpy(),
+                  "pārējās": (dy["label"] == 0).to_numpy()}
+        for gname, gm in groups.items():
+            ww = w[gm]
+            g = dy[gm]
+            rule.append({"year": int(y), "group": gname, "rows": int(gm.sum()), "weight": float(ww.sum()),
+                         "share_after": wshare((g["after"] & ~g["unknown"]).to_numpy(), ww),
+                         "share_same_year": wshare((g["chm_year"] == y).to_numpy(), ww),
+                         "share_unknown": wshare(g["unknown"].to_numpy(), ww),
+                         "share_allowed": wshare(g["ok"].to_numpy(), ww),
+                         "share_no_chm": wshare((~g["has_chm"]).to_numpy(), ww)})
+        for gname in ("pozitīvās", "pozitīvās, jaunie perēkļi", "pārējās"):
+            for tname, tm in (("visi", np.ones(len(dy), bool)), ("attēls < t", dy["ok"].to_numpy()),
+                              ("attēls ≥ t", (dy["after"] & ~dy["unknown"]).to_numpy())):
+                m = groups[gname] & tm & dy["has_chm"].to_numpy()
+                g, ww = dy[m], w[m]
+                if not m.sum():
+                    continue
+                diag.append({"year": int(y), "group": gname, "image": tname, "rows": int(m.sum()), "weight": float(ww.sum()),
+                             "chm_mean": float(np.average(g["chm_mean"], weights=ww)),
+                             "chm_p90_median": wquant(g["chm_p90"].to_numpy(np.float64), ww, 0.5),
+                             "chm_p90_q25": wquant(g["chm_p90"].to_numpy(np.float64), ww, 0.25),
+                             "chm_gt5_mean": float(np.average(g["chm_gt5"], weights=ww)),
+                             "share_open": wshare((g["chm_gt5"] < low_gt5).to_numpy(), ww),
+                             "share_low_p90": wshare((g["chm_p90"] < low_p90).to_numpy(), ww)})
+    rule, diag = pd.DataFrame(rule), pd.DataFrame(diag)
+    rule.round(6).to_csv(tdir / "rm7c_rule.csv", index=False)
+    diag.round(6).to_csv(tdir / "rm7c_diag.csv", index=False)
+    # image year x label year: positives (rows) and their share of open cells
+    pos = d[(d["label"] == 1) & d["has_chm"]]
+    ct = pos.groupby(["year", "chm_year"]).agg(rows=("label", "size"), share_open=("chm_gt5", lambda v: float((v < low_gt5).mean())),
+                                               chm_p90_median=("chm_p90", "median")).reset_index()
+    ct.round(4).to_csv(tdir / "rm7c_pos_by_image_year.csv", index=False)
+    fig = viz.chm_leak(rule, diag, fdir / "rm7c_chm_noplude.png", low_gt5)
+    info = {"rows": int(len(d)), "low_gt5": low_gt5, "low_p90": low_p90, "sample": str(mc.sample)}
+    (tdir / "rm7c_leak_info.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
+    typer.echo(rule[rule["year"] >= 2020].round(4).to_string(index=False))
+    typer.echo(str(fig))
+    _metadata(cfg, "chm_leak", info)
 
 
 @app.command("models-pilot")

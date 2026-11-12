@@ -694,3 +694,40 @@ platība). **Galvenā:** tās pašas metrikas jaunajiem perēkļiem (`p620_dist_
 **Aprēķins.** Izlase un modeļi laptopā no kopijas. Ja izlase > 8 GB RAM vai > 2 GB diskā — apstājas un jautā.
 CHMv2 serverī fonā (tmux `cds`, viens savienojums palaišanai, pārbaude ne biežāk kā reizi 10 min; ≥ 5 GB brīvi;
 atsākšana pa blokiem; tikai 30 m agregāti).
+
+## 2.26 7c — CHMv2 bez noplūdes (B_chm_clean): iepriekšēja reģistrācija (lietotājs, 2026-11-12)
+
+Ierakstīts un iekomitēts **pirms** B_chm_clean palaišanas. Pēc tam neko nepievieno un neizvēlas pēc testa
+rezultātiem; RM_7c ziņo visu šeit uzskaitīto.
+
+**Kas reģistrācijas brīdī jau ir zināms** (aprakstošie soļi, bez modeļa; `chm-dates`, `chm-leak`):
+- CHMv2 attēlu datumi ir pieejami pa poligoniem flīzē (`metadata/<quadkey>.geojson`, lauks `acq_date`) [P].
+- Visām 17 101 809 analīzes šūnām datums ir zināms; vēlākais attēla gads šūnā ir 2006–2019, neviens ≥ 2020 [P].
+- Tātad noteikums „attēla gads < rindas gads“ gados 2020–2024 neizņem nevienu vērtību: B_chm_clean pazīmes
+  sakrīt ar 7b B_chm pazīmēm, un B_chm_clean_mono rezultātam jāsakrīt ar B_chm_mono (7b §8). Palaidiens to pārbauda.
+- Vienīgais jaunais tests ir pāris B_chm_clean − LR; tā rezultāts reģistrācijas brīdī **nav** rēķināts.
+
+**Šūnas attēla datums.** Šūnas centrs un 8 punkti ±10 m ap to; šūnas datums = **vēlākais** no 9 (30 m agregāts
+jauc visas šūnas apakšpikseļus). Ja kādā no 9 punktiem nav poligona, datums ir nezināms.
+
+**Noplūdes noteikums.** Rindai (šūna, gads y) CHM pazīmes (`chm_mean`, `chm_p90`, `chm_gt5`) paliek tikai tad, ja
+šūnas attēla gads ir zināms un < y; citādi NaN. Noteikums vienāds apmācības un testa rindām. 7b noteikums
+„CHM tikai y ≥ 2020“ paliek spēkā [N, mans papildinājums: lai B_chm_clean no 7b B_chm atšķirtos tikai ar
+noteikuma izņemtajām vērtībām].
+
+**Modeļi (viens palaidiens, `models-latvia --part bchm_clean`).**
+- **B_chm_clean_mono** = B pazīmes (2.25) + CHM pazīmes pēc noplūdes noteikuma; HGB parametri, monotonie
+  ierobežojumi un sēkla kā 2.25.
+- Atsaucei tajā pašā palaidienā: LR (stiprā bāzlīnija, 2.25), B_mono, B_chm_mono (kā 7b; jāatkārto 7b §8 skaitļi —
+  reproducējamības pārbaude, nevis jauns tests).
+
+**Validācija un metrikas** kā 2.25: tā pati 7b izlase (`sample_7b.nc`), galvenās etiķetes (ar izslēgšanu),
+paplašināms logs, testa gadi t = 2021…2024 (kā 7b B_chm); PR-AUC / pozitīvo daļa, trāpījumi augšējos 5 % un 10 %
+platības; 95 % TI ar klasteru bootstrap pa 20 km blokiem (999), pāra starpības uz tiem pašiem atkārtojumiem.
+
+**Pāri (abi ziņoti visiem 4 gadiem).**
+- B_chm_clean_mono − LR;
+- B_chm_clean_mono − B_mono.
+- **Galvenais:** jaunie perēkļi (`p620_dist_t1` > 500 m). Visas šūnas ziņo līdzās, kā 7b.
+
+Nekas cits netiek palaists (nav telpiskās validācijas, jutīgumu, reģionu, permutācijas nozīmīguma).

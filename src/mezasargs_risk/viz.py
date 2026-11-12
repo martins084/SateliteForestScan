@@ -743,6 +743,9 @@ MODEL_STYLE_7B = {"random": ("nejaušs", "#9a9890", ":"), "dist_t1": ("tikai 620
                   "dist_t23": ("tikai 620 t−2..t−3", "#a3a29a", "-."), "LR": ("stiprā bāzlīnija (LR)", INK, "-"),
                   "A_mono": ("A spiediens", S1, "-"), "B_mono": ("B + audze", S3, "-"),
                   "B_chm_mono": ("B + CHMv2", "#8a5cd1", "-"), "C_mono": ("C + klimats", S2, "-")}
+MODEL_STYLE_7C = {"LR": ("stiprā bāzlīnija (LR)", INK, "-"), "B_mono": ("B + audze", S3, "-"),
+                  "B_chm_mono": ("B + CHMv2 (7b, ar noplūdi)", "#c3a9ec", "--"),
+                  "B_chm_clean_mono": ("B + CHMv2, tikai attēls < t", "#8a5cd1", "-")}
 SENS_STYLE_7B = {"LR": ("stiprā bāzlīnija (LR)", INK, "-"), "A_mono": ("A", S1, "-"),
                  "A_mono_yw": ("A, vienāds gadu svars", "#86b6ef", "--"), "A_mono_rel": ("A, relatīvais spiediens", "#86b6ef", ":"),
                  "C_mono": ("C", S2, "-"), "C_mono_yw": ("C, vienāds gadu svars", "#f3a27f", "--"),
@@ -861,6 +864,50 @@ def region_metrics(reg: pd.DataFrame, path: Path) -> Path:
     fig.legend(h, lab, loc="outside lower center", ncol=len(lab), fontsize=7, frameon=False)
     fig.suptitle("7b Latvija pa NUTS 2024 reģioniem (aprakstoši); 95 % TI — bootstrap pa 20 km blokiem reģionā",
                  fontsize=10, x=0.01, ha="left")
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
+def chm_leak(rule: pd.DataFrame, diag: pd.DataFrame, path: Path, low_gt5: float, first_year: int = 2020) -> Path:
+    """Stage 7c: CHMv2 leakage check. (a) share of cells whose CHM image is from a year >= t; (b) share of open
+    cells (share above 5 m < low_gt5) in positives and other cells, all label years; (c) the same for t >= 2020 split
+    by image year < t / >= t; (d) median of the 90th height percentile, same split."""
+    col = {"visas šūnas": S1, "pārējās": S1, "pozitīvās": S2, "pozitīvās, jaunie perēkļi": S3}
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7.6), dpi=200, layout="constrained")
+    ax = axes[0, 0]
+    r = rule[rule["year"] >= first_year]
+    for g in ("visas šūnas", "pozitīvās", "pozitīvās, jaunie perēkļi"):
+        s = r[r["group"] == g]
+        ax.plot(s["year"], 100 * s["share_after"], "-o", ms=4, color=col[g], label=g)
+    ax.set_title("(a) CHM attēls uzņemts gadā ≥ t (pazīme gadā t nav atļauta)", loc="left", fontsize=8)
+    ax.set_ylabel("% no grupas (ar izlases svariem)")
+    ax.set_ylim(0, None)
+    ax.legend(fontsize=7)
+    ax = axes[0, 1]
+    a = diag[diag["image"] == "visi"]
+    for g in ("pārējās", "pozitīvās", "pozitīvās, jaunie perēkļi"):
+        s = a[a["group"] == g]
+        ax.plot(s["year"], 100 * s["share_open"], "-o", ms=4, color=col[g], label=g)
+    ax.set_title(f"(b) atklātas šūnas (virs 5 m < {100 * low_gt5:.0f} % šūnas), visi attēli", loc="left", fontsize=8)
+    ax.set_ylabel("% no grupas")
+    ax.set_ylim(0, None)
+    ax.legend(fontsize=7)
+    d = diag[(diag["year"] >= first_year) & (diag["image"] != "visi") & (diag["group"] != "pozitīvās, jaunie perēkļi")]
+    for ax, (c, lab, sc) in zip(axes[1], (("share_open", "% no grupas", 100.0), ("chm_p90_median", "m", 1.0))):
+        for g in ("pārējās", "pozitīvās"):
+            for im, ls in (("attēls < t", "-"), ("attēls ≥ t", "--")):
+                s = d[(d["group"] == g) & (d["image"] == im)]
+                ax.plot(s["year"], sc * s[c], ls, marker="o", ms=4, color=col[g], label=f"{g}, {im}")
+        ax.set_ylabel(lab)
+        ax.set_ylim(0, None)
+        ax.legend(fontsize=7)
+    axes[1, 0].set_title("(c) atklātas šūnas pēc attēla laika", loc="left", fontsize=8)
+    axes[1, 1].set_title("(d) augstuma 90. procentiles mediāna pēc attēla laika", loc="left", fontsize=8)
+    for ax in axes.ravel():
+        ax.set_xlabel("etiķetes gads t")
+        ax.xaxis.get_major_locator().set_params(integer=True)
+    fig.suptitle("7c: CHMv2 noplūdes pārbaude (7b izlase, galvenās etiķetes)", x=0.01, ha="left", fontsize=10, fontweight="bold")
     fig.savefig(path)
     plt.close(fig)
     return path
